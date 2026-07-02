@@ -42,6 +42,12 @@ export class Streamer {
   private queue: ChunkInfo[] = [];
   private queued = new Set<number>();
   private frame = 0;
+  // last-known camera position (floating origin). Meshes are positioned from this at
+  // CREATION, so a chunk built at any point in the frame — in particular an edit rebuild
+  // that runs after the per-frame transform pass — is never rendered untransformed.
+  private eyeX = 0;
+  private eyeY = 0;
+  private eyeZ = 0;
   residencyDirty = true;
 
   // metrics
@@ -135,6 +141,7 @@ export class Streamer {
       geom.computeBoundingSphere();
       mesh = new THREE.Mesh(geom, this.material);
       mesh.userData.anchor = data.anchor;
+      mesh.position.set(data.anchor[0] - this.eyeX, data.anchor[1] - this.eyeY, data.anchor[2] - this.eyeZ);
       this.scene.add(mesh);
     }
     this.resident.set(info.key, { mesh, info, triangles: data ? data.triangles : 0 });
@@ -163,6 +170,9 @@ export class Streamer {
 
   /** Per-frame: update camera-relative transforms (floating origin). */
   updateTransforms(eyeX: number, eyeY: number, eyeZ: number): void {
+    this.eyeX = eyeX;
+    this.eyeY = eyeY;
+    this.eyeZ = eyeZ;
     for (const res of this.resident.values()) {
       if (!res.mesh) continue;
       const a = res.mesh.userData.anchor as [number, number, number];
