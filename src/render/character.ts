@@ -12,7 +12,7 @@ import type { Player } from '../player/player';
 export class Character {
   readonly group: THREE.Group;
   private readonly plane: THREE.Group;
-  private readonly prop: THREE.Mesh;
+  private readonly prop: THREE.Group;
   private readonly body: THREE.Group;
   private readonly fadeMats: THREE.MeshStandardMaterial[] = [];
   private readonly m = new THREE.Matrix4();
@@ -47,38 +47,91 @@ export class Character {
     visor.position.set(0, 1.38, -0.29);
     this.body.add(visor);
 
-    // --- the plane: fuselage + high wing + tail + spinning prop, forward = -Z ---
+    // --- the plane: a high-wing bush flyer, forward = -Z, pilot rides in the open cockpit ---
     this.plane = new THREE.Group();
-    const fuselage = new THREE.Mesh(new THREE.CylinderGeometry(0.4, 0.46, 3.2, 10), hullMat);
-    fuselage.rotation.x = Math.PI / 2;
-    fuselage.position.set(0, 0.8, 0.15);
-    this.plane.add(fuselage);
-    const nose = new THREE.Mesh(new THREE.ConeGeometry(0.4, 0.65, 10), hullMat);
+
+    // fuselage: dark engine cowl, red cabin, long tapered tail boom
+    const cowl = new THREE.Mesh(new THREE.CylinderGeometry(0.46, 0.4, 0.55, 12), propMat);
+    cowl.rotation.x = Math.PI / 2;
+    cowl.position.set(0, 0.82, -1.42);
+    const cabin = new THREE.Mesh(new THREE.CylinderGeometry(0.5, 0.52, 1.5, 12), hullMat);
+    cabin.rotation.x = Math.PI / 2;
+    cabin.position.set(0, 0.85, -0.42);
+    const boom = new THREE.Mesh(new THREE.CylinderGeometry(0.09, 0.48, 1.9, 10), hullMat);
+    boom.rotation.x = Math.PI / 2;
+    boom.position.set(0, 0.92, 1.27);
+    const nose = new THREE.Mesh(new THREE.ConeGeometry(0.4, 0.5, 12), propMat);
     nose.rotation.x = -Math.PI / 2;
-    nose.position.set(0, 0.8, -1.75);
-    this.plane.add(nose);
-    const wing = new THREE.Mesh(new THREE.BoxGeometry(6.0, 0.08, 1.25), wingMat);
-    wing.position.set(0, 1.62, -0.25);
-    this.plane.add(wing);
-    const strutL = new THREE.Mesh(new THREE.CylinderGeometry(0.035, 0.035, 1.15), propMat);
-    strutL.position.set(-1.15, 1.2, -0.1);
-    strutL.rotation.z = 0.9;
-    const strutR = strutL.clone();
-    strutR.position.x = 1.15;
-    strutR.rotation.z = -0.9;
-    this.plane.add(strutL, strutR);
-    const fin = new THREE.Mesh(new THREE.BoxGeometry(0.08, 0.9, 0.68), hullMat);
-    fin.position.set(0, 1.25, 1.65);
-    this.plane.add(fin);
-    const stab = new THREE.Mesh(new THREE.BoxGeometry(1.9, 0.07, 0.6), wingMat);
-    stab.position.set(0, 0.86, 1.68);
-    this.plane.add(stab);
-    this.prop = new THREE.Mesh(new THREE.BoxGeometry(1.7, 0.16, 0.06), propMat);
-    this.prop.position.set(0, 0.8, -2.1);
-    this.plane.add(this.prop);
-    const spinner = new THREE.Mesh(new THREE.SphereGeometry(0.14, 8, 6), propMat);
-    spinner.position.set(0, 0.8, -2.12);
-    this.plane.add(spinner);
+    nose.position.set(0, 0.82, -1.9);
+    this.plane.add(cowl, cabin, boom, nose);
+
+    // raked windshield in front of the pilot
+    const shield = new THREE.Mesh(new THREE.BoxGeometry(0.78, 0.55, 0.05), visorMat);
+    shield.position.set(0, 1.5, -0.82);
+    shield.rotation.x = 0.42;
+    this.plane.add(shield);
+
+    // wing: two halves with dihedral, red tip accents, above the pilot's head
+    for (const sign of [1, -1]) {
+      const halfGeo = new THREE.BoxGeometry(3.0, 0.09, 1.15);
+      halfGeo.translate(sign * 1.5, 0, 0);
+      const half = new THREE.Mesh(halfGeo, wingMat);
+      half.position.set(0, 1.86, -0.35);
+      half.rotation.z = sign * 0.07;
+      const tipGeo = new THREE.BoxGeometry(0.24, 0.11, 1.17);
+      tipGeo.translate(sign * 2.9, 0, 0);
+      const tip = new THREE.Mesh(tipGeo, hullMat);
+      tip.position.copy(half.position);
+      tip.rotation.z = half.rotation.z;
+      this.plane.add(half, tip);
+    }
+    const strutR = new THREE.Mesh(new THREE.CylinderGeometry(0.035, 0.035, 1.58, 6), propMat);
+    strutR.position.set(0.99, 1.28, -0.35);
+    strutR.rotation.z = -0.8;
+    const strutL = strutR.clone();
+    strutL.position.x = -0.99;
+    strutL.rotation.z = 0.8;
+    this.plane.add(strutR, strutL);
+
+    // tail: fin with a cream cap, low-set stabilizer
+    const fin = new THREE.Mesh(new THREE.BoxGeometry(0.07, 0.8, 0.6), hullMat);
+    fin.position.set(0, 1.45, 2.0);
+    const finTip = new THREE.Mesh(new THREE.BoxGeometry(0.08, 0.22, 0.62), wingMat);
+    finTip.position.set(0, 1.78, 2.0);
+    const stab = new THREE.Mesh(new THREE.BoxGeometry(1.8, 0.06, 0.55), wingMat);
+    stab.position.set(0, 1.0, 2.05);
+    this.plane.add(fin, finTip, stab);
+
+    // bush gear: fat mains on splayed legs, tiny tail wheel
+    const wheelGeo = new THREE.CylinderGeometry(0.3, 0.3, 0.2, 12);
+    wheelGeo.rotateZ(Math.PI / 2);
+    const wheelR = new THREE.Mesh(wheelGeo, propMat);
+    wheelR.position.set(0.7, 0.18, -0.85);
+    const wheelL = wheelR.clone();
+    wheelL.position.x = -0.7;
+    const legR = new THREE.Mesh(new THREE.CylinderGeometry(0.045, 0.045, 0.75, 6), hullMat);
+    legR.position.set(0.45, 0.51, -0.85);
+    legR.rotation.z = 0.87;
+    const legL = legR.clone();
+    legL.position.x = -0.45;
+    legL.rotation.z = -0.87;
+    const tailWheel = new THREE.Mesh(new THREE.CylinderGeometry(0.11, 0.11, 0.1, 10).rotateZ(Math.PI / 2), propMat);
+    tailWheel.position.set(0, 0.58, 2.15);
+    const tailStrut = new THREE.Mesh(new THREE.CylinderGeometry(0.03, 0.03, 0.32, 6), propMat);
+    tailStrut.position.set(0, 0.72, 2.15);
+    this.plane.add(wheelR, wheelL, legR, legL, tailWheel, tailStrut);
+
+    // two-blade prop behind a pointed spinner
+    this.prop = new THREE.Group();
+    const blade = new THREE.Mesh(new THREE.BoxGeometry(2.0, 0.15, 0.05), propMat);
+    const blade2 = blade.clone();
+    blade2.rotation.z = Math.PI / 2;
+    this.prop.add(blade, blade2);
+    this.prop.position.set(0, 0.82, -2.2);
+    const spinner = new THREE.Mesh(new THREE.ConeGeometry(0.14, 0.32, 10), propMat);
+    spinner.rotation.x = -Math.PI / 2;
+    spinner.position.set(0, 0.82, -2.32);
+    this.plane.add(this.prop, spinner);
 
     this.plane.visible = false;
     this.body.add(this.plane);
@@ -107,15 +160,18 @@ export class Character {
 
     // flight attitude: pitch with actual velocity, bank with the turn
     if (player.mode === 'plane') {
+      // positive rotation about the right axis pitches the nose UP, so climbing
+      // (vr > 0) must apply +vp — the old -vp had the plane diving while it climbed
       const v = Math.hypot(player.vx, player.vy, player.vz);
       if (v > 1) {
         const vr = (player.vx * ux + player.vy * uy + player.vz * uz) / v;
         const vp = Math.asin(Math.max(-1, Math.min(1, vr)));
-        this.q.setFromAxisAngle(this.right.normalize(), -vp * 0.8);
+        this.q.setFromAxisAngle(this.right.normalize(), vp * 0.8);
         this.group.quaternion.premultiply(this.q);
       }
+      // bank > 0 = left turn; positive roll about the back axis drops the left wing
       this.back.set(-player.fwdX, -player.fwdY, -player.fwdZ).normalize();
-      this.q.setFromAxisAngle(this.back, -player.bank);
+      this.q.setFromAxisAngle(this.back, player.bank);
       this.group.quaternion.premultiply(this.q);
       this.propAngle += dt * (8 + player.planeSpeed * 0.5);
       this.prop.rotation.z = this.propAngle;

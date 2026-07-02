@@ -456,6 +456,7 @@ chop trees, mine, build — ${PLANE_WOOD_COST} wood crafts a plane (E)`, 10);
     grantPlane: () => { planeCrafted = true; },
     give: (slot: number, n: number) => { counts[slot] = (counts[slot] ?? 0) + n; },
     debugPick: () => ({ lastPick, treePick }),
+    character,
     camInfo: () => {
       const eye = player.eye();
       return {

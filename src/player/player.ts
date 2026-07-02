@@ -69,6 +69,7 @@ export class Player {
   grounded = false;
   submerged = 0;                   // meters of body below the water surface
   bank = 0;                        // smoothed roll for the character model
+  private bankTarget = 0;
   tile = 0;
   // plane state
   planeSpeed = 0;
@@ -198,7 +199,6 @@ export class Player {
     const rx = fy * uz - fz * uy, ry = fz * ux - fx * uz, rz = fx * uy - fy * ux;
     const r0 = this.radius();
     this.submerged = Math.max(0, WATER_SURFACE - r0);
-    const prevFwdX = fx, prevFwdY = fy, prevFwdZ = fz;
     this.planeStowed = false;
     // bleed off the step-up render offset (~100 ms glide)
     this.stepSmooth *= Math.exp(-16 * dt);
@@ -225,6 +225,14 @@ export class Player {
       let vty = this.vy - (this.vx * ux + this.vy * uy + this.vz * uz) * uy;
       let vtz = this.vz - (this.vx * ux + this.vy * uy + this.vz * uz) * uz;
       const vtl = Math.hypot(vtx, vty, vtz);
+      // bank target: lean into the turn while the velocity still lags the view heading
+      // ((vT x fwd) . up > 0 = heading is left of travel = left turn = positive roll)
+      if (vtl > 1) {
+        const sinT = ((vty * fz - vtz * fy) * ux + (vtz * fx - vtx * fz) * uy + (vtx * fy - vty * fx) * uz) / vtl;
+        this.bankTarget = Math.max(-0.85, Math.min(0.85, sinT * 1.5));
+      } else {
+        this.bankTarget = 0;
+      }
       let gAhead = gHere;
       if (vtl > 1) {
         const lx = this.px + (vtx / vtl) * vtl * PLANE_LOOKAHEAD_S;
@@ -360,11 +368,10 @@ export class Player {
       this.px *= s; this.py *= s; this.pz *= s;
     }
 
-    // smoothed bank (roll) for the character model, from heading turn rate
-    const turn = (prevFwdX * this.fwdY - prevFwdY * this.fwdX) * nuz
-      + (prevFwdY * this.fwdZ - prevFwdZ * this.fwdY) * nux
-      + (prevFwdZ * this.fwdX - prevFwdX * this.fwdZ) * nuy;
-    const targetBank = this.mode === 'plane' ? Math.max(-0.85, Math.min(0.85, (turn / Math.max(dt, 1e-4)) * 0.5)) : 0;
+    // smoothed bank (roll) for the character model
+    // (the old version diffed fwd across the frame, but mouse look mutates fwd BETWEEN
+    // frames, so it only ever saw parallel transport and the plane never banked)
+    const targetBank = this.mode === 'plane' ? this.bankTarget : 0;
     this.bank += (targetBank - this.bank) * Math.min(1, 4.5 * dt);
   }
 }
