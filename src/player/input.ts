@@ -10,7 +10,6 @@ const DRAG_CLICK_SLOP = 5;
 
 export class Input {
   keys = new Set<string>();
-  keyEdges = new Set<string>();
   mouseDX = 0;
   mouseDY = 0;
   wheel = 0;
@@ -19,6 +18,7 @@ export class Input {
   placeHeld = false;
   minePressed = false;
   placePressed = false;
+  keyEdges = new Set<string>();
   locked = false;
   lockUnavailable = false;
   /** touch controls own the pointer: mouse handlers stand down, no pointer lock */
@@ -56,7 +56,7 @@ export class Input {
     window.addEventListener('mousedown', (e) => {
       if (this.touchMode) return;
       // UI elements (hotbar) handle their own pointers
-      if (e.target instanceof HTMLElement && e.target.closest('#hotbar, .tbtn, #rally-menu')) return;
+      if (e.target instanceof HTMLElement && e.target.closest('#hotbar, .tbtn')) return;
       el.focus();
       if (!this.locked && !this.lockUnavailable) {
         // attempt pointer lock; a denial (embedded preview) flips us to drag-look
@@ -136,8 +136,8 @@ export class Input {
   down(code: string): boolean { return this.keys.has(code); }
 
   pressed(code: string): boolean {
-    const wasPressed = this.keyEdges.has(code);
+    const hit = this.keyEdges.has(code);
     this.keyEdges.delete(code);
-    return wasPressed;
+    return hit;
   }
 }

@@ -2,14 +2,11 @@ Original prompt: complete courier frontier plan
 
 ## 2026-07-02
 
-- Read the Courier Frontier plan and current rally implementation.
-- Scope for this pass: implement the first Outpost Prep Tutorial slice with contract/build-site state, ground prep UI/markers, existing gather/place hooks, route handoff, and route completion feedback.
-- Use existing sphere movement, route, mining, chopping, placement, and courier rally systems; do not replace player motion or camera code.
-- Added pure Frontier modules for contracts, build-site inspection, mode state, prep HUD, and footprint markers.
-- Added `test/frontier.test.ts`; focused Frontier tests pass with `npm test -- --run test/frontier.test.ts`.
-- Wired the `Frontier` menu entry, outpost prep start, material tracking, build markers, launch gating, route handoff, route completion feedback, debug text hooks, and touch launch state.
-- Verified desktop Frontier prep/ready/launch/complete and mobile/touch prep/ready with Playwright screenshots and state assertions; temporary screenshot artifacts were reviewed and removed.
-- Added the `Creative` menu entry for full-hotbar free-flight inspection/building and wired touch parity so the mobile plane button toggles free-flight/walk like desktop `F`.
-- Fixed keyboard edge buffering so quick `Esc`, `R`, `E`, `F`, `G`, `O`, `F3`, and `H` taps are not dropped during slower frames or headless browser runs.
-- Updated README and release QA docs for PC/mobile parity, Frontier, Creative, production preview, Pages deployment, and the known Vite large-chunk warning.
-- Rebuilt production assets before preview QA after detecting a stale preview bundle; fresh `dist/` passed desktop Creative and mobile `?touch=1` Creative parity checks with no console/page errors.
+- User rejected the courier route modes and Frontier/outpost-building loop; current direction is back to the sandbox planet: creative/free-flight, mining, building, chopping, and the craftable plane.
+- Reverted the Courier/Frontier release in the working tree, removing the route/outpost modules, docs, UI CSS, and tests instead of leaving unused mode code.
+- Kept useful non-mode improvements: key-edge buffering for reliable quick taps, `render_game_to_text`, `advanceTime`, and a clearer `?creative=1` path.
+- Updated plane onboarding: startup hint explains two trees -> 12 wood -> `E`/plane button, tree chopping reports plane progress, and failed craft attempts say how to get wood.
+- Verified `npm test` returns the original 24-test suite, `npm run build` passes, the develop-web-game Playwright client captures Creative/touch gameplay, and targeted Playwright assertions confirm no Courier/Frontier UI remains.
+- User approved committing, pushing, and deploying this cleanup to Pages.
+- Added README QA/deployment notes for the simplified sandbox release path and Pages workflow.
+- Release gates for this commit: `npm test` passed 24 tests; `npm run build` passed with the known Vite large-chunk warning; production preview passed desktop default sandbox plane-craft and mobile `?creative=1&touch=1` checks with clean console/page errors and nonblank canvas pixel samples.

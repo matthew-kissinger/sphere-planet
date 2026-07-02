@@ -18,33 +18,6 @@ import { pick, pickTree, type PickResult, type TreePick } from './edit/pick';
 import { Metrics } from './demo/metrics';
 import { Autopilot, OrbitDemo } from './demo/autopilot';
 import { Hud, splash, hideSplash } from './demo/hud';
-import {
-  buildCourierRoutes,
-  cross,
-  dot,
-  normalize as normalizeVec,
-  scale,
-  sub,
-  type CourierRoute,
-  type CourierTarget,
-  type Vec3Like,
-} from './game/courierRoutes';
-import { CourierRally, type CourierPlayerSample } from './game/courierRally';
-import { CourierRouteView } from './game/courierView';
-import { CourierUi, type CourierRouteOption, type CourierScreen, type CourierUiAction } from './game/courierUi';
-import { CourierAudio } from './game/courierAudio';
-import { contractForRoute } from './game/contracts';
-import {
-  createOutpostBuildSite,
-  findFrontierOutpostTile,
-  inspectBuildSite,
-  type BuildSite,
-  type BuildSiteInspection,
-  type FrontierInventory,
-} from './game/buildSites';
-import { FrontierMode } from './game/frontierMode';
-import { FrontierUi } from './game/frontierUi';
-import { FrontierBuildView } from './game/frontierView';
 
 const params = new URLSearchParams(location.search);
 const SEED = params.get('seed') ?? 'GP192-01';
@@ -89,11 +62,6 @@ function raf(): Promise<void> {
 function smoothstep(a: number, b: number, x: number): number {
   const t = Math.max(0, Math.min(1, (x - a) / (b - a)));
   return t * t * (3 - 2 * t);
-}
-
-function tileUnit(geo: Goldberg, tileId: number): Vec3Like {
-  const c = geo.centers;
-  return { x: c[tileId * 3], y: c[tileId * 3 + 1], z: c[tileId * 3 + 2] };
 }
 
 async function boot(): Promise<void> {
@@ -299,6 +267,7 @@ async function boot(): Promise<void> {
   player.spawnAt(spawnTile);
   const input = new Input(renderer.domElement);
   const touch = new TouchControls(input, app, params.get('touch') === '1');
+  const creativeActive = params.get('creative') === '1';
   const hud = new Hud();
   const metrics = new Metrics(() => {
     const s = streamer.stats();
@@ -307,62 +276,6 @@ async function boot(): Promise<void> {
   const autopilot = new Autopilot(geo, layers, columns, metrics, (msg) => hud.flash(msg, 10));
   const orbitDemo = new OrbitDemo(metrics, (msg) => hud.flash(msg, 10));
   const character = new Character(scene);
-  const frontierContract = contractForRoute('tutorial');
-  const frontierOutpostTile = findFrontierOutpostTile(geo, columns, terrain, trees, spawnTile);
-  const frontierBuildSite = createOutpostBuildSite(
-    geo,
-    layers,
-    columns,
-    frontierOutpostTile,
-    frontierContract.routeId,
-    frontierContract.requiredMaterials,
-  );
-  const routeWithPreparedPad = (route: CourierRoute, site: BuildSite): CourierRoute => {
-    const padIndex = route.targets.findLastIndex((target) => target.kind === 'pad');
-    if (padIndex < 0) return route;
-    const tileId = site.centerTile;
-    const unit = tileUnit(geo, tileId);
-    const up = normalizeVec(unit);
-    const previous = padIndex > 0 ? normalizeVec(route.targets[padIndex - 1].unit) : normalizeVec(route.start.unit);
-    const backToPrevious = normalizeVec(sub(previous, scale(up, dot(previous, up))), route.start.forward);
-    const forward = scale(backToPrevious, -1);
-    const right = normalizeVec(cross(forward, up), route.start.right);
-    const ground = layers.topRadius(columns.groundLayerBelow(tileId, layers.bounds[0]));
-    const originalPad = route.targets[padIndex];
-    const preparedPad: CourierTarget = {
-      ...originalPad,
-      tileId,
-      unit: up,
-      position: scale(up, ground + originalPad.agl),
-      forward,
-      right,
-      up,
-      radius: Math.max(originalPad.radius, 32),
-    };
-    const targets = route.targets.map((target, index) => index === padIndex ? preparedPad : target);
-    return { ...route, targets };
-  };
-  const courierRoutes = buildCourierRoutes(geo, layers, columns, spawnTile)
-    .map((route) => route.id === frontierContract.routeId ? routeWithPreparedPad(route, frontierBuildSite) : route);
-  const courierRally = new CourierRally(courierRoutes);
-  const courierView = new CourierRouteView(scene);
-  const courierUi = new CourierUi();
-  const courierAudio = new CourierAudio();
-  const frontierMode = new FrontierMode();
-  const frontierUi = new FrontierUi();
-  const frontierBuildView = new FrontierBuildView(scene, geo, layers);
-  let frontierInspection: BuildSiteInspection | null = null;
-  const courierRouteOptions: CourierRouteOption[] = courierRoutes.map((route) => ({
-    id: route.id,
-    name: route.name,
-    summary: route.summary,
-    ringCount: route.ringCount,
-  }));
-  let courierScreen: CourierScreen = 'title';
-  let courierAudioEnabled = localStorage.getItem('courier-audio') !== 'off';
-  let courierReducedMotion = localStorage.getItem('courier-reduced-motion') === 'on';
-  let creativeActive = params.get('creative') === '1';
-  courierAudio.setEnabled(courierAudioEnabled);
 
   // --- highlight (Line with an explicit closing vertex; LineLoop is unsupported on WebGPURenderer) ---
   const highlightGeom = new THREE.BufferGeometry();
@@ -391,9 +304,13 @@ async function boot(): Promise<void> {
   streamer.residencyDirty = false;
 
   hideSplash();
-  hud.flash(touch.enabled
-    ? 'drag to look · tap to mine · hold to build'
-    : `chop trees — ${PLANE_WOOD_COST} wood crafts a plane (E)`, 8);
+  hud.flash(creativeActive
+    ? touch.enabled
+      ? 'Creative: full hotbar · drag to look · tap/hold to edit · plane button toggles walk/free-flight'
+      : 'Creative: full hotbar · F toggles walk/free-flight · E boards the plane'
+    : touch.enabled
+      ? `Plane hint: tap trees for wood · ${PLANE_WOOD_COST} wood crafts the plane button`
+      : `Plane hint: chop 2 trees with LMB for ${PLANE_WOOD_COST} wood, then press E to craft + board`, 9);
 
   // --- camera state ---
   let zoomExp = 0;
@@ -410,7 +327,7 @@ async function boot(): Promise<void> {
   const counts = SLOTS.map(() => 0);
   let hotbarSel = 0;
   let planeCrafted = params.get('plane') === '1';
-  if (params.get('creative') === '1') {
+  if (creativeActive) {
     for (let i = 0; i < counts.length; i++) counts[i] = 999;
     planeCrafted = true;
     player.mode = 'fly';
@@ -463,8 +380,16 @@ async function boot(): Promise<void> {
     if (treePick && (!lastPick || treePick.dist < lastPick.dist)) {
       if (trees.chop(treePick.tile)) {
         counts[WOOD_SLOT] += WOOD_PER_TREE;
-        frontierMode.recordGather('wood', WOOD_PER_TREE);
-        hud.flash(`+${WOOD_PER_TREE} wood · ${counts[WOOD_SLOT]}`, 2);
+        if (!planeCrafted && counts[WOOD_SLOT] >= PLANE_WOOD_COST) {
+          hud.flash(touch.enabled
+            ? `${counts[WOOD_SLOT]}/${PLANE_WOOD_COST} wood · tap the plane button to craft + fly`
+            : `${counts[WOOD_SLOT]}/${PLANE_WOOD_COST} wood · press E to craft + board the plane`, 4);
+        } else if (!planeCrafted) {
+          const remainingTrees = Math.ceil((PLANE_WOOD_COST - counts[WOOD_SLOT]) / WOOD_PER_TREE);
+          hud.flash(`+${WOOD_PER_TREE} wood · ${counts[WOOD_SLOT]}/${PLANE_WOOD_COST} for plane · ${remainingTrees} tree${remainingTrees === 1 ? '' : 's'} left`, 3);
+        } else {
+          hud.flash(`+${WOOD_PER_TREE} wood · ${counts[WOOD_SLOT]}`, 2);
+        }
         rebuildAround(treePick.tile);
         treePick = null;
       }
@@ -474,11 +399,7 @@ async function boot(): Promise<void> {
     const mat = columns.materialAt(lastPick.hitTile, lastPick.hitLayer);
     if (columns.mine(lastPick.hitTile, lastPick.hitLayer)) {
       const slot = yieldSlot(mat);
-      if (slot >= 0) {
-        counts[slot]++;
-        if (slot === 1) frontierMode.recordGather('rock', 1);
-        if (slot === WOOD_SLOT) frontierMode.recordGather('wood', 1);
-      }
+      if (slot >= 0) counts[slot]++;
       edits++;
       rebuildAround(lastPick.hitTile);
     }
@@ -509,7 +430,6 @@ async function boot(): Promise<void> {
   });
 
   let fWas = false, gWas = false, oWas = false, eWas = false, f3Was = false, hWas = false;
-  let escWas = false, rWas = false;
   let showDiag = params.get('debug') === '1';
   let prevSel = -1;
   let lockHinted = false;
@@ -525,288 +445,18 @@ async function boot(): Promise<void> {
       if (counts[WOOD_SLOT] >= PLANE_WOOD_COST) {
         counts[WOOD_SLOT] -= PLANE_WOOD_COST;
         planeCrafted = true;
-        if (player.enterPlane()) hud.flash(touch.enabled ? 'plane crafted — stick throttles, look steers' : 'plane crafted — W/S throttle, look steers', 6);
+        if (player.enterPlane()) hud.flash(touch.enabled
+          ? 'plane crafted + boarded · left stick throttles · drag-look steers · plane button stows'
+          : 'plane crafted + boarded · W/S throttle · look steers · E stows', 6);
       } else {
-        hud.flash(`plane needs ${PLANE_WOOD_COST} wood · ${counts[WOOD_SLOT]}/${PLANE_WOOD_COST}`, 3);
+        hud.flash(touch.enabled
+          ? `plane needs ${PLANE_WOOD_COST} wood · ${counts[WOOD_SLOT]}/${PLANE_WOOD_COST} · tap trees to chop`
+          : `plane needs ${PLANE_WOOD_COST} wood · ${counts[WOOD_SLOT]}/${PLANE_WOOD_COST} · chop trees with LMB`, 4);
       }
       return;
     }
     if (!player.enterPlane()) hud.flash("can't take off from water", 2.5);
   };
-
-  const frontierInventory = (): FrontierInventory => ({
-    wood: counts[WOOD_SLOT],
-    rock: counts[1],
-  });
-
-  const frontierGroundActiveNow = (): boolean => frontierMode.status === 'prepping' || frontierMode.status === 'ready';
-  const courierBlocksControlsNow = (): boolean => courierRally.isPlayerControlBlocked() && !frontierGroundActiveNow() && !creativeActive;
-  const setTouchPlaneButton = (): void => {
-    const frontierGroundActive = frontierGroundActiveNow();
-    const courierBlocksControls = courierBlocksControlsNow();
-    const frontierSnapshot = frontierMode.getSnapshot();
-    touch.setPlaneButton(
-      courierBlocksControls ? 'hidden'
-      : frontierGroundActive ? (frontierSnapshot.canLaunch ? 'launch' : 'prep')
-      : creativeActive ? 'fly'
-      : player.mode === 'plane' ? 'flying'
-      : planeCrafted ? 'fly'
-      : counts[WOOD_SLOT] > 0 ? 'craft'
-      : 'hidden',
-      frontierGroundActive
-        ? frontierSnapshot.canLaunch ? 'go' : `${frontierSnapshot.padPlaced}/${frontierSnapshot.padTotal}`
-      : creativeActive ? player.mode === 'fly' ? 'walk' : 'free'
-      : !planeCrafted && player.mode !== 'plane'
-        ? `${Math.min(counts[WOOD_SLOT], PLANE_WOOD_COST)}/${PLANE_WOOD_COST}` : '');
-  };
-
-  const refreshFrontier = (dt = 0): void => {
-    const site = frontierMode.activeSite;
-    if (!site) {
-      frontierInspection = null;
-      frontierUi.render(frontierMode.getSnapshot());
-      setTouchPlaneButton();
-      return;
-    }
-    frontierInspection = inspectBuildSite(site, columns);
-    frontierMode.tick(dt, frontierInspection, frontierInventory());
-    frontierUi.render(frontierMode.getSnapshot());
-    setTouchPlaneButton();
-  };
-
-  const movePlayerToFrontierOutpost = (): void => {
-    player.spawnAt(frontierBuildSite.centerTile);
-    player.vx = 0;
-    player.vy = 0;
-    player.vz = 0;
-    player.mode = 'walk';
-    player.grounded = false;
-    player.planeStowed = false;
-    player.pitch = 0;
-    player.reorthonormalize();
-    planeCrafted = false;
-    zoomHold = false;
-    planeAutoZoom = false;
-    zoomExpTarget = 0;
-  };
-
-  const beginCreativeMode = (): void => {
-    courierRally.showMenu();
-    courierView.setRoute(null);
-    frontierMode.reset();
-    frontierBuildView.setSite(null);
-    refreshFrontier();
-    for (let i = 0; i < counts.length; i++) counts[i] = Math.max(counts[i], 999);
-    planeCrafted = true;
-    creativeActive = true;
-    player.mode = 'fly';
-    player.grounded = false;
-    player.vx = 0;
-    player.vy = 0;
-    player.vz = 0;
-    player.reorthonormalize();
-    courierScreen = 'hidden';
-    zoomHold = false;
-    planeAutoZoom = false;
-    renderCourierScreen();
-    hud.flash('Creative mode: full hotbar, free-flight, plane unlocked', 4);
-  };
-
-  const renderCourierScreen = (): void => {
-    courierUi.renderScreen({
-      screen: courierScreen,
-      selectedRouteId: courierRally.selectedRouteId,
-      routes: courierRouteOptions,
-      result: courierRally.getSnapshot().result,
-      failReason: courierRally.getSnapshot().failReason,
-      audioEnabled: courierAudioEnabled,
-      reducedMotion: courierReducedMotion,
-      frontier: frontierMode.getSnapshot(),
-    });
-  };
-
-  const resetPlayerForCourierRoute = (route: CourierRoute): void => {
-    player.px = route.start.position.x;
-    player.py = route.start.position.y;
-    player.pz = route.start.position.z;
-    player.tile = route.start.tileId;
-    player.vx = 0;
-    player.vy = 0;
-    player.vz = 0;
-    player.fwdX = route.start.forward.x;
-    player.fwdY = route.start.forward.y;
-    player.fwdZ = route.start.forward.z;
-    player.pitch = -0.05;
-    player.mode = 'walk';
-    player.grounded = false;
-    player.submerged = 0;
-    player.planeStowed = false;
-    player.bank = 0;
-    player.reorthonormalize();
-    planeCrafted = true;
-    player.enterPlane();
-    player.throttle = route.starterThrottle;
-    player.planeSpeed = Math.max(player.planeSpeed, route.starterThrottle - 6);
-    player.holdAGL = route.startAgl;
-    zoomHold = false;
-    planeAutoZoom = true;
-    zoomExpTarget = PLANE_CAM_EXP;
-  };
-
-  const beginCourierRoute = (routeId = courierRally.selectedRouteId, fromFrontier = false): void => {
-    if (!fromFrontier) {
-      frontierMode.reset();
-      frontierBuildView.setSite(null);
-      refreshFrontier();
-    }
-    const route = courierRally.startRoute(routeId);
-    resetPlayerForCourierRoute(route);
-    courierView.setRoute(route);
-    courierScreen = 'hidden';
-    renderCourierScreen();
-    void courierAudio.unlock().then(() => courierAudio.ui());
-    hud.flash(`${route.name}: launch countdown`, 2);
-  };
-
-  const beginFrontierPrep = (): void => {
-    courierRally.showMenu();
-    courierView.setRoute(null);
-    frontierMode.start(frontierContract, frontierBuildSite, frontierInventory());
-    frontierBuildView.setSite(frontierBuildSite);
-    movePlayerToFrontierOutpost();
-    courierScreen = 'hidden';
-    refreshFrontier();
-    renderCourierScreen();
-    hud.flash('Frontier contract: gather, build the marked pad, then launch', 4);
-  };
-
-  const launchFrontierRoute = (): void => {
-    refreshFrontier();
-    const snapshot = frontierMode.getSnapshot();
-    if (!frontierMode.beginFlight()) {
-      hud.flash(snapshot.hint, 2.5);
-      return;
-    }
-    frontierUi.render(frontierMode.getSnapshot());
-    frontierBuildView.setSite(null);
-    beginCourierRoute(snapshot.routeId ?? frontierContract.routeId, true);
-  };
-
-  const nextCourierRouteId = (): string => {
-    const currentId = courierRally.activeRoute?.id ?? courierRally.selectedRouteId;
-    const currentIndex = Math.max(0, courierRoutes.findIndex((route) => route.id === currentId));
-    return courierRoutes[(currentIndex + 1) % courierRoutes.length].id;
-  };
-
-  const handleCourierAction = (action: CourierUiAction): void => {
-    void courierAudio.unlock().then(() => courierAudio.ui());
-    switch (action.type) {
-      case 'play':
-        creativeActive = false;
-        beginCourierRoute(action.routeId ?? courierRally.selectedRouteId);
-        break;
-      case 'play-frontier':
-        creativeActive = false;
-        beginFrontierPrep();
-        break;
-      case 'play-creative':
-        beginCreativeMode();
-        break;
-      case 'show-routes':
-        courierScreen = 'routes';
-        renderCourierScreen();
-        break;
-      case 'show-controls':
-        courierScreen = 'controls';
-        renderCourierScreen();
-        break;
-      case 'show-settings':
-        courierScreen = 'settings';
-        renderCourierScreen();
-        break;
-      case 'show-title':
-        courierScreen = 'title';
-        renderCourierScreen();
-        break;
-      case 'resume':
-        courierRally.resume();
-        courierScreen = 'hidden';
-        renderCourierScreen();
-        break;
-      case 'restart': {
-        const route = courierRally.restartRoute();
-        if (route) {
-          frontierMode.retryFlight();
-          resetPlayerForCourierRoute(route);
-          courierView.setRoute(route);
-          courierScreen = 'hidden';
-          renderCourierScreen();
-        }
-        break;
-      }
-      case 'quit':
-        courierRally.showMenu();
-        frontierMode.reset();
-        frontierBuildView.setSite(null);
-        refreshFrontier();
-        courierView.setRoute(null);
-        player.exitPlane();
-        creativeActive = false;
-        courierScreen = 'title';
-        renderCourierScreen();
-        break;
-      case 'next-route':
-        beginCourierRoute(nextCourierRouteId());
-        break;
-      case 'toggle-audio':
-        courierAudioEnabled = !courierAudioEnabled;
-        courierAudio.setEnabled(courierAudioEnabled);
-        localStorage.setItem('courier-audio', courierAudioEnabled ? 'on' : 'off');
-        renderCourierScreen();
-        break;
-      case 'toggle-motion':
-        courierReducedMotion = !courierReducedMotion;
-        localStorage.setItem('courier-reduced-motion', courierReducedMotion ? 'on' : 'off');
-        renderCourierScreen();
-        break;
-    }
-  };
-
-  const pulseTarget = (target: CourierTarget | null, color?: number): void => {
-    if (!target || courierReducedMotion) return;
-    courierView.pulseTarget(target, color);
-  };
-
-  const handleCourierEvents = (events: ReturnType<CourierRally['drainEvents']>): void => {
-    for (const event of events) {
-      if (event.type === 'route.started') {
-        courierAudio.start();
-        hud.flash('go', 1);
-      } else if (event.type === 'ring.passed') {
-        courierAudio.ring(event.chain);
-        pulseTarget(event.target);
-        hud.flash(`ring ${event.target.ringNumber} · chain x${event.chain}`, 1.35);
-      } else if (event.type === 'route.completed') {
-        courierAudio.success();
-        frontierMode.complete(event.result);
-        const route = courierRally.activeRoute;
-        pulseTarget(route ? route.targets[route.targets.length - 1] : null, 0x8cf2ac);
-        courierScreen = 'complete';
-        renderCourierScreen();
-      } else if (event.type === 'route.failed') {
-        courierAudio.fail();
-        frontierMode.failFlight(event.reason);
-        const snapshot = courierRally.getSnapshot();
-        const route = courierRally.activeRoute;
-        pulseTarget(route ? route.targets[Math.min(snapshot.targetIndex, route.targets.length - 1)] : null, 0xff5e5b);
-        courierScreen = 'failed';
-        renderCourierScreen();
-        hud.flash(event.reason, 2.5);
-      }
-    }
-  };
-
-  renderCourierScreen();
 
   // --- debug/eval hooks ---
   const setZoom = (e: number | null): void => {
@@ -832,77 +482,7 @@ async function boot(): Promise<void> {
       wood: counts[WOOD_SLOT],
       rock: counts[1],
       spawnTile,
-      courier: courierRally.getSnapshot(),
-      frontier: frontierMode.getSnapshot(),
     }),
-    courier: {
-      routes: courierRoutes,
-      rally: courierRally,
-      start: beginCourierRoute,
-      restart: () => handleCourierAction({ type: 'restart' }),
-      menu: () => handleCourierAction({ type: 'quit' }),
-      screen: () => courierScreen,
-    },
-    frontier: {
-      mode: frontierMode,
-      site: frontierBuildSite,
-      start: beginFrontierPrep,
-      launch: launchFrontierRoute,
-      inspect: () => frontierBuildSite ? inspectBuildSite(frontierBuildSite, columns) : null,
-      completePrep: () => {
-        counts[WOOD_SLOT] = Math.max(counts[WOOD_SLOT], frontierContract.requiredMaterials.wood);
-        counts[1] = Math.max(counts[1], frontierContract.requiredMaterials.rock);
-        frontierMode.recordInventory(frontierInventory());
-        for (const cell of frontierBuildSite.padCells) {
-          if (columns.place(cell.tileId, cell.layer, MAT.ROCK)) {
-            edits++;
-            rebuildAround(cell.tileId);
-          }
-        }
-        if (columns.place(frontierBuildSite.beaconCell.tileId, frontierBuildSite.beaconCell.layer, MAT.WOOD)) {
-          edits++;
-          rebuildAround(frontierBuildSite.beaconCell.tileId);
-        }
-        refreshFrontier();
-        return frontierMode.getSnapshot();
-      },
-      completeFlight: () => {
-        const route = courierRally.activeRoute;
-        if (!route) return { error: 'no active route' };
-        const sample = (target: CourierTarget | null, overrides: Partial<CourierPlayerSample> = {}): CourierPlayerSample => ({
-          position: target?.position ?? route.start.position,
-          velocity: target ? scale(target.forward, 32) : { x: 0, y: 0, z: 0 },
-          mode: 'plane',
-          speed: 42,
-          agl: target?.agl ?? route.startAgl,
-          planeStowed: false,
-          submerged: 0,
-          ...overrides,
-        });
-        handleCourierEvents(courierRally.update(3.2, sample(null)));
-        for (const target of route.targets) {
-          handleCourierEvents(courierRally.update(0.25, sample(target, target.kind === 'pad'
-            ? { mode: 'walk', speed: 20, agl: 0.4, planeStowed: true }
-            : undefined)));
-        }
-        courierUi.setHud(
-          courierRally.getSnapshot(),
-          Math.hypot(player.vx, player.vy, player.vz),
-          player.radius() - PLANET_RADIUS,
-          player.altitudeAGL(),
-        );
-        frontierUi.render(frontierMode.getSnapshot());
-        renderCourierScreen();
-        return {
-          courier: courierRally.getSnapshot(),
-          frontier: frontierMode.getSnapshot(),
-        };
-      },
-    },
-    creative: {
-      start: beginCreativeMode,
-      active: () => creativeActive,
-    },
     startTraversal: () => autopilot.toggle(player),
     startOrbit: () => orbitDemo.start(),
     setZoom,
@@ -910,6 +490,14 @@ async function boot(): Promise<void> {
     setFly: (on: boolean) => { player.mode = on ? 'fly' : 'walk'; },
     grantPlane: () => { planeCrafted = true; },
     give: (slot: number, n: number) => { counts[slot] = (counts[slot] ?? 0) + n; },
+    creative: {
+      active: () => creativeActive,
+      fill: () => {
+        for (let i = 0; i < counts.length; i++) counts[i] = Math.max(counts[i], 999);
+        planeCrafted = true;
+        player.mode = 'fly';
+      },
+    },
     debugPick: () => ({ lastPick, treePick }),
     character,
     sky,
@@ -1070,32 +658,35 @@ async function boot(): Promise<void> {
   (window as any).__THREE_GAME_DIAGNOSTICS__ = {
     renderer: renderer.info,
     get state() {
-      const speed = Math.hypot(player.vx, player.vy, player.vz);
       return {
         backend: isWebGPU ? 'webgpu' : 'webgl2',
         mode: player.mode,
-        speed,
+        speed: Math.hypot(player.vx, player.vy, player.vz),
         agl: player.altitudeAGL(),
-        courier: courierRally.getSnapshot(),
-        frontier: frontierMode.getSnapshot(),
-        routeObjects: courierRally.activeRoute?.targets.length ?? 0,
         streamer: streamer.stats(),
       };
     },
   };
 
   (window as any).render_game_to_text = () => JSON.stringify({
+    coordinates: 'world origin at planet core; player radius/AGL are meters',
     mode: player.mode,
     player: {
       tile: player.tile,
       speed: Math.round(Math.hypot(player.vx, player.vy, player.vz) * 10) / 10,
       agl: Math.round(player.altitudeAGL() * 10) / 10,
     },
-    inventory: { wood: counts[WOOD_SLOT], rock: counts[1] },
+    inventory: {
+      wood: counts[WOOD_SLOT],
+      rock: counts[1],
+      selected: SLOTS[hotbarSel]?.name ?? 'unknown',
+    },
+    plane: {
+      crafted: planeCrafted,
+      woodCost: PLANE_WOOD_COST,
+      readyToCraft: !planeCrafted && counts[WOOD_SLOT] >= PLANE_WOOD_COST,
+    },
     creativeActive,
-    courier: courierRally.getSnapshot(),
-    frontier: frontierMode.getSnapshot(),
-    screen: courierScreen,
   });
   (window as any).advanceTime = (ms = 16) => new Promise((resolve) => setTimeout(resolve, Math.max(0, ms)));
 
@@ -1114,59 +705,35 @@ async function boot(): Promise<void> {
 
     const drained = input.drain();
     const tf = touch.frame();
-    let uiAction: CourierUiAction | null;
-    while ((uiAction = courierUi.consumeAction()) !== null) handleCourierAction(uiAction);
-    const frontierGroundActive = frontierMode.status === 'prepping' || frontierMode.status === 'ready';
-    const courierBlocksControls = courierRally.isPlayerControlBlocked() && !frontierGroundActive && !creativeActive;
 
     // key edges
     const fDown = input.down('KeyF'), gDown = input.down('KeyG'), oDown = input.down('KeyO'), eDown = input.down('KeyE');
     const f3Down = input.down('F3'), hDown = input.down('KeyH');
-    const escDown = input.down('Escape'), rDown = input.down('KeyR');
     const fPressed = input.pressed('KeyF') || (fDown && !fWas);
     const gPressed = input.pressed('KeyG') || (gDown && !gWas);
     const oPressed = input.pressed('KeyO') || (oDown && !oWas);
     const ePressed = input.pressed('KeyE') || (eDown && !eWas);
     const f3Pressed = input.pressed('F3') || (f3Down && !f3Was);
     const hPressed = input.pressed('KeyH') || (hDown && !hWas);
-    const escPressed = input.pressed('Escape') || (escDown && !escWas);
-    const rPressed = input.pressed('KeyR') || (rDown && !rWas);
-    if (escPressed) {
-      if (frontierGroundActive) {
-        frontierMode.reset();
-        frontierBuildView.setSite(null);
-        refreshFrontier();
-        courierScreen = 'title';
-        renderCourierScreen();
-      } else if (courierRally.status === 'paused') {
-        handleCourierAction({ type: 'resume' });
-      } else if (courierRally.status === 'running' || courierRally.status === 'countdown') {
-        courierRally.pause();
-        courierScreen = 'pause';
-        renderCourierScreen();
-      }
+    if (fPressed && !autopilot.active) {
+      player.toggleFly();
+      if (creativeActive) hud.flash(player.mode === 'fly' ? 'creative free-flight' : 'walk mode', 2);
     }
-    if (rPressed && (courierRally.status === 'failed' || courierRally.status === 'complete' || courierRally.status === 'paused')) {
-      handleCourierAction({ type: 'restart' });
-    }
-    if (fPressed && !autopilot.active && !courierBlocksControls && !frontierGroundActive) player.toggleFly();
-    if (gPressed && !courierBlocksControls && !frontierGroundActive) { autopilot.toggle(player); hud.flash(autopilot.active ? 'autopilot lap…' : 'autopilot off', 3); }
-    if (oPressed && !courierBlocksControls && !frontierGroundActive) { orbitDemo.start(); hud.flash('orbit demo…', 3); }
-    if ((ePressed || tf.plane) && !autopilot.active && !courierBlocksControls) {
-      if (frontierGroundActive) launchFrontierRoute();
-      else if (creativeActive && tf.plane && !ePressed) {
+    if (gPressed) { autopilot.toggle(player); hud.flash(autopilot.active ? 'autopilot lap…' : 'autopilot off', 3); }
+    if (oPressed) { orbitDemo.start(); hud.flash('orbit demo…', 3); }
+    if ((ePressed || tf.plane) && !autopilot.active) {
+      if (creativeActive && tf.plane && !ePressed) {
         player.toggleFly();
-        setTouchPlaneButton();
         hud.flash(player.mode === 'fly' ? 'creative free-flight' : 'creative walk mode', 2);
+      } else {
+        handlePlaneKey();
       }
-      else handlePlaneKey();
     }
     if (f3Pressed) showDiag = !showDiag;
     if (hPressed) hud.toggleHelp();
     fWas = fDown; gWas = gDown; oWas = oDown; eWas = eDown; f3Was = f3Down; hWas = hDown;
-    escWas = escDown; rWas = rDown;
     for (let i = 0; i < SLOTS.length; i++) {
-      if (!courierBlocksControls && input.down(`Digit${i + 1}`)) hotbarSel = i;
+      if (input.down(`Digit${i + 1}`)) hotbarSel = i;
     }
     if (hotbarSel !== prevSel) {
       if (prevSel >= 0) hud.slotName(SLOTS[hotbarSel].name);
@@ -1178,10 +745,10 @@ async function boot(): Promise<void> {
     }
 
     // look + move (touch joystick/buttons merge with the keyboard)
-    if (input.active() && !autopilot.active && !courierBlocksControls) player.applyLook(drained.dx, drained.dy);
-    if (autopilot.active && !courierBlocksControls) {
+    if (input.active() && !autopilot.active) player.applyLook(drained.dx, drained.dy);
+    if (autopilot.active) {
       autopilot.update(dt, player);
-    } else if (!courierBlocksControls) {
+    } else {
       const fwd = Math.max(-1, Math.min(1, (input.down('KeyW') ? 1 : 0) + (input.down('KeyS') ? -1 : 0) + tf.moveY));
       const strafe = Math.max(-1, Math.min(1, (input.down('KeyD') ? 1 : 0) + (input.down('KeyA') ? -1 : 0) + tf.moveX));
       const upDown = (input.down('Space') || tf.jump ? 1 : 0) + (input.down('ControlLeft') || input.down('KeyC') || tf.down ? -1 : 0);
@@ -1193,20 +760,6 @@ async function boot(): Promise<void> {
         swimUp: input.down('Space') || tf.jump,
       });
       if (player.planeStowed) hud.flash(player.submerged > 0.2 ? 'splashdown' : 'touched down', 2);
-    }
-
-    const courierSample: CourierPlayerSample = {
-      position: { x: player.px, y: player.py, z: player.pz },
-      velocity: { x: player.vx, y: player.vy, z: player.vz },
-      mode: player.mode,
-      speed: Math.hypot(player.vx, player.vy, player.vz),
-      agl: player.altitudeAGL(),
-      planeStowed: player.planeStowed,
-      submerged: player.submerged,
-    };
-    handleCourierEvents(courierRally.update(dt, courierSample));
-    if (frontierMode.activeSite && (frontierMode.status === 'prepping' || frontierMode.status === 'ready')) {
-      refreshFrontier(dt);
     }
 
     // user wheel always takes priority over scripted/auto zoom
@@ -1343,18 +896,16 @@ async function boot(): Promise<void> {
     sun.position.set(SUN.x * 11000 - camWorld.x, SUN.y * 11000 - camWorld.y, SUN.z * 11000 - camWorld.z);
     sunTarget.position.set(-camWorld.x, -camWorld.y, -camWorld.z);
     character.update(player, camWorld, camDist, dt);
-    courierView.update(courierRally.getSnapshot(), camWorld, dt);
-    frontierBuildView.update(frontierInspection, camWorld);
 
     // --- picking + edits ---
-    if (!courierBlocksControls && input.active() && !touch.enabled && camDist < 120 && frameIdx % 2 === 0) {
+    if (input.active() && !touch.enabled && camDist < 120 && frameIdx % 2 === 0) {
       const dirx = tx - cwx, diry = ty - cwy, dirz = tz - cwz;
       const dl = Math.hypot(dirx, diry, dirz) || 1;
       updatePicks(dirx / dl, diry / dl, dirz / dl);
     }
-    if (courierBlocksControls || !input.active() || camDist >= 120) { lastPick = null; treePick = null; }
+    if (!input.active() || camDist >= 120) { lastPick = null; treePick = null; }
     // touch: a tap mines at the tapped ray, a long-press builds there
-    if (!courierBlocksControls && touch.enabled && camDist < 120 && (tf.mines.length > 0 || tf.places.length > 0)) {
+    if (touch.enabled && camDist < 120 && (tf.mines.length > 0 || tf.places.length > 0)) {
       for (const m of tf.mines) {
         rayV.set((m.x / window.innerWidth) * 2 - 1, -(m.y / window.innerHeight) * 2 + 1, 0.5).unproject(camera).normalize();
         updatePicks(rayV.x, rayV.y, rayV.z);
@@ -1392,8 +943,8 @@ async function boot(): Promise<void> {
     }
 
     mineTimer -= dt; placeTimer -= dt;
-    if (!courierBlocksControls && (drained.mine || (input.mineHeld && mineTimer <= 0)) && (lastPick || treePick)) { tryMine(); mineTimer = 0.17; }
-    if (!courierBlocksControls && (drained.place || (input.placeHeld && placeTimer <= 0)) && lastPick) { tryPlace(); placeTimer = 0.17; }
+    if ((drained.mine || (input.mineHeld && mineTimer <= 0)) && (lastPick || treePick)) { tryMine(); mineTimer = 0.17; }
+    if ((drained.place || (input.placeHeld && placeTimer <= 0)) && lastPick) { tryPlace(); placeTimer = 0.17; }
 
     // --- hud + metrics ---
     metrics.frame(dtMs);
@@ -1403,7 +954,6 @@ async function boot(): Promise<void> {
       hudTimer = 0.25;
       const agl = player.altitudeAGL();
       const speed = Math.hypot(player.vx, player.vy, player.vz);
-      const altitude = player.radius() - PLANET_RADIUS;
       hud.setVitals(`${metrics.fpsEma.toFixed(0)} fps${metrics.active() ? ` · ● ${metrics.active()}` : ''}`);
       if (showDiag) {
         const s = streamer.stats();
@@ -1429,10 +979,16 @@ async function boot(): Promise<void> {
         player.mode === 'fly' ? `fly · ${agl.toFixed(0)} m` :
         autopilot.active ? 'autopilot — G stops' : null);
       hud.setHotbar(SLOTS.map((sl, i) => ({ name: sl.name, css: sl.css, count: counts[i] })), hotbarSel);
-      setTouchPlaneButton();
-      touch.setDownVisible(!courierBlocksControls && player.mode !== 'walk');
-      courierUi.setHud(courierRally.getSnapshot(), speed, altitude, agl);
-      renderCourierScreen();
+      touch.setPlaneButton(
+        creativeActive ? 'fly'
+        : player.mode === 'plane' ? 'flying'
+        : planeCrafted ? 'fly'
+        : counts[WOOD_SLOT] > 0 ? 'craft'
+        : 'hidden',
+        creativeActive ? player.mode === 'fly' ? 'walk' : 'free'
+        : !planeCrafted && player.mode !== 'plane'
+          ? `${Math.min(counts[WOOD_SLOT], PLANE_WOOD_COST)}/${PLANE_WOOD_COST}` : '');
+      touch.setDownVisible(player.mode !== 'walk');
     }
 
     renderer.render(scene, camera);

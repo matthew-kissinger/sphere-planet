@@ -37,7 +37,7 @@ export interface TouchFrame {
   places: { x: number; y: number }[];
 }
 
-export type PlaneButtonState = 'hidden' | 'craft' | 'fly' | 'flying' | 'prep' | 'launch';
+export type PlaneButtonState = 'hidden' | 'craft' | 'fly' | 'flying';
 
 export class TouchControls {
   enabled = false;
@@ -286,10 +286,8 @@ export class TouchControls {
     this.planeState = state;
     this.planeLabel = label;
     this.btnPlane.classList.toggle('show', state !== 'hidden');
-    this.btnPlane.classList.toggle('ready', state === 'fly' || state === 'flying' || state === 'launch');
+    this.btnPlane.classList.toggle('ready', state === 'fly' || state === 'flying');
     this.btnPlane.innerHTML = state === 'flying' ? '<span>✕</span><span class="sub">stow</span>'
-      : state === 'prep' ? `<span>⌂</span><span class="sub">${label}</span>`
-      : state === 'launch' ? `<span>✈</span><span class="sub">go</span>`
       : label ? `<span>✈</span><span class="sub">${label}</span>` : '<span>✈</span>';
   }
 

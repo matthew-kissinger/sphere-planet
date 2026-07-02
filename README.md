@@ -7,9 +7,9 @@ continuous from a footstep on a beach to the whole planet hanging in space.
 **Play it: <https://matthew-kissinger.github.io/goldberg-planet/>**
 
 Best in a WebGPU browser (Chrome/Edge); it falls back to WebGL2 automatically everywhere else.
-Works on phones too: touch controls appear automatically and cover the same shipped modes as
-mouse/keyboard. Play a quick courier route, prep a ground outpost in Frontier mode, or enter
-Creative with a full hotbar and free-flight.
+Works on phones too — touch controls appear automatically. The game is a sandbox: walk,
+swim, mine, build, chop two trees for plane wood, then press `E` or tap the plane button
+to fly around the world, under, over, and through the voxel clouds.
 
 | | | |
 |---|---|---|
@@ -21,22 +21,15 @@ Creative with a full hotbar and free-flight.
 ```
 npm install
 npm run dev      # open the printed URL
-npm test         # 30 topology/world/courier/frontier tests
+npm test         # 24 topology/world/trees/storage/persistence tests
 npm run build    # typecheck + production bundle (deployed to Pages by CI)
 ```
 
 URL params: `?seed=anything` (world seed), `?m=192` (Goldberg frequency), `?gpu=gl`
-(force the WebGL2 fallback), `?creative=1` (999 of every block + the plane pre-crafted),
-`?touch=1` (force the touch UI), `?clouds=0` (no cloud layer), `?skyq=low|high` (sky march
-quality; defaults low on coarse-pointer devices), `?debug=1` (start with F3 diagnostics open).
-
-## Game modes
-
-| Mode | What you do | PC input | Mobile input |
-|---|---|---|---|
-| **Play** | Start the selected courier route immediately, fly rings, and land at the delivery pad. | Click `Play`, steer with mouse, throttle with `W/S`, pause with `Esc`. | Tap `Play`, drag-look, left stick throttles while flying, round buttons climb/descend/stow. |
-| **Frontier** | Gather `12 wood` and `6 rock`, place blocks into the marked `7-cell` pad and beacon, then launch Harbor Loop from the prepared outpost. | Click `Frontier`, use normal chop/mine/build controls, press `E` when the HUD says launch. | Tap `Frontier`, tap to chop/mine, hold to build, tap the plane button when it says `go`. |
-| **Creative** | Start with a full hotbar, unlocked plane, and free-flight for terrain editing and inspection. | Click `Creative`; `F` toggles free-flight/walk and `E` still boards/stows the plane. | Tap `Creative`; the plane button toggles free-flight/walk so touch has parity with `F`. |
+(force the WebGL2 fallback), `?creative=1` (999 of every block, the plane unlocked, and
+free-flight enabled), `?touch=1` (force the touch UI), `?clouds=0` (no cloud layer),
+`?skyq=low|high` (sky march quality; defaults low on coarse-pointer devices), `?debug=1`
+(start with F3 diagnostics open).
 
 ## Controls
 
@@ -49,11 +42,11 @@ quality; defaults low on coarse-pointer devices), `?debug=1` (start with F3 diag
 | LMB | mine terrain / **chop trees** (+6 wood each) |
 | RMB | build the selected block |
 | 1–5 | hotbar: dirt · rock · sand · snow · wood — mining feeds the counts, building spends them |
-| **E** | **the plane**: craft it once for 12 wood, then board / stow anytime |
+| **E** | **the plane**: chop 2 trees for 12 wood, craft it once, then board / stow anytime |
 | W / S (flying) | throttle 16–88 m/s |
 | look up / down (flying) | climb / dive — **level flight holds your height over the terrain** |
 | mouse wheel | one continuous axis from first-person to whole-planet orbit and back |
-| F | creative free-flight toggle |
+| F | free-flight / walk toggle |
 | F3 / H | diagnostics overlay / show the help again |
 | G / O | autopilot circumnavigation / orbit pull-back demo (both capture frame metrics) |
 
@@ -61,32 +54,17 @@ quality; defaults low on coarse-pointer devices), `?debug=1` (start with F3 diag
 (push past the rim to sprint — in the plane it works the throttle), dragging anywhere else
 looks, **tap to mine or chop**, **hold ~0.4 s to build** (keep holding and drag to paint),
 pinch to zoom from first person to orbit, and round buttons handle jump/climb, descend,
-and crafting / boarding / stowing the plane. In Frontier mode the plane button becomes the
-launch button once the pad, beacon, and material requirements are complete. In Creative mode
-the same button toggles free-flight/walk for touch parity with desktop `F`.
+and crafting / boarding / stowing the plane. With `?creative=1`, the plane button toggles
+walk/free-flight so mobile has the same Creative shortcut as desktop `F`.
 
 ## The survival loop
 
 Trees grow in forest clusters on grassland — deterministically from the seed, like everything
 else: a released region regrows the same woods, minus what you chopped (the chopped set is
 sparse state, independent of mesh residency, exactly like column edits). Chop six wood out of
-a tree with LMB; twelve crafts your plane. Mining yields blocks by material (grass crumbles
+a tree with LMB; two trees craft your plane. Mining yields blocks by material (grass crumbles
 to dirt, seabed to sand); the hotbar builds them back anywhere, and placed cells **remember
 their material** through release and regeneration.
-
-## Courier Frontier ground mode
-
-The rally prototype keeps quick-play flight available, and the `Frontier` menu entry adds a
-ground/crafting logistics loop: gather wood and rock, build the marked outpost pad and
-beacon with placed tiles, then launch the prepared Harbor Loop delivery. See
-[Courier Frontier Ground Mode Plan](docs/design/courier-frontier-plan.md).
-
-## Creative mode
-
-The `Creative` menu entry is for inspection, free building, and performance/streaming checks.
-It grants `999` of every hotbar material, unlocks the plane, starts in free-flight, and leaves
-the normal planet editing systems active. Desktop keeps the `F` free-flight toggle; mobile
-gets the same free-flight/walk toggle through the round plane button.
 
 ## The plane
 
@@ -174,23 +152,20 @@ water, or a cliff stows it; E brings it back mid-fall.
 ## QA and deployment
 
 - Local gates: `npm test` and `npm run build`.
-- Browser QA should cover desktop `1280x720`, mobile `390x844` with `?touch=1`, quick-play
-  route start, Frontier prep/launch/completion, Creative free-flight, pause/retry/menu, and
-  console/page errors.
+- Browser QA should cover the default sandbox start, plane crafting from `12` wood, `?creative=1`,
+  desktop controls, mobile `?touch=1`, and console/page errors.
 - Production build uses Vite `base: './'`, so the same `dist/` works under
   `https://matthew-kissinger.github.io/goldberg-planet/` and local static preview paths.
-- GitHub Pages deployment is expected from `dist/` after a successful build. The repo is
-  intentionally static: no server secrets, no runtime API keys, and no Pages-specific
-  backend configuration.
+- GitHub Pages deploys from the `main` branch workflow in `.github/workflows/deploy.yml`.
+  The app is static: no server secrets, runtime API keys, or backend configuration are expected.
 
-Test suite: 30 tests — icosahedron invariants; 10m²+2 counts with exactly 12 pentagons;
+Test suite: 24 tests — icosahedron invariants; 10m²+2 counts with exactly 12 pentagons;
 neighbor symmetry; CCW winding and bit-identical shared corners; id round-trips; seam
 agreement; `tileOf` vs brute force; layer-grid inverses; terrain determinism and
 ocean/land/mountain balance; column edit semantics incl. tunnels and immutable bedrock;
 **per-cell placed materials with replay persistence**; sparse-edit storage scaling; chunk
 partition exactness; mesh determinism; edit locality; **tree determinism, chopping, and
-regeneration**; edit persistence through regeneration; courier route/rally state; and
-Frontier contract/build-site launch gating.
+regeneration**; edit persistence through regeneration.
 
 ## Honest limitations
 
