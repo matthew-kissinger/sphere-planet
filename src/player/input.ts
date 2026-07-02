@@ -10,6 +10,7 @@ const DRAG_CLICK_SLOP = 5;
 
 export class Input {
   keys = new Set<string>();
+  keyEdges = new Set<string>();
   mouseDX = 0;
   mouseDY = 0;
   wheel = 0;
@@ -33,11 +34,15 @@ export class Input {
     el.tabIndex = 0;
     window.addEventListener('keydown', (e) => {
       if (e.code === 'Tab' || e.code === 'F5') return;
+      if (!this.keys.has(e.code)) this.keyEdges.add(e.code);
       this.keys.add(e.code);
       if (['Space', 'ControlLeft', 'KeyW', 'KeyA', 'KeyS', 'KeyD', 'F3'].includes(e.code)) e.preventDefault();
     });
     window.addEventListener('keyup', (e) => this.keys.delete(e.code));
-    window.addEventListener('blur', () => this.keys.clear());
+    window.addEventListener('blur', () => {
+      this.keys.clear();
+      this.keyEdges.clear();
+    });
 
     document.addEventListener('pointerlockchange', () => {
       this.locked = document.pointerLockElement === el;
@@ -51,7 +56,7 @@ export class Input {
     window.addEventListener('mousedown', (e) => {
       if (this.touchMode) return;
       // UI elements (hotbar) handle their own pointers
-      if (e.target instanceof HTMLElement && e.target.closest('#hotbar, .tbtn')) return;
+      if (e.target instanceof HTMLElement && e.target.closest('#hotbar, .tbtn, #rally-menu')) return;
       el.focus();
       if (!this.locked && !this.lockUnavailable) {
         // attempt pointer lock; a denial (embedded preview) flips us to drag-look
@@ -129,4 +134,10 @@ export class Input {
   }
 
   down(code: string): boolean { return this.keys.has(code); }
+
+  pressed(code: string): boolean {
+    const wasPressed = this.keyEdges.has(code);
+    this.keyEdges.delete(code);
+    return wasPressed;
+  }
 }
