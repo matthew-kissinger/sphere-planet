@@ -20,6 +20,8 @@ export class Input {
   placePressed = false;
   locked = false;
   lockUnavailable = false;
+  /** touch controls own the pointer: mouse handlers stand down, no pointer lock */
+  touchMode = false;
   private dragButton = -1;
   private dragMoved = 0;
   private lastX = 0;
@@ -32,7 +34,7 @@ export class Input {
     window.addEventListener('keydown', (e) => {
       if (e.code === 'Tab' || e.code === 'F5') return;
       this.keys.add(e.code);
-      if (['Space', 'ControlLeft', 'KeyW', 'KeyA', 'KeyS', 'KeyD'].includes(e.code)) e.preventDefault();
+      if (['Space', 'ControlLeft', 'KeyW', 'KeyA', 'KeyS', 'KeyD', 'F3'].includes(e.code)) e.preventDefault();
     });
     window.addEventListener('keyup', (e) => this.keys.delete(e.code));
     window.addEventListener('blur', () => this.keys.clear());
@@ -47,6 +49,9 @@ export class Input {
     });
 
     window.addEventListener('mousedown', (e) => {
+      if (this.touchMode) return;
+      // UI elements (hotbar) handle their own pointers
+      if (e.target instanceof HTMLElement && e.target.closest('#hotbar, .tbtn')) return;
       el.focus();
       if (!this.locked && !this.lockUnavailable) {
         // attempt pointer lock; a denial (embedded preview) flips us to drag-look
@@ -68,6 +73,7 @@ export class Input {
       }
     });
     window.addEventListener('mousemove', (e) => {
+      if (this.touchMode) return;
       if (this.locked) {
         this.mouseDX += e.movementX;
         this.mouseDY += e.movementY;
@@ -82,6 +88,7 @@ export class Input {
       }
     });
     window.addEventListener('mouseup', (e) => {
+      if (this.touchMode) return;
       if (this.locked) {
         if (e.button === 0) this.mineHeld = false;
         if (e.button === 2) this.placeHeld = false;
@@ -103,9 +110,9 @@ export class Input {
     window.addEventListener('contextmenu', (e) => e.preventDefault());
   }
 
-  /** true when look/move input is live (locked, or drag-look fallback engaged) */
+  /** true when look/move input is live (locked, drag-look fallback, or touch) */
   active(): boolean {
-    return this.locked || this.lockUnavailable;
+    return this.locked || this.lockUnavailable || this.touchMode;
   }
 
   /** consume per-frame deltas */

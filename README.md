@@ -7,7 +7,8 @@ continuous from a footstep on a beach to the whole planet hanging in space.
 **Play it: <https://matthew-kissinger.github.io/goldberg-planet/>**
 
 Best in a WebGPU browser (Chrome/Edge); it falls back to WebGL2 automatically everywhere else.
-Chop twelve wood, press E, and fly around the world.
+Works on phones too — touch controls appear automatically. Chop twelve wood, press E (or tap ✈),
+and fly around the world, under, over, and through the voxel clouds.
 
 | | | |
 |---|---|---|
@@ -24,7 +25,9 @@ npm run build    # typecheck + production bundle (deployed to Pages by CI)
 ```
 
 URL params: `?seed=anything` (world seed), `?m=192` (Goldberg frequency), `?gpu=gl`
-(force the WebGL2 fallback), `?creative=1` (999 of every block + the plane pre-crafted).
+(force the WebGL2 fallback), `?creative=1` (999 of every block + the plane pre-crafted),
+`?touch=1` (force the touch UI), `?clouds=0` (no cloud layer), `?skyq=low|high` (sky march
+quality; defaults low on coarse-pointer devices), `?debug=1` (start with F3 diagnostics open).
 
 ## Controls
 
@@ -42,7 +45,14 @@ URL params: `?seed=anything` (world seed), `?m=192` (Goldberg frequency), `?gpu=
 | look up / down (flying) | climb / dive — **level flight holds your height over the terrain** |
 | mouse wheel | one continuous axis from first-person to whole-planet orbit and back |
 | F | creative free-flight |
+| F3 / H | diagnostics overlay / show the help again |
 | G / O | autopilot circumnavigation / orbit pull-back demo (both capture frame metrics) |
+
+**On touch devices** the UI switches itself over: a floating joystick on the left moves
+(push past the rim to sprint — in the plane it works the throttle), dragging anywhere else
+looks, **tap to mine or chop**, **hold ~0.4 s to build** (keep holding and drag to paint),
+pinch to zoom from first person to orbit, and round buttons handle jump/climb, descend,
+and crafting / boarding / stowing the plane.
 
 ## The survival loop
 
@@ -104,6 +114,14 @@ water, or a cliff stows it; E brings it back mid-fall.
   scale) whose per-vertex shore depth is sampled from the **layer-quantized** surface, so
   the depth tint and foam band hug the actual hex terraces; slow swells + short chop
   displace it and a moving ripple field breaks up the specular highlight.
+- The **sky is raymarched, not faked**: the atmosphere integrates an exponential density
+  shell (out to 1.2 R) per pixel with day/night scattering and a warm terminator band, and
+  the **voxel clouds** march a 21 m cell lattice in a band 120–165 m up — hash-thresholded
+  banked coverage that drifts with the wind, sunlit tops, blocky undersides, and a near-fade
+  so flying through a bank stays readable. Both clamp every ray against the **scene depth
+  buffer** and the analytic water sphere instead of depth-testing shell geometry, which is
+  what lets the glow haze distant ridgelines (aerial perspective), wrap the limb with a soft
+  falloff from orbit, and never bleed through a cliff, a tree, or a cave ceiling.
 - **Camera**: floating origin (f64 sim, camera pinned at 0,0,0); one continuous wheel axis
   from first person to orbit (the first/third transition is a smooth ramp plus a character
   fade, not a cut); the third-person boom **ray-casts the column field** and pulls in ahead
@@ -147,6 +165,9 @@ regeneration**; edit persistence through regeneration.
   surface far away.
 - Collision is a column-sampled point capsule (step-up, head bump, wall block) — fine at
   these speeds, not a swept hull.
+- The cloud march is capped at ~44 steps, so at extreme grazing angles (the far horizon from
+  the ground) the most distant clouds thin out before the limb; the atmosphere haze covers
+  most of it.
 - Meshing stays on the main thread because measurement says it can (p95 2.4 ms); the mesher
   is three-free and typed-array pure, ready to move to a Worker if a bigger planet needs it.
 - Progress persists for the session (edits, chops, inventory, the plane); there is no save

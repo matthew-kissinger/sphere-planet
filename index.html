@@ -2,22 +2,56 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover" />
+  <meta name="mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
   <title>Goldberg Planet</title>
   <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Cpolygon points='16,2 28,9 28,23 16,30 4,23 4,9' fill='%236fae4e' stroke='%232c4a22' stroke-width='2'/%3E%3C/svg%3E" />
   <style>
-    html, body { margin: 0; padding: 0; overflow: hidden; background: #05060a; height: 100%; }
-    #app { position: fixed; inset: 0; }
+    html, body {
+      margin: 0; padding: 0; overflow: hidden; background: #05060a; height: 100%;
+      user-select: none; -webkit-user-select: none; -webkit-touch-callout: none;
+      touch-action: none; overscroll-behavior: none;
+    }
+    #app { position: fixed; inset: 0; touch-action: none; }
     #app canvas { display: block; }
     .hud {
-      position: fixed; font-family: 'Cascadia Mono', Consolas, monospace; font-size: 12px;
+      position: fixed; font-family: 'Cascadia Mono', Consolas, ui-monospace, monospace; font-size: 12px;
       color: #cfd8e3; pointer-events: none; user-select: none; text-shadow: 0 1px 2px rgba(0,0,0,0.8);
     }
-    #stats { top: 10px; left: 12px; line-height: 1.5; white-space: pre; }
-    #help {
-      bottom: 10px; left: 12px; line-height: 1.45; color: #8fa0b3; white-space: pre;
+    #vitals {
+      top: calc(8px + env(safe-area-inset-top)); left: calc(10px + env(safe-area-inset-left));
+      font-size: 11px; color: #6d7d94; letter-spacing: 0.3px;
     }
-    #msg { top: 10px; right: 12px; text-align: right; line-height: 1.5; color: #a8c6e8; white-space: pre; }
+    #diag {
+      top: calc(28px + env(safe-area-inset-top)); left: calc(10px + env(safe-area-inset-left));
+      line-height: 1.55; white-space: pre; display: none;
+      background: rgba(8, 12, 20, 0.5); border: 1px solid rgba(140,160,190,0.14); border-radius: 8px;
+      padding: 8px 10px; backdrop-filter: blur(4px); -webkit-backdrop-filter: blur(4px);
+    }
+    #help {
+      bottom: calc(12px + env(safe-area-inset-bottom)); left: calc(12px + env(safe-area-inset-left));
+      line-height: 1.6; color: #7e8fa5; white-space: pre; font-size: 11.5px;
+      opacity: 1; transition: opacity 0.7s;
+    }
+    #help.hide { opacity: 0; }
+    #msg {
+      bottom: calc(126px + env(safe-area-inset-bottom)); left: 50%; transform: translateX(-50%);
+      color: #dfe9f6; text-align: center; line-height: 1.5; max-width: 84vw;
+      opacity: 0; transition: opacity 0.3s;
+      background: rgba(8, 12, 20, 0.55); border: 1px solid rgba(140,160,190,0.16); border-radius: 9px;
+      padding: 5px 12px; backdrop-filter: blur(5px); -webkit-backdrop-filter: blur(5px);
+    }
+    #msg.on { opacity: 1; }
+    #flight {
+      bottom: calc(96px + env(safe-area-inset-bottom)); left: 50%; transform: translateX(-50%);
+      color: #a8bcd6; font-size: 12px; letter-spacing: 0.6px; display: none; white-space: pre;
+    }
+    #slotname {
+      bottom: calc(72px + env(safe-area-inset-bottom)); left: 50%; transform: translateX(-50%);
+      color: #c3d2e6; font-size: 11px; letter-spacing: 0.8px; opacity: 0; transition: opacity 0.3s;
+    }
+    #slotname.on { opacity: 1; }
     #crosshair {
       top: 50%; left: 50%; width: 4px; height: 4px; margin: -2px 0 0 -2px;
       background: rgba(255,255,255,0.85); border-radius: 50%;
@@ -31,38 +65,86 @@
     #splash .bar { width: 260px; height: 3px; background: #1a2230; }
     #splash .bar > div { height: 100%; width: 0%; background: #5b8fd6; transition: width 0.2s; }
     #hotbar {
-      bottom: 10px; left: 50%; transform: translateX(-50%);
-      display: flex; gap: 5px;
+      bottom: calc(12px + env(safe-area-inset-bottom)); left: 50%; transform: translateX(-50%);
+      display: flex; gap: 5px; pointer-events: auto;
     }
     #hotbar .slot {
-      width: 52px; height: 52px; position: relative; border-radius: 5px;
-      background: rgba(10, 14, 22, 0.55); border: 1.5px solid rgba(150, 165, 185, 0.35);
-      box-sizing: border-box;
+      width: 50px; height: 50px; position: relative; border-radius: 8px;
+      background: rgba(10, 14, 22, 0.5); border: 1.5px solid rgba(150, 165, 185, 0.3);
+      box-sizing: border-box; backdrop-filter: blur(4px); -webkit-backdrop-filter: blur(4px);
     }
-    #hotbar .slot.sel { border-color: #e8eef6; background: rgba(28, 36, 52, 0.7); }
+    #hotbar .slot.sel { border-color: #e8eef6; background: rgba(30, 38, 54, 0.72); }
     #hotbar .swatch {
-      position: absolute; inset: 9px 9px 13px 9px; border-radius: 3px;
+      position: absolute; inset: 8px; border-radius: 4px;
       box-shadow: inset -2px -3px 0 rgba(0,0,0,0.25), inset 2px 2px 0 rgba(255,255,255,0.18);
     }
-    #hotbar .key { position: absolute; top: 1px; left: 4px; font-size: 9px; color: #93a3b8; }
-    #hotbar .count { position: absolute; bottom: 1px; right: 4px; font-size: 11px; color: #eef3fa; }
-    #hotbar .name { position: absolute; bottom: 1px; left: 4px; font-size: 8px; color: #7e8ea3; }
+    #hotbar .key { position: absolute; top: 2px; left: 5px; font-size: 9px; color: #93a3b8; }
+    #hotbar .count { position: absolute; bottom: 2px; right: 5px; font-size: 11px; color: #eef3fa; text-shadow: 0 1px 2px rgba(0,0,0,0.9); }
+
+    /* --- touch controls (enabled by adding .touch to body) --- */
+    #joy {
+      position: fixed; width: 128px; height: 128px; border-radius: 50%; display: none;
+      background: rgba(10, 14, 24, 0.25); border: 1.5px solid rgba(165, 185, 210, 0.28);
+      pointer-events: none; z-index: 5;
+    }
+    #joyknob {
+      position: absolute; width: 56px; height: 56px; left: 36px; top: 36px; border-radius: 50%;
+      background: rgba(185, 200, 222, 0.4); border: 1.5px solid rgba(215, 228, 245, 0.5);
+    }
+    .tbtn {
+      position: fixed; border-radius: 50%; display: none; z-index: 5;
+      background: rgba(10, 14, 24, 0.38); border: 1.5px solid rgba(165, 185, 210, 0.34);
+      color: #dfe8f4; pointer-events: auto; user-select: none;
+      font-family: 'Cascadia Mono', Consolas, ui-monospace, monospace;
+      align-items: center; justify-content: center; flex-direction: column; line-height: 1.1;
+      text-shadow: 0 1px 2px rgba(0,0,0,0.8);
+    }
+    .tbtn.press { background: rgba(95, 125, 175, 0.5); border-color: rgba(200, 218, 240, 0.6); }
+    .tbtn .sub { font-size: 9px; color: #9fb0c6; }
+    #btn-jump {
+      width: 76px; height: 76px; font-size: 26px;
+      right: calc(22px + env(safe-area-inset-right)); bottom: calc(118px + env(safe-area-inset-bottom));
+    }
+    #btn-down {
+      width: 58px; height: 58px; font-size: 20px;
+      right: calc(112px + env(safe-area-inset-right)); bottom: calc(96px + env(safe-area-inset-bottom));
+    }
+    #btn-plane {
+      width: 60px; height: 60px; font-size: 21px;
+      right: calc(30px + env(safe-area-inset-right)); bottom: calc(214px + env(safe-area-inset-bottom));
+    }
+    #btn-plane.ready { border-color: rgba(150, 210, 145, 0.7); color: #cdeec8; }
+
+    body.touch #help { display: none; }
+    body.touch #crosshair { display: none; }
+    body.touch #btn-jump { display: flex; }
+    body.touch #btn-down.show { display: flex; }
+    body.touch #btn-plane.show { display: flex; }
+    body.touch #hotbar .slot { width: 46px; height: 46px; }
+    body.touch #hotbar .key { display: none; }
+    @media (max-width: 480px) {
+      body.touch #hotbar .slot { width: 42px; height: 42px; }
+      body.touch #hotbar { gap: 4px; }
+    }
   </style>
 </head>
 <body>
   <div id="app"></div>
   <div id="splash"><div>forging planet…</div><div class="bar"><div id="splashbar"></div></div><div id="splashmsg" style="color:#5f7189;font-size:12px"></div></div>
-  <div id="stats" class="hud"></div>
+  <div id="vitals" class="hud"></div>
+  <div id="diag" class="hud"></div>
   <div id="msg" class="hud"></div>
+  <div id="flight" class="hud"></div>
+  <div id="slotname" class="hud"></div>
   <div id="crosshair" class="hud"></div>
   <div id="hotbar" class="hud"></div>
-  <div id="help" class="hud">click     lock mouse (or drag to look) | WASD move | shift sprint
-space     jump | swim up in water
-LMB       mine / chop trees   RMB: build selected block (1-5)
-E         plane: craft with 12 wood, then board / stow anytime
-W/S       plane throttle | look up/down to climb and dive
-wheel     zoom: first person to whole-planet orbit and back
-F         creative fly | G autopilot lap | O orbit demo</div>
+  <div id="help" class="hud">WASD move · space jump · shift sprint · wheel zoom
+LMB mine + chop · RMB build · 1-5 pick block
+E plane (12 wood) · F fly · F3 stats · H help</div>
+  <div id="joy"><div id="joyknob"></div></div>
+  <div id="btn-jump" class="tbtn">▲</div>
+  <div id="btn-down" class="tbtn">▼</div>
+  <div id="btn-plane" class="tbtn">✈</div>
   <script type="module" src="/src/main.ts"></script>
 </body>
 </html>

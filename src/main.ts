@@ -1,5 +1,5 @@
 import * as THREE from 'three/webgpu';
-import { color, float, positionWorld, positionLocal, cameraPosition, normalWorld, normalize, uniform, attribute, vec3, time, mix, smoothstep as tslSmoothstep } from 'three/tsl';
+import { color, float, positionWorld, positionLocal, cameraPosition, normalWorld, normalize, attribute, vec3, time, mix, smoothstep as tslSmoothstep } from 'three/tsl';
 import { Goldberg } from './geo/goldberg';
 import { buildLayers, PLANET_RADIUS, WATER_SURFACE } from './world/layers';
 import { Terrain, MAT, type MaterialId } from './world/terrain';
@@ -9,9 +9,11 @@ import { Streamer } from './world/streamer';
 import { chunkKeyOfTile } from './world/chunks';
 import { FarSphere } from './render/farsphere';
 import { buildGeodesic } from './render/geodesic';
+import { Sky } from './render/sky';
 import { Character } from './render/character';
 import { Player } from './player/player';
 import { Input } from './player/input';
+import { TouchControls } from './player/touch';
 import { pick, pickTree, type PickResult, type TreePick } from './edit/pick';
 import { Metrics } from './demo/metrics';
 import { Autopilot, OrbitDemo } from './demo/autopilot';
@@ -89,7 +91,9 @@ async function boot(): Promise<void> {
     await renderer.init();
   }
   const isWebGPU = !!(renderer.backend as { isWebGPUBackend?: boolean }).isWebGPUBackend;
-  renderer.setPixelRatio(Math.min(window.devicePixelRatio, 1.75));
+  // coarse-pointer devices get a lower pixel-ratio cap and cheaper sky march
+  const coarsePointer = window.matchMedia('(pointer: coarse)').matches || params.get('touch') === '1';
+  renderer.setPixelRatio(Math.min(window.devicePixelRatio, coarsePointer ? 1.5 : 1.75));
   renderer.setSize(window.innerWidth, window.innerHeight);
   app.appendChild(renderer.domElement);
 
@@ -220,25 +224,12 @@ async function boot(): Promise<void> {
     scene.add(stars);
   }
 
-  // --- atmosphere shell (TSL fresnel, additive) ---
-  const atmo = (() => {
-    const geom = new THREE.IcosahedronGeometry(PLANET_RADIUS * 1.05, 6);
-    const mat = new THREE.MeshBasicNodeMaterial();
-    const viewDir = normalize(cameraPosition.sub(positionWorld));
-    const fresnel = float(1.0).sub(normalWorld.dot(viewDir).abs()).max(0.0).pow(2.6);
-    const sunFacing = normalWorld.dot(uniform(SUN)).mul(0.5).add(0.5);
-    mat.colorNode = color(0x4d9ae6);
-    mat.opacityNode = fresnel.mul(sunFacing.mul(0.6).add(0.25)).mul(0.85);
-    mat.transparent = true;
-    mat.depthWrite = false;
-    mat.blending = THREE.AdditiveBlending;
-    mat.side = THREE.BackSide;
-    const mesh = new THREE.Mesh(geom, mat);
-    mesh.frustumCulled = false;
-    mesh.renderOrder = 5;
-    scene.add(mesh);
-    return mesh;
-  })();
+  // --- atmosphere + voxel clouds (raymarched, depth-aware) ---
+  const skyQuality: 'high' | 'low' =
+    params.get('skyq') === 'high' ? 'high'
+    : params.get('skyq') === 'low' ? 'low'
+    : coarsePointer ? 'low' : 'high';
+  const sky = new Sky(scene, SUN, skyQuality, params.get('clouds') !== '0');
 
   // --- player + input + demos ---
   const player = new Player(geo, layers, columns);
@@ -275,6 +266,7 @@ async function boot(): Promise<void> {
   })();
   player.spawnAt(spawnTile);
   const input = new Input(renderer.domElement);
+  const touch = new TouchControls(input, app, params.get('touch') === '1');
   const hud = new Hud();
   const metrics = new Metrics(() => {
     const s = streamer.stats();
@@ -311,8 +303,9 @@ async function boot(): Promise<void> {
   streamer.residencyDirty = false;
 
   hideSplash();
-  hud.flash(`${isWebGPU ? 'WebGPU' : 'WebGL2 fallback'} · seed ${SEED} · GP(${M},0) · ${geo.count.toLocaleString()} tiles
-chop trees, mine, build — ${PLANE_WOOD_COST} wood crafts a plane (E)`, 10);
+  hud.flash(touch.enabled
+    ? 'drag to look · tap to mine · hold to build'
+    : `chop trees — ${PLANE_WOOD_COST} wood crafts a plane (E)`, 8);
 
   // --- camera state ---
   let zoomExp = 0;
@@ -323,6 +316,7 @@ chop trees, mine, build — ${PLANE_WOOD_COST} wood crafts a plane (E)`, 10);
   let camObstruct = Infinity; // obstruction cap on the camera boom (smoothly regrows)
   const camUp = new THREE.Vector3(0, 1, 0);
   const camWorld = { x: 0, y: 0, z: 0 };
+  const rayV = new THREE.Vector3();
 
   // --- inventory + edit state ---
   const counts = SLOTS.map(() => 0);
@@ -358,12 +352,29 @@ chop trees, mine, build — ${PLANE_WOOD_COST} wood crafts a plane (E)`, 10);
 
   const playerReach = (): number => (player.mode === 'fly' ? 60 : 9.5);
 
+  // shared by the center-crosshair pick and touch-tap picks
+  const updatePicks = (dirx: number, diry: number, dirz: number): void => {
+    const reach = playerReach();
+    const p = pick(geo, layers, columns, camWorld.x, camWorld.y, camWorld.z, dirx, diry, dirz, reach + camDist);
+    if (p) {
+      const hitR = layers.topRadius(p.hitLayer);
+      const c = geo.centers;
+      const hx = c[p.hitTile * 3] * hitR - player.px;
+      const hy = c[p.hitTile * 3 + 1] * hitR - player.py;
+      const hz = c[p.hitTile * 3 + 2] * hitR - player.pz;
+      lastPick = Math.hypot(hx, hy, hz) > reach ? null : p;
+    } else {
+      lastPick = null;
+    }
+    treePick = pickTree(geo, layers, columns, trees, camWorld.x, camWorld.y, camWorld.z, dirx, diry, dirz, reach + camDist);
+  };
+
   const tryMine = (): void => {
     // a tree in front of the terrain hit gets chopped instead
     if (treePick && (!lastPick || treePick.dist < lastPick.dist)) {
       if (trees.chop(treePick.tile)) {
         counts[WOOD_SLOT] += WOOD_PER_TREE;
-        hud.flash(`+${WOOD_PER_TREE} wood (${counts[WOOD_SLOT]})`, 2);
+        hud.flash(`+${WOOD_PER_TREE} wood · ${counts[WOOD_SLOT]}`, 2);
         rebuildAround(treePick.tile);
         treePick = null;
       }
@@ -387,7 +398,7 @@ chop trees, mine, build — ${PLANE_WOOD_COST} wood crafts a plane (E)`, 10);
       if (lastPick.prevLayer >= headK && lastPick.prevLayer <= feetK) return;
     }
     if (counts[hotbarSel] <= 0) {
-      hud.flash(`out of ${SLOTS[hotbarSel].name} — mine some first (LMB)`, 2.5);
+      hud.flash(`out of ${SLOTS[hotbarSel].name}`, 2);
       return;
     }
     if (columns.place(lastPick.prevTile, lastPick.prevLayer, SLOTS[hotbarSel].mat)) {
@@ -403,26 +414,29 @@ chop trees, mine, build — ${PLANE_WOOD_COST} wood crafts a plane (E)`, 10);
     renderer.setSize(window.innerWidth, window.innerHeight);
   });
 
-  let fWas = false, gWas = false, oWas = false, eWas = false;
+  let fWas = false, gWas = false, oWas = false, eWas = false, f3Was = false, hWas = false;
+  let showDiag = params.get('debug') === '1';
+  let prevSel = -1;
+  let lockHinted = false;
+  hud.onSlotSelect = (i) => { hotbarSel = i; };
 
   const handlePlaneKey = (): void => {
     if (player.mode === 'plane') {
       player.exitPlane();
-      hud.flash('plane stowed — falling!', 2.5);
+      hud.flash('plane stowed', 2);
       return;
     }
     if (!planeCrafted) {
       if (counts[WOOD_SLOT] >= PLANE_WOOD_COST) {
         counts[WOOD_SLOT] -= PLANE_WOOD_COST;
         planeCrafted = true;
-        if (player.enterPlane()) hud.flash('plane crafted! mouse steers · W/S throttle · shift boost · E stows', 8);
+        if (player.enterPlane()) hud.flash(touch.enabled ? 'plane crafted — stick throttles, look steers' : 'plane crafted — W/S throttle, look steers', 6);
       } else {
-        hud.flash(`a plane needs ${PLANE_WOOD_COST} wood — you have ${counts[WOOD_SLOT]}. chop trees (LMB)`, 4);
+        hud.flash(`plane needs ${PLANE_WOOD_COST} wood · ${counts[WOOD_SLOT]}/${PLANE_WOOD_COST}`, 3);
       }
       return;
     }
-    if (player.enterPlane()) hud.flash('airborne — level flight holds your height over the terrain', 4);
-    else hud.flash("can't take off while swimming", 2.5);
+    if (!player.enterPlane()) hud.flash("can't take off from water", 2.5);
   };
 
   // --- debug/eval hooks ---
@@ -457,6 +471,7 @@ chop trees, mine, build — ${PLANE_WOOD_COST} wood crafts a plane (E)`, 10);
     give: (slot: number, n: number) => { counts[slot] = (counts[slot] ?? 0) + n; },
     debugPick: () => ({ lastPick, treePick }),
     character,
+    sky,
     camInfo: () => {
       const eye = player.eye();
       return {
@@ -625,34 +640,46 @@ chop trees, mine, build — ${PLANE_WOOD_COST} wood crafts a plane (E)`, 10);
     frameIdx++;
 
     const drained = input.drain();
+    const tf = touch.frame();
 
     // key edges
     const fDown = input.down('KeyF'), gDown = input.down('KeyG'), oDown = input.down('KeyO'), eDown = input.down('KeyE');
+    const f3Down = input.down('F3'), hDown = input.down('KeyH');
     if (fDown && !fWas && !autopilot.active) player.toggleFly();
-    if (gDown && !gWas) { autopilot.toggle(player); hud.flash(autopilot.active ? 'autopilot: circumnavigating…' : 'autopilot off', 4); }
-    if (oDown && !oWas) { orbitDemo.start(); hud.flash('orbit pull-back demo…', 4); }
-    if (eDown && !eWas && !autopilot.active) handlePlaneKey();
-    fWas = fDown; gWas = gDown; oWas = oDown; eWas = eDown;
+    if (gDown && !gWas) { autopilot.toggle(player); hud.flash(autopilot.active ? 'autopilot lap…' : 'autopilot off', 3); }
+    if (oDown && !oWas) { orbitDemo.start(); hud.flash('orbit demo…', 3); }
+    if ((eDown && !eWas || tf.plane) && !autopilot.active) handlePlaneKey();
+    if (f3Down && !f3Was) showDiag = !showDiag;
+    if (hDown && !hWas) hud.toggleHelp();
+    fWas = fDown; gWas = gDown; oWas = oDown; eWas = eDown; f3Was = f3Down; hWas = hDown;
     for (let i = 0; i < SLOTS.length; i++) {
       if (input.down(`Digit${i + 1}`)) hotbarSel = i;
     }
+    if (hotbarSel !== prevSel) {
+      if (prevSel >= 0) hud.slotName(SLOTS[hotbarSel].name);
+      prevSel = hotbarSel;
+    }
+    if (input.lockUnavailable && !input.locked && !input.touchMode && !lockHinted) {
+      lockHinted = true;
+      hud.flash('pointer lock unavailable — drag to look', 4);
+    }
 
-    // look + move
+    // look + move (touch joystick/buttons merge with the keyboard)
     if (input.active() && !autopilot.active) player.applyLook(drained.dx, drained.dy);
     if (autopilot.active) {
       autopilot.update(dt, player);
     } else {
-      const fwd = (input.down('KeyW') ? 1 : 0) + (input.down('KeyS') ? -1 : 0);
-      const strafe = (input.down('KeyD') ? 1 : 0) + (input.down('KeyA') ? -1 : 0);
-      const upDown = (input.down('Space') ? 1 : 0) + (input.down('ControlLeft') || input.down('KeyC') ? -1 : 0);
+      const fwd = Math.max(-1, Math.min(1, (input.down('KeyW') ? 1 : 0) + (input.down('KeyS') ? -1 : 0) + tf.moveY));
+      const strafe = Math.max(-1, Math.min(1, (input.down('KeyD') ? 1 : 0) + (input.down('KeyA') ? -1 : 0) + tf.moveX));
+      const upDown = (input.down('Space') || tf.jump ? 1 : 0) + (input.down('ControlLeft') || input.down('KeyC') || tf.down ? -1 : 0);
       player.update(dt, {
         forward: fwd, strafe,
         upDown: player.mode !== 'walk' ? upDown : 0,
-        sprint: input.down('ShiftLeft'),
-        jump: input.down('Space'),
-        swimUp: input.down('Space'),
+        sprint: input.down('ShiftLeft') || tf.sprint,
+        jump: input.down('Space') || tf.jump,
+        swimUp: input.down('Space') || tf.jump,
       });
-      if (player.planeStowed) hud.flash(player.submerged > 0.2 ? 'splashdown — plane stowed' : 'touched down — plane stowed', 3);
+      if (player.planeStowed) hud.flash(player.submerged > 0.2 ? 'splashdown' : 'touched down', 2);
     }
 
     // user wheel always takes priority over scripted/auto zoom
@@ -785,31 +812,33 @@ chop trees, mine, build — ${PLANE_WOOD_COST} wood crafts a plane (E)`, 10);
     streamer.updateTransforms(camWorld.x, camWorld.y, camWorld.z);
     farSphere.mesh.position.set(-camWorld.x, -camWorld.y, -camWorld.z);
     water.position.set(-camWorld.x, -camWorld.y, -camWorld.z);
-    atmo.position.set(-camWorld.x, -camWorld.y, -camWorld.z);
+    sky.update(camWorld.x, camWorld.y, camWorld.z, camera);
     sun.position.set(SUN.x * 11000 - camWorld.x, SUN.y * 11000 - camWorld.y, SUN.z * 11000 - camWorld.z);
     sunTarget.position.set(-camWorld.x, -camWorld.y, -camWorld.z);
     character.update(player, camWorld, camDist, dt);
 
     // --- picking + edits ---
-    if (input.active() && camDist < 120 && frameIdx % 2 === 0) {
+    if (input.active() && !touch.enabled && camDist < 120 && frameIdx % 2 === 0) {
       const dirx = tx - cwx, diry = ty - cwy, dirz = tz - cwz;
       const dl = Math.hypot(dirx, diry, dirz) || 1;
-      const reach = playerReach();
-      const p = pick(geo, layers, columns, camWorld.x, camWorld.y, camWorld.z, dirx / dl, diry / dl, dirz / dl, reach + camDist);
-      if (p) {
-        const hitR = layers.topRadius(p.hitLayer);
-        const c = geo.centers;
-        const hx = c[p.hitTile * 3] * hitR - player.px;
-        const hy = c[p.hitTile * 3 + 1] * hitR - player.py;
-        const hz = c[p.hitTile * 3 + 2] * hitR - player.pz;
-        lastPick = Math.hypot(hx, hy, hz) > reach ? null : p;
-      } else {
-        lastPick = null;
-      }
-      // trees are pickable in front of (or instead of) terrain
-      treePick = pickTree(geo, layers, columns, trees, camWorld.x, camWorld.y, camWorld.z, dirx / dl, diry / dl, dirz / dl, reach + camDist);
+      updatePicks(dirx / dl, diry / dl, dirz / dl);
     }
     if (!input.active() || camDist >= 120) { lastPick = null; treePick = null; }
+    // touch: a tap mines at the tapped ray, a long-press builds there
+    if (touch.enabled && camDist < 120 && (tf.mines.length > 0 || tf.places.length > 0)) {
+      for (const m of tf.mines) {
+        rayV.set((m.x / window.innerWidth) * 2 - 1, -(m.y / window.innerHeight) * 2 + 1, 0.5).unproject(camera).normalize();
+        updatePicks(rayV.x, rayV.y, rayV.z);
+        tryMine();
+      }
+      for (const b of tf.places) {
+        rayV.set((b.x / window.innerWidth) * 2 - 1, -(b.y / window.innerHeight) * 2 + 1, 0.5).unproject(camera).normalize();
+        updatePicks(rayV.x, rayV.y, rayV.z);
+        tryPlace();
+      }
+      lastPick = null;
+      treePick = null;
+    }
 
     const hlTree = treePick && (!lastPick || treePick.dist < lastPick.dist);
     const hlTile = hlTree ? treePick!.tile : lastPick ? lastPick.hitTile : -1;
@@ -843,27 +872,41 @@ chop trees, mine, build — ${PLANE_WOOD_COST} wood crafts a plane (E)`, 10);
     hudTimer -= dt;
     if (hudTimer <= 0) {
       hudTimer = 0.25;
-      const s = streamer.stats();
       const agl = player.altitudeAGL();
       const speed = Math.hypot(player.vx, player.vy, player.vz);
-      const modeLabel = autopilot.active ? 'autopilot'
-        : player.mode === 'plane' ? 'PLANE'
-        : player.submerged > 0.4 ? 'swimming'
-        : player.mode;
-      hud.setStats([
-        `${isWebGPU ? 'WebGPU' : 'WebGL2'}  ${metrics.fpsEma.toFixed(0)} fps  ${metrics.frameMsEma.toFixed(1)} ms`,
-        `mode ${modeLabel}${player.grounded ? ' (grounded)' : ''}  speed ${speed.toFixed(1)} m/s`,
-        player.mode === 'plane' ? `throttle ${player.throttle.toFixed(0)} m/s  holding ${player.holdAGL.toFixed(0)} m over terrain` : '',
-        `alt ${agl.toFixed(1)} m AGL  h ${(player.radius() - PLANET_RADIUS).toFixed(1)} m  zoom ${camDist.toFixed(0)} m`,
-        `tile ${player.tile}${geo.degreeOf(player.tile) === 5 ? ' *pentagon*' : ''}  seed ${SEED}`,
-        `chunks ${s.resident} resident / ${s.queued} queued  ${(s.triangles / 1000).toFixed(0)}k tris`,
-        `columns ${columns.generatedCount.toLocaleString()} / ${geo.count.toLocaleString()} generated  edits ${edits}`,
-        !planeCrafted ? `craft a plane: chop ${PLANE_WOOD_COST} wood, then press E (${counts[WOOD_SLOT]}/${PLANE_WOOD_COST})` : '',
-        lastEditMs > 0 ? `last edit rebuild ${lastEditMs.toFixed(1)} ms` : '',
-        input.lockUnavailable && !input.locked ? 'pointer lock unavailable here: DRAG to look' : '',
-        metrics.active() ? `● capturing: ${metrics.active()}` : '',
-      ].filter((l) => l !== ''));
+      hud.setVitals(`${metrics.fpsEma.toFixed(0)} fps${metrics.active() ? ` · ● ${metrics.active()}` : ''}`);
+      if (showDiag) {
+        const s = streamer.stats();
+        const modeLabel = autopilot.active ? 'autopilot'
+          : player.mode === 'plane' ? 'plane'
+          : player.submerged > 0.4 ? 'swim'
+          : player.mode;
+        hud.setDiag([
+          `${isWebGPU ? 'WebGPU' : 'WebGL2'} · ${metrics.frameMsEma.toFixed(1)} ms · seed ${SEED}`,
+          `mode ${modeLabel}${player.grounded ? ' (grounded)' : ''} · ${speed.toFixed(1)} m/s`,
+          player.mode === 'plane' ? `throttle ${player.throttle.toFixed(0)} · holding ${player.holdAGL.toFixed(0)} m` : '',
+          `alt ${agl.toFixed(1)} AGL · h ${(player.radius() - PLANET_RADIUS).toFixed(1)} · zoom ${camDist.toFixed(0)}`,
+          `tile ${player.tile}${geo.degreeOf(player.tile) === 5 ? ' *pentagon*' : ''} · GP(${M},0)`,
+          `chunks ${s.resident} res / ${s.queued} q · ${(s.triangles / 1000).toFixed(0)}k tris`,
+          `columns ${columns.generatedCount.toLocaleString()} / ${geo.count.toLocaleString()} · edits ${edits}`,
+          lastEditMs > 0 ? `last edit rebuild ${lastEditMs.toFixed(1)} ms` : '',
+        ].filter((l) => l !== ''));
+      } else {
+        hud.setDiag(null);
+      }
+      hud.setFlight(
+        player.mode === 'plane' ? `✈ ${speed.toFixed(0)} m/s · ${agl.toFixed(0)} m` :
+        player.mode === 'fly' ? `fly · ${agl.toFixed(0)} m` :
+        autopilot.active ? 'autopilot — G stops' : null);
       hud.setHotbar(SLOTS.map((sl, i) => ({ name: sl.name, css: sl.css, count: counts[i] })), hotbarSel);
+      touch.setPlaneButton(
+        player.mode === 'plane' ? 'flying'
+        : planeCrafted ? 'fly'
+        : counts[WOOD_SLOT] > 0 ? 'craft'
+        : 'hidden',
+        !planeCrafted && player.mode !== 'plane'
+          ? `${Math.min(counts[WOOD_SLOT], PLANE_WOOD_COST)}/${PLANE_WOOD_COST}` : '');
+      touch.setDownVisible(player.mode !== 'walk');
     }
 
     renderer.render(scene, camera);
