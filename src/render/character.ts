@@ -14,6 +14,7 @@ export class Character {
   private readonly plane: THREE.Group;
   private readonly prop: THREE.Group;
   private readonly body: THREE.Group;
+  private readonly pilotBody: THREE.Group;
   private readonly fadeMats: THREE.MeshStandardMaterial[] = [];
   private readonly m = new THREE.Matrix4();
   private readonly right = new THREE.Vector3();
@@ -39,13 +40,17 @@ export class Character {
     wingMat.side = THREE.DoubleSide;
     const propMat = mat(0x2b2b30, 0.5, 0.1);
 
+    this.pilotBody = new THREE.Group();
+
     const capsule = new THREE.Mesh(new THREE.CapsuleGeometry(0.34, 1.05, 6, 14), suit);
     capsule.position.set(0, 0.93, 0);
-    this.body.add(capsule);
+    this.pilotBody.add(capsule);
 
     const visor = new THREE.Mesh(new THREE.BoxGeometry(0.34, 0.14, 0.1), visorMat);
     visor.position.set(0, 1.38, -0.29);
-    this.body.add(visor);
+    this.pilotBody.add(visor);
+
+    this.body.add(this.pilotBody);
 
     // --- the plane: a high-wing bush flyer, forward = -Z, pilot rides in the open cockpit ---
     this.plane = new THREE.Group();
@@ -150,6 +155,7 @@ export class Character {
     if (!show) return;
     for (const m of this.fadeMats) m.opacity = alpha;
     this.plane.visible = player.mode === 'plane';
+    this.pilotBody.visible = player.mode !== 'plane';
 
     const [ux, uy, uz] = player.up();
     this.upV.set(ux, uy, uz);
