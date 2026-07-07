@@ -3,6 +3,8 @@ import {
   normalizePlacementTurn,
   packStructureCommand,
   placeStructureCommand,
+  previewPlaceStructureCommand,
+  previewRelocateStructureCommand,
   relocateStructureCommand,
   rotatePlacedStructureCommand,
   rotateSelectedPlacementCommand,
@@ -253,5 +255,170 @@ describe('Hearth and Horizon build commands', () => {
       blockers: ['douse light first'],
       action: 'campfire:pack:campfire cannot be packed · douse light first',
     });
+  });
+
+  it('previews snap placement and relocation blockers without mutating structures or inventory', () => {
+    const materials = [0, 0, 0, 0, 0];
+    const crafted: InventoryItems = { doorKit: 1, windowFrame: 1 };
+    const structures: StructureSave[] = [];
+    const door = addStructure(structures, { item: 'doorKit', tile: 6, layer: 2, yaw: 0 })!;
+    const windowFrame = addStructure(structures, { item: 'windowFrame', tile: 9, layer: 2, yaw: 0 })!;
+
+    expect(previewPlaceStructureCommand({
+      structures,
+      item: 'windowFrame',
+      tile: 7,
+      layer: 2,
+      yaw: 0,
+      placementTurn: 0,
+      materialCounts: materials,
+      craftedItems: crafted,
+      creative: false,
+      playerTile: 4,
+    })).toMatchObject({
+      active: true,
+      mode: 'place',
+      ok: true,
+      item: 'windowFrame',
+      tile: 7,
+      blocker: null,
+      blockers: [],
+      socket: { role: 'wall-light', modularKit: true },
+    });
+    expect(crafted.windowFrame).toBe(1);
+    expect(structures.map((s) => s.tile)).toEqual([6, 9]);
+
+    expect(previewPlaceStructureCommand({
+      structures,
+      item: 'windowFrame',
+      tile: 4,
+      layer: 2,
+      yaw: 0,
+      placementTurn: 0,
+      materialCounts: materials,
+      craftedItems: crafted,
+      creative: false,
+      playerTile: 4,
+    })).toMatchObject({
+      ok: false,
+      message: 'step aside before placing here',
+      blocker: 'player on snap target',
+      blockers: ['player on snap target'],
+    });
+    expect(previewPlaceStructureCommand({
+      structures,
+      item: 'windowFrame',
+      tile: 6,
+      layer: 2,
+      yaw: 0,
+      placementTurn: 0,
+      materialCounts: materials,
+      craftedItems: crafted,
+      creative: false,
+      playerTile: 4,
+    })).toMatchObject({
+      ok: false,
+      message: 'that hex already has a prop',
+      blocker: 'occupied snap target',
+      blockers: ['occupied snap target'],
+    });
+    expect(previewPlaceStructureCommand({
+      structures,
+      item: 'windowFrame',
+      tile: 8,
+      layer: 2,
+      yaw: 0,
+      placementTurn: 0,
+      materialCounts: materials,
+      craftedItems: crafted,
+      creative: false,
+      playerTile: 4,
+      blocker: 'needs solid ground',
+    })).toMatchObject({
+      ok: false,
+      message: 'needs solid ground',
+      blocker: 'needs solid ground',
+      blockers: ['needs solid ground'],
+    });
+
+    expect(previewRelocateStructureCommand({
+      structures,
+      target: door,
+      tile: 8,
+      layer: 3,
+      yaw: Math.PI / 3,
+      playerTile: 4,
+    })).toMatchObject({
+      active: true,
+      mode: 'relocate',
+      ok: true,
+      item: 'doorKit',
+      id: door.id,
+      fromTile: 6,
+      tile: 8,
+      layer: 3,
+      turn: 1,
+      blocker: null,
+      socket: { role: 'wall-opening', modularKit: true },
+    });
+    expect(previewRelocateStructureCommand({
+      structures,
+      target: door,
+      tile: 4,
+      layer: 2,
+      playerTile: 4,
+    })).toMatchObject({
+      ok: false,
+      message: 'step aside before moving here',
+      blocker: 'player on snap target',
+      blockers: ['player on snap target'],
+    });
+    expect(previewRelocateStructureCommand({
+      structures,
+      target: door,
+      tile: 9,
+      layer: 2,
+      playerTile: 4,
+    })).toMatchObject({
+      ok: false,
+      message: 'that hex already has a prop',
+      blocker: 'occupied snap target',
+      blockers: ['occupied snap target'],
+    });
+    expect(previewRelocateStructureCommand({
+      structures,
+      target: door,
+      tile: 6,
+      layer: 2,
+      playerTile: 4,
+    })).toMatchObject({
+      ok: false,
+      message: 'door kit already on that snap hex',
+      blocker: 'same snap target',
+      blockers: ['same snap target'],
+    });
+    expect(previewRelocateStructureCommand({
+      structures,
+      target: windowFrame,
+      tile: 8,
+      layer: 2,
+      playerTile: 4,
+    })).toMatchObject({
+      ok: true,
+    });
+    const litFire = addStructure(structures, { item: 'campfire', tile: 10, layer: 2, yaw: 0 })!;
+    litFire.state = { lit: true };
+    expect(previewRelocateStructureCommand({
+      structures,
+      target: litFire,
+      tile: 11,
+      layer: 2,
+      playerTile: 4,
+    })).toMatchObject({
+      ok: false,
+      blocker: 'douse light first',
+      blockers: ['douse light first'],
+    });
+    expect(structures.find((s) => s.id === door.id)).toMatchObject({ tile: 6, layer: 2 });
   });
 });

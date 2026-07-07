@@ -79,7 +79,8 @@ hotbar, `B` uses or closes the open panel, `LB+B` packs a safe prop, `Y` toggles
 `LB+RT` grabs or drops a movable prop, Back opens the Route Slate, D-pad left/right inside the slate drops or moves the active itinerary stop later, `LB+D-pad` rotates selected build pieces or the active move cursor before placement, and Start boards/stows the
 plane. `LB+Back` toggles mute. While crafting or chest storage is open, D-pad moves the focused row/action, `A`
 confirms craft/place/transfer, and `B` closes the focused panel without leaking jump, use,
-hotbar, mine, or build input into the world.
+hotbar, mine, or build input into the world. Automated gamepad proof uses injected
+synthetic controller input; physical controller validation remains manual and unclaimed.
 
 ## The survival loop
 
@@ -117,8 +118,9 @@ has an explicit facing contract: `Z/X` rotate the selected prop or nearby placed
 hex face at a time, gamepad `LB+D-pad` rotates selected build pieces, and inactive placed
 props can now be moved through the relocation cursor with `V`/`Shift+E`, the touch move
 button, or gamepad `LB+RT`. The C1 and C2/C3 browser proofs verify rotated placement, safe
-pack-back, lit-prop pack refusal, snap-grid relocation blockers, and state-preserving
-snap-back across desktop, laptop, tablet, phone, and synthetic gamepad profiles. Stone axe, pick,
+pack-back, lit-prop pack refusal, snap-preview and blocked-preview diagnostics/screenshots,
+snap-grid relocation blockers, and state-preserving snap-back across desktop, laptop,
+tablet, phone, and injected synthetic gamepad profiles. Stone axe, pick,
 shovel, and hatchet now matter in play: matching tools reach a little farther, repeat
 faster while held, and track saved wear. The Stone Hatchet is a short-reach, quick,
 fragile one-handed chopping and brambleback-warding sidearm that sits below the full stone
@@ -492,7 +494,7 @@ water, or a cliff stows it; E brings it back mid-fall.
 - GitHub Pages deploys from the `main` branch workflow in `.github/workflows/deploy.yml`.
   The app is static: no server secrets, runtime API keys, or backend configuration are expected.
 
-Test suite: 269 tests — icosahedron invariants; 10m²+2 counts with exactly 12 pentagons;
+Test suite: 279 tests — icosahedron invariants; 10m²+2 counts with exactly 12 pentagons;
 neighbor symmetry; CCW winding and bit-identical shared corners; id round-trips; seam
 agreement; `tileOf` vs brute force; layer-grid inverses; terrain determinism and
 ocean/land/mountain balance; column edit semantics incl. tunnels and immutable bedrock;

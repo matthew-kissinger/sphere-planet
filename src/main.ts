@@ -90,12 +90,15 @@ import { caveMouthSignals, nearestCaveMouthSignal, type CaveMouthTile } from './
 import {
   packStructureCommand,
   placeStructureCommand,
+  previewPlaceStructureCommand,
+  previewRelocateStructureCommand,
   relocateStructureCommand,
   rotatePlacedStructureCommand,
   rotateSelectedPlacementCommand,
   selectStructurePlacementCommand,
   useStructureInteractionCommand,
   type StructureCommandResult,
+  type StructureSnapPreview,
 } from './sim/buildCommands';
 import {
   PLACEABLE_ITEM_IDS,
@@ -1782,12 +1785,48 @@ async function boot(): Promise<void> {
   };
 
   const placementYawOffset = (): number => placementYawTurns * STRUCTURE_YAW_STEP;
+  const currentStructureSnapPreview = (): StructureSnapPreview | null => {
+    if (currentPanelOwnership().worldInputBlocked || autopilot.active || !lastPick) return null;
+    if (relocationCursor) {
+      const target = relocationTargetStructure();
+      if (!target) return null;
+      const snap = structureSnapTarget(target.item, lastPick.hitTile, lastPick.hitLayer);
+      return previewRelocateStructureCommand({
+        structures,
+        target,
+        tile: lastPick.hitTile,
+        layer: snap.layer,
+        yaw: yawForTile(lastPick.hitTile) + placementYawOffset(),
+        playerTile: player.tile,
+        blocker: snap.blocker,
+      });
+    }
+    if (selectedStructureItem) {
+      const snap = structureSnapTarget(selectedStructureItem, lastPick.hitTile, lastPick.hitLayer);
+      return previewPlaceStructureCommand({
+        structures,
+        item: selectedStructureItem,
+        tile: lastPick.hitTile,
+        layer: snap.layer,
+        yaw: yawForTile(lastPick.hitTile) + placementYawOffset(),
+        placementTurn: placementYawTurns,
+        materialCounts: counts,
+        craftedItems,
+        creative: creativeActive,
+        playerTile: player.tile,
+        blocker: snap.blocker,
+      });
+    }
+    return null;
+  };
+
   const placementDiagnostics = () => ({
     selected: selectedStructureItem,
     turn: placementYawTurns,
     degrees: placementYawTurns * 60,
     offset: placementYawOffset(),
     targetTile: lastPick?.hitTile ?? null,
+    preview: currentStructureSnapPreview(),
     relocating: relocationCursor ? {
       id: relocationCursor.id,
       item: relocationCursor.item,
@@ -1963,6 +2002,7 @@ async function boot(): Promise<void> {
       targetTile: lastPick?.hitTile ?? null,
       targetLayer: snap?.layer ?? lastPick?.hitLayer ?? null,
       targetBlocker: snap?.blocker ?? null,
+      preview: currentStructureSnapPreview(),
     };
   };
 
@@ -5083,7 +5123,7 @@ async function boot(): Promise<void> {
     }),
     craft: (recipeId: string) => craftSelected(recipeId),
     crafting: () => ({ open: craftingOpen, crafted: { ...craftedItems }, recipes: craftingRows(), ledger: packLedger() }),
-    structures: () => ({ items: structures.map((s) => ({ ...s, state: s.state ? { ...s.state } : undefined, turn: structureYawTurn(s.yaw) })), placement: placementDiagnostics(), relocation: relocationDiagnostics(), commands: buildCommandDiagnostics(), sockets: { houseKit: houseKitSocketCatalog() }, crops: cropDiagnostics(), compostBins: compostBinDiagnostics(), rainCisterns: rainCisternDiagnostics(), rootCellars: rootCellarDiagnostics(), caveAnchors: caveAnchorDiagnostics(), waystones: waystoneDiagnostics(), weatherVanes: weatherVaneDiagnostics(), fishTraps: fishTrapDiagnostics(), shoreNets: shoreNetDiagnostics(), storage: { open: openChestId !== null, chestId: openChestId, state: currentChestStorage() }, home: homeScore(structures, geo), renderer: structureRenderer.stats(), lastAction: lastStructureAction }),
+    structures: () => ({ items: structures.map((s) => ({ ...s, state: s.state ? { ...s.state } : undefined, turn: structureYawTurn(s.yaw) })), placement: placementDiagnostics(), relocation: relocationDiagnostics(), snapPreview: currentStructureSnapPreview(), commands: buildCommandDiagnostics(), sockets: { houseKit: houseKitSocketCatalog() }, crops: cropDiagnostics(), compostBins: compostBinDiagnostics(), rainCisterns: rainCisternDiagnostics(), rootCellars: rootCellarDiagnostics(), caveAnchors: caveAnchorDiagnostics(), waystones: waystoneDiagnostics(), weatherVanes: weatherVaneDiagnostics(), fishTraps: fishTrapDiagnostics(), shoreNets: shoreNetDiagnostics(), storage: { open: openChestId !== null, chestId: openChestId, state: currentChestStorage() }, home: homeScore(structures, geo), renderer: structureRenderer.stats(), lastAction: lastStructureAction }),
     buildCommands: () => buildCommandDiagnostics(),
     selectStructure: (item: string) => selectStructureForPlacement(item),
     placeStructure: (item: string, tile?: number) => {
@@ -5416,7 +5456,7 @@ async function boot(): Promise<void> {
         characterRenderer: character.stats(),
         mineProgress: mineProgressDiagnostics(),
         survival: { ...survivalSnapshot(), time: { ...timeState }, pack: packBurden() },
-        structures: { relocation: relocationDiagnostics(), commands: buildCommandDiagnostics() },
+        structures: { relocation: relocationDiagnostics(), snapPreview: currentStructureSnapPreview(), commands: buildCommandDiagnostics() },
       };
     },
   };
@@ -5485,6 +5525,7 @@ async function boot(): Promise<void> {
       selected: selectedStructureItem,
       placement: placementDiagnostics(),
       relocation: relocationDiagnostics(),
+      snapPreview: currentStructureSnapPreview(),
       commands: buildCommandDiagnostics(),
       sockets: { houseKit: houseKitSocketCatalog() },
       yawTurns: structures.map((s) => ({ id: s.id, item: s.item, tile: s.tile, turn: structureYawTurn(s.yaw), yaw: s.yaw })),
@@ -5941,6 +5982,7 @@ async function boot(): Promise<void> {
     tickResourceDrops(dt);
     character.update(player, camWorld, camDist, dt, characterVisualState());
     structureRenderer.update(structures, geo, layers, camWorld, now / 1000);
+    structureRenderer.updateSnapPreview(currentStructureSnapPreview(), geo, layers, camWorld, now / 1000);
     resourceDropRenderer.update(resourceDrops, geo, layers, columns, camWorld, now / 1000);
     landmarkRenderer.update(pentagonTiles, discoveredPentagons, geo, layers, columns, camWorld, now / 1000, completedPentagonSites);
     const domainSites = currentDomainResourceSites();

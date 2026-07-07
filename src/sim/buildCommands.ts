@@ -9,6 +9,8 @@ import {
   rotateStructure,
   spendPlacedItem,
   STRUCTURE_YAW_STEP,
+  structureDismantleBlockers,
+  structureSocketSpec,
   structureYawTurn,
   type CaveAnchorContext,
   type CropPlotEnvironment,
@@ -18,6 +20,7 @@ import {
   type StructureRelocationResult,
   type StructureInteractionResult,
   type StructureSave,
+  type StructureSocketSpec,
   type StructureTopology,
   type WaystoneContext,
   type WeatherVaneContext,
@@ -48,6 +51,24 @@ export interface StructureCommandResult {
   caveAction?: string;
   inventoryReturned?: boolean;
   blockers?: string[];
+}
+
+export interface StructureSnapPreview {
+  active: boolean;
+  mode: 'place' | 'relocate';
+  ok: boolean;
+  item: PlaceableItemId;
+  id?: number;
+  tile: number;
+  layer: number;
+  yaw: number;
+  turn: number;
+  fromTile?: number;
+  fromLayer?: number;
+  message: string;
+  blocker: string | null;
+  blockers: string[];
+  socket: StructureSocketSpec;
 }
 
 export interface StructurePlaceCommandInput {
@@ -87,6 +108,10 @@ export interface StructureRelocateCommandInput {
   playerTile: number;
   blocker?: string | null;
 }
+
+export interface StructurePlacePreviewInput extends StructurePlaceCommandInput {}
+
+export interface StructureRelocatePreviewInput extends StructureRelocateCommandInput {}
 
 export function normalizePlacementTurn(turns: number): number {
   return ((Math.trunc(Number.isFinite(turns) ? turns : 0) % 6) + 6) % 6;
@@ -179,6 +204,41 @@ export function rotatePlacedStructureCommand(
     yaw: result.yaw,
     message: result.message,
     action: `${target.item}:rotate:${result.message}`,
+  };
+}
+
+export function previewPlaceStructureCommand(input: StructurePlacePreviewInput): StructureSnapPreview {
+  const turn = normalizePlacementTurn(input.placementTurn);
+  const socket = structureSocketSpec(input.item);
+  const base = {
+    active: true,
+    mode: 'place' as const,
+    item: input.item,
+    tile: Math.trunc(input.tile),
+    layer: Math.trunc(input.layer),
+    yaw: input.yaw,
+    turn,
+    socket,
+  };
+  if (!input.creative && itemCount(input.materialCounts, input.craftedItems, input.item) <= 0) {
+    const blocker = `no ${placeableName(input.item).toLowerCase()} to place`;
+    return { ...base, ok: false, message: blocker, blocker, blockers: [blocker] };
+  }
+  if (Math.trunc(input.tile) === Math.trunc(input.playerTile)) {
+    return { ...base, ok: false, message: 'step aside before placing here', blocker: 'player on snap target', blockers: ['player on snap target'] };
+  }
+  if (input.blocker) {
+    return { ...base, ok: false, message: input.blocker, blocker: input.blocker, blockers: [input.blocker] };
+  }
+  if (input.structures.some((entry) => entry.tile === Math.trunc(input.tile))) {
+    return { ...base, ok: false, message: 'that hex already has a prop', blocker: 'occupied snap target', blockers: ['occupied snap target'] };
+  }
+  return {
+    ...base,
+    ok: true,
+    message: `${placeableName(input.item)} can snap here`,
+    blocker: null,
+    blockers: [],
   };
 }
 
@@ -308,6 +368,54 @@ export function relocateStructureCommand(input: StructureRelocateCommandInput): 
     action: `${target.item}:relocate:${result.message}`,
     blockers: result.blockers,
     relocation: result,
+  };
+}
+
+export function previewRelocateStructureCommand(input: StructureRelocatePreviewInput): StructureSnapPreview | null {
+  const target = input.target;
+  if (!target) return null;
+  const toTile = Math.trunc(input.tile);
+  const toLayer = Math.trunc(input.layer);
+  const yaw = Number.isFinite(input.yaw) ? input.yaw! : target.yaw;
+  const turn = structureYawTurn(yaw);
+  const base = {
+    active: true,
+    mode: 'relocate' as const,
+    item: target.item,
+    id: target.id,
+    tile: toTile,
+    layer: toLayer,
+    yaw,
+    turn,
+    fromTile: target.tile,
+    fromLayer: target.layer,
+    socket: structureSocketSpec(target.item),
+  };
+  if (toTile < 0 || toLayer < 0) {
+    return { ...base, ok: false, message: `${placeableName(target.item).toLowerCase()} cannot be moved there`, blocker: 'invalid snap target', blockers: ['invalid snap target'] };
+  }
+  const dismantleBlockers = structureDismantleBlockers(target);
+  if (dismantleBlockers.length > 0) {
+    return { ...base, ok: false, message: `${placeableName(target.item).toLowerCase()} cannot be moved · ${dismantleBlockers[0]}`, blocker: dismantleBlockers[0], blockers: dismantleBlockers };
+  }
+  if (toTile === Math.trunc(input.playerTile)) {
+    return { ...base, ok: false, message: 'step aside before moving here', blocker: 'player on snap target', blockers: ['player on snap target'] };
+  }
+  if (input.blocker) {
+    return { ...base, ok: false, message: input.blocker, blocker: input.blocker, blockers: [input.blocker] };
+  }
+  if (target.tile === toTile) {
+    return { ...base, ok: false, message: `${placeableName(target.item).toLowerCase()} already on that snap hex`, blocker: 'same snap target', blockers: ['same snap target'] };
+  }
+  if (input.structures.some((entry) => entry.id !== target.id && entry.tile === toTile)) {
+    return { ...base, ok: false, message: 'that hex already has a prop', blocker: 'occupied snap target', blockers: ['occupied snap target'] };
+  }
+  return {
+    ...base,
+    ok: true,
+    message: `${placeableName(target.item)} can move here`,
+    blocker: null,
+    blockers: [],
   };
 }
 

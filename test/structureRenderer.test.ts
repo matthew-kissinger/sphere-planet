@@ -31,6 +31,14 @@ function namedObject(renderer: StructureRenderer, name: string): THREE.Object3D 
   return found;
 }
 
+function previewObject(renderer: StructureRenderer, name: string): THREE.Object3D | null {
+  let found: THREE.Object3D | null = null;
+  renderer.snapPreviewGroup.traverse((part) => {
+    if (part.name === name) found = part;
+  });
+  return found;
+}
+
 async function flushAsyncSkinLoads(): Promise<void> {
   await new Promise((resolve) => setTimeout(resolve, 0));
 }
@@ -164,5 +172,112 @@ describe('structure renderer asset readability', () => {
       'warmth radius from lit shelter fire',
       'roof coverage shelter glow',
     ]));
+  });
+
+  it('renders valid and blocked snap previews without adding saved structure groups', () => {
+    const scene = new THREE.Scene();
+    const geo = new Goldberg(8);
+    const layers = buildLayers();
+    const renderer = new StructureRenderer(scene);
+    const structures: StructureSave[] = [
+      { id: 1, item: 'doorKit', tile: 1, layer: 100, yaw: 0 },
+    ];
+
+    renderer.setStructures(structures);
+    renderer.update(structures, geo, layers, { x: 0, y: 0, z: 0 }, 1);
+    renderer.updateSnapPreview({
+      active: true,
+      mode: 'place',
+      ok: true,
+      item: 'windowFrame',
+      tile: 2,
+      layer: 100,
+      yaw: Math.PI / 3,
+      turn: 1,
+      message: 'Window frame can snap here',
+      blocker: null,
+      blockers: [],
+      socket: {
+        item: 'windowFrame',
+        name: 'Window frame',
+        role: 'wall-light',
+        modularKit: true,
+        gridWidth: 0.92,
+        gridDepth: 0.18,
+        height: 1.45,
+        pivot: 'wall-center',
+        collider: 'thin-wall',
+        snap: ['front edge on hex face'],
+        visualScale: 'test',
+        loadBearing: 'code-socket',
+        glbPolicy: 'decorative-skin-after-normalization',
+      },
+    }, geo, layers, { x: 0, y: 0, z: 0 }, 1.1);
+
+    expect(renderer.stats()).toMatchObject({
+      groups: 1,
+      snapPreview: {
+        active: true,
+        ok: true,
+        mode: 'place',
+        item: 'windowFrame',
+        tile: 2,
+        blocker: null,
+      },
+    });
+    expect(renderer.stats().snapPreview.meshes).toBeGreaterThan(2);
+    expect(renderer.stats().snapPreview.readabilityRoles).toBeGreaterThanOrEqual(3);
+    expect(previewObject(renderer, 'snapPreviewFootprint')?.visible).toBe(true);
+    expect(previewObject(renderer, 'snapPreviewBlockerA')?.visible).toBe(false);
+
+    renderer.updateSnapPreview({
+      active: true,
+      mode: 'relocate',
+      ok: false,
+      item: 'doorKit',
+      id: 1,
+      tile: 1,
+      layer: 100,
+      yaw: 0,
+      turn: 0,
+      fromTile: 1,
+      fromLayer: 100,
+      message: 'door kit already on that snap hex',
+      blocker: 'same snap target',
+      blockers: ['same snap target'],
+      socket: {
+        item: 'doorKit',
+        name: 'Door kit',
+        role: 'wall-opening',
+        modularKit: true,
+        gridWidth: 1,
+        gridDepth: 0.22,
+        height: 1.9,
+        pivot: 'wall-center',
+        collider: 'thin-wall',
+        snap: ['front edge on hex face'],
+        visualScale: 'test',
+        loadBearing: 'code-socket',
+        glbPolicy: 'decorative-skin-after-normalization',
+      },
+    }, geo, layers, { x: 0, y: 0, z: 0 }, 1.2);
+
+    expect(renderer.stats()).toMatchObject({
+      groups: 1,
+      snapPreview: {
+        active: true,
+        ok: false,
+        mode: 'relocate',
+        item: 'doorKit',
+        tile: 1,
+        blocker: 'same snap target',
+      },
+    });
+    expect(previewObject(renderer, 'snapPreviewBlockerA')?.visible).toBe(true);
+    expect(previewObject(renderer, 'snapPreviewBlockerB')?.visible).toBe(true);
+
+    renderer.updateSnapPreview(null, geo, layers, { x: 0, y: 0, z: 0 }, 1.3);
+    expect(renderer.stats().snapPreview.active).toBe(false);
+    expect(renderer.stats().groups).toBe(1);
   });
 });

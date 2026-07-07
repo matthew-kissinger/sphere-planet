@@ -201,6 +201,27 @@ function assertCommand(record, expected, label) {
   }
 }
 
+function assertSnapPreview(state, expected, label) {
+  const preview = state?.preview;
+  if (!preview || typeof preview !== 'object') throw new Error(`${label}: missing snap preview ${JSON.stringify(state)}`);
+  for (const [key, value] of Object.entries(expected)) {
+    if (value instanceof RegExp) {
+      if (!value.test(String(preview[key] ?? ''))) throw new Error(`${label}: preview ${key} mismatch ${JSON.stringify(preview)} expected ${value}`);
+    } else if (preview[key] !== value) {
+      throw new Error(`${label}: preview ${key} mismatch ${JSON.stringify(preview)} expected ${JSON.stringify(value)}`);
+    }
+  }
+  if (state.textPreview && JSON.stringify(preview) !== JSON.stringify(state.textPreview)) {
+    throw new Error(`${label}: text preview diagnostics drifted ${JSON.stringify({ preview, textPreview: state.textPreview })}`);
+  }
+  if (!state.renderer?.active || state.renderer.ok !== preview.ok || state.renderer.item !== preview.item || state.renderer.tile !== preview.tile) {
+    throw new Error(`${label}: renderer preview drifted ${JSON.stringify({ preview, renderer: state.renderer })}`);
+  }
+  if ((state.renderer.meshes ?? 0) < 3 || (state.renderer.readabilityRoles ?? 0) < 3) {
+    throw new Error(`${label}: renderer preview not readable enough ${JSON.stringify(state.renderer)}`);
+  }
+}
+
 function controlSource(profile) {
   if (profile.gamepad) return 'gamepad';
   if (profile.touch) return 'touch';
@@ -233,6 +254,25 @@ async function triggerRelocationDrop(page, profile, tile) {
     await page.keyboard.press('KeyV');
     await page.waitForTimeout(220);
   }
+}
+
+async function readSnapPreview(page, tile, screenshotName) {
+  await page.evaluate((targetTile) => window.__world.debugAimAtTile(targetTile), tile);
+  await page.waitForTimeout(220);
+  const state = await page.evaluate(() => {
+    const structures = window.__world.structures();
+    const text = JSON.parse(window.render_game_to_text()).structures;
+    return {
+      preview: structures.snapPreview,
+      placement: structures.placement,
+      relocation: structures.relocation,
+      renderer: structures.renderer?.snapPreview,
+      textPreview: text.snapPreview,
+      textRelocation: text.relocation,
+    };
+  });
+  const shot = screenshotName ? await screenshot(page, screenshotName) : null;
+  return { ...state, screenshot: shot };
 }
 
 async function setupPlayerRelocationFixture(page) {
@@ -324,6 +364,17 @@ async function runPlayerRelocationControls(page, profile, name) {
     throw new Error(`${name}: relocation cursor not active after ${source} grab ${JSON.stringify(grabbed)}`);
   }
 
+  const validPreview = await readSnapPreview(page, fixture.targetTile, `${name}-valid-snap-preview`);
+  assertSnapPreview(validPreview, {
+    active: true,
+    mode: 'relocate',
+    ok: true,
+    item: 'windowFrame',
+    id: fixture.prop.id,
+    tile: fixture.targetTile,
+    blocker: null,
+  }, `${name}: ${source} valid relocation preview`);
+
   await triggerRelocationDrop(page, profile, fixture.targetTile);
   const movedOut = await page.evaluate((id) => {
     const structures = window.__world.structures();
@@ -349,6 +400,31 @@ async function runPlayerRelocationControls(page, profile, name) {
 
   await standNearStructure(page, fixture.prop.id);
   await triggerRelocationControl(page, profile);
+  const playerTile = await page.evaluate(() => window.__world.player.tile);
+  const playerBlockedPreview = await readSnapPreview(page, playerTile, null);
+  assertSnapPreview(playerBlockedPreview, {
+    active: true,
+    mode: 'relocate',
+    ok: false,
+    item: 'windowFrame',
+    id: fixture.prop.id,
+    tile: playerTile,
+    blocker: 'player on snap target',
+    message: 'step aside before moving here',
+  }, `${name}: ${source} player-tile relocation preview`);
+
+  const occupiedBlockedPreview = await readSnapPreview(page, fixture.occupiedTile, `${name}-blocked-snap-preview`);
+  assertSnapPreview(occupiedBlockedPreview, {
+    active: true,
+    mode: 'relocate',
+    ok: false,
+    item: 'windowFrame',
+    id: fixture.prop.id,
+    tile: fixture.occupiedTile,
+    blocker: 'occupied snap target',
+    message: 'that hex already has a prop',
+  }, `${name}: ${source} occupied relocation preview`);
+
   await triggerRelocationDrop(page, profile, fixture.occupiedTile);
   const blocked = await page.evaluate((id) => {
     const structures = window.__world.structures();
@@ -370,6 +446,9 @@ async function runPlayerRelocationControls(page, profile, name) {
   }, `${name}: ${source} occupied relocation block`);
   if (!blocked.relocation.active || blocked.structure?.tile !== fixture.targetTile) {
     throw new Error(`${name}: blocked ${source} move should keep cursor and current tile ${JSON.stringify(blocked)}`);
+  }
+  if (occupiedBlockedPreview.preview.message !== blocked.command.message || occupiedBlockedPreview.preview.blocker !== blocked.command.blockers?.[0]) {
+    throw new Error(`${name}: occupied preview did not match blocked command ${JSON.stringify({ preview: occupiedBlockedPreview.preview, command: blocked.command })}`);
   }
 
   await triggerRelocationDrop(page, profile, fixture.sourceTile);
@@ -403,10 +482,25 @@ async function runPlayerRelocationControls(page, profile, name) {
     source,
     fixture,
     grabbed: grabbed.command,
+    validPreview: {
+      preview: validPreview.preview,
+      renderer: validPreview.renderer,
+      screenshot: validPreview.screenshot,
+    },
     movedOut: movedOut.command,
+    playerBlockedPreview: {
+      preview: playerBlockedPreview.preview,
+      renderer: playerBlockedPreview.renderer,
+    },
+    occupiedBlockedPreview: {
+      preview: occupiedBlockedPreview.preview,
+      renderer: occupiedBlockedPreview.renderer,
+      screenshot: occupiedBlockedPreview.screenshot,
+    },
     blocked: blocked.command,
     movedBack: movedBack.command,
     finalTile: movedBack.structure.tile,
+    previewClaim: 'snap and blocked preview diagnostics were read before drop; deterministic target aim uses debug proof hooks',
   };
 }
 
@@ -629,6 +723,7 @@ async function runProfile(browser, url, profile) {
       touch: !!profile.touch,
       gamepad: !!profile.gamepad,
       inputClaim: `${playerRelocation.source} player-facing relocation path; deterministic proof target uses debug aim only`,
+      previewClaim: playerRelocation.previewClaim,
       consoleErrors,
       pageErrors,
     };
@@ -669,6 +764,7 @@ async function main() {
       generatedAt: new Date().toISOString(),
       claim: proofClaim,
       inputClaim: 'C2/C3 relocation is proven through player-facing keyboard, touch, and injected synthetic gamepad paths across desktop/laptop/tablet/phone profiles; deterministic target aiming uses debug proof hooks; real hardware gamepad validation remains unclaimed',
+      previewClaim: 'C2/C3 snap-preview and blocked-preview diagnostics/screenshots are proven before player-facing relocation drops across the same profile matrix',
       realHardwareGamepad: false,
       desktopUrl,
       touchUrl,

@@ -40,6 +40,14 @@ Current operating goal: Hearth and Horizon full crafting-survival cycle under th
   button, and injected synthetic gamepad `LB+RT` across desktop/laptop/tablet/phone profiles.
   The proof still does not claim real hardware gamepad validation, and target selection uses
   a deterministic debug aim hook so the browser gate stays repeatable.
+- Closed the first C2/C3 snap-preview readability slice. `src/sim/buildCommands.ts` now
+  exposes pure, non-mutating place/relocate preview decisions; `StructureRenderer` renders a
+  transient valid/blocked ghost with footprint, facing tick, and blocked crossbars; and
+  `__world.structures()`, diagnostics, and `render_game_to_text` expose the same preview
+  object. The C2/C3 proof now reads valid, occupied-blocked, and player-blocked previews
+  before the drop, compares occupied preview blockers to the final command blocker, and
+  captures valid/blocked preview screenshots across the existing desktop/laptop/touch/
+  synthetic-gamepad matrix.
 - Closed the first B1 build-command boundary slice under the DAG/subagent workflow. The new
   `src/sim/buildCommands.ts` facade owns structured command results for selecting build
   props, rotating selected placement, rotating placed props, placing, using, and packing
@@ -65,7 +73,8 @@ Current operating goal: Hearth and Horizon full crafting-survival cycle under th
   cluster, proves keyboard selected-placement rotation, synthetic gamepad build rotation,
   placed-prop rotation, safe workbench pack-back inventory return, lit campfire pack
   refusal, placement readback, screenshot pixel variance, and no page/console errors across
-  desktop keyboard, laptop keyboard, tablet touch, phone touch, and desktop gamepad profiles.
+  desktop keyboard, laptop keyboard, tablet touch, phone touch, and desktop synthetic-gamepad
+  profiles.
 - Recorded the two subagent lanes in the cycle docs: C1 rotate/pack proof is now the right
   pre-GLB house-kit step, while B1 command extraction remains the next architecture move
   before broader relocation/snap-grid rules widen.

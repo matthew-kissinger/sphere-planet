@@ -1,11 +1,31 @@
 import * as THREE from 'three/webgpu';
 import type { Goldberg } from '../geo/goldberg';
 import type { Layers } from '../world/layers';
-import { homeScore, type ShelterReport, type StructureSave } from '../sim/structures';
+import { homeScore, type ShelterReport, type StructureSave, type StructureSocketSpec } from '../sim/structures';
 import type { KilnAssetSnapshot, StructureSkinProvider } from './kilnAssets';
 
 type PropFactory = () => THREE.Group;
 type StructureSilhouette = 'cave-anchor-belay-marker' | 'waystone-attuned-marker';
+
+export interface StructureSnapPreview {
+  active: boolean;
+  mode: 'place' | 'relocate';
+  item: StructureSave['item'];
+  tile: number;
+  layer: number;
+  yaw: number;
+  turn: number;
+  fromTile?: number;
+  fromLayer?: number;
+  ok: boolean;
+  blocker: string | null;
+  id?: number;
+  sourceId?: number;
+  message?: string;
+  blockers?: readonly string[];
+  socket?: StructureSocketSpec;
+  socketRole?: string;
+}
 
 function mat(color: number, roughness = 0.85, metalness = 0.02, emissive = 0x000000): THREE.MeshStandardMaterial {
   return new THREE.MeshStandardMaterial({ color, roughness, metalness, emissive, emissiveIntensity: emissive === 0 ? 0 : 0.7 });
@@ -45,6 +65,10 @@ const materials = {
   forage: mat(0x7db35f, 0.58, 0.03, 0x4f8d45),
   home: mat(0xf0be5a, 0.45, 0.12, 0xf0a020),
   smoke: new THREE.MeshStandardMaterial({ color: 0x9aa3a7, roughness: 1, metalness: 0, transparent: true, opacity: 0.46, depthWrite: false }),
+  snapPreviewOk: new THREE.MeshStandardMaterial({ color: 0x8fe88a, roughness: 0.55, metalness: 0.02, emissive: 0x3ecf62, emissiveIntensity: 0.45, transparent: true, opacity: 0.38, depthWrite: false }),
+  snapPreviewBlocked: new THREE.MeshStandardMaterial({ color: 0xff8b64, roughness: 0.55, metalness: 0.02, emissive: 0xff4f2d, emissiveIntensity: 0.52, transparent: true, opacity: 0.42, depthWrite: false }),
+  snapPreviewRingOk: new THREE.MeshStandardMaterial({ color: 0xc8f0a3, roughness: 0.6, metalness: 0.02, emissive: 0x5fd65b, emissiveIntensity: 0.65, transparent: true, opacity: 0.72, depthWrite: false }),
+  snapPreviewRingBlocked: new THREE.MeshStandardMaterial({ color: 0xffc08a, roughness: 0.6, metalness: 0.02, emissive: 0xff5b36, emissiveIntensity: 0.72, transparent: true, opacity: 0.78, depthWrite: false }),
 };
 
 const box = new THREE.BoxGeometry(1, 1, 1);
@@ -577,12 +601,19 @@ const FACTORIES: Record<StructureSave['item'], PropFactory> = {
 
 export class StructureRenderer {
   readonly group = new THREE.Group();
+  readonly snapPreviewGroup = new THREE.Group();
   private readonly objects = new Map<number, THREE.Group>();
   private readonly kilnSkinStatus = new Map<number, 'pending' | 'loaded' | 'fallback'>();
+  private snapPreviewObject: THREE.Group | null = null;
+  private snapPreviewItem: StructureSave['item'] | null = null;
+  private lastSnapPreview: StructureSnapPreview | null = null;
 
   constructor(scene: THREE.Scene, private readonly kilnAssets?: StructureSkinProvider) {
     this.group.name = 'placed-structures';
+    this.snapPreviewGroup.name = 'structure-snap-preview';
+    this.snapPreviewGroup.visible = false;
     scene.add(this.group);
+    scene.add(this.snapPreviewGroup);
   }
 
   setStructures(structures: readonly StructureSave[]): void {
@@ -638,6 +669,88 @@ export class StructureRenderer {
       obj.visible = true;
       this.applyState(obj, s, timeSec, shelter);
     }
+  }
+
+  updateSnapPreview(preview: StructureSnapPreview | null, geo: Goldberg, layers: Layers, camWorld: { x: number; y: number; z: number }, timeSec = 0): void {
+    this.lastSnapPreview = preview ? { ...preview } : null;
+    if (!preview?.active) {
+      this.snapPreviewGroup.visible = false;
+      return;
+    }
+    if (!this.snapPreviewObject || this.snapPreviewItem !== preview.item) {
+      this.snapPreviewGroup.clear();
+      this.snapPreviewObject = this.makeSnapPreviewObject(preview.item);
+      this.snapPreviewItem = preview.item;
+      this.snapPreviewGroup.add(this.snapPreviewObject);
+    }
+    const ok = preview.ok;
+    this.snapPreviewGroup.visible = true;
+    this.snapPreviewGroup.userData.snapPreview = { ...preview };
+    const frame = geo.frameOf(preview.tile);
+    const ca = Math.cos(preview.yaw), sa = Math.sin(preview.yaw);
+    const vX = new THREE.Vector3(
+      frame.east[0] * ca + frame.north[0] * sa,
+      frame.east[1] * ca + frame.north[1] * sa,
+      frame.east[2] * ca + frame.north[2] * sa,
+    );
+    const vY = new THREE.Vector3(...frame.normal);
+    const vZ = new THREE.Vector3(
+      -frame.east[0] * sa + frame.north[0] * ca,
+      -frame.east[1] * sa + frame.north[1] * ca,
+      -frame.east[2] * sa + frame.north[2] * ca,
+    );
+    const m = new THREE.Matrix4().makeBasis(vX, vY, vZ);
+    this.snapPreviewGroup.setRotationFromMatrix(m);
+    const c = geo.centers;
+    const r = layers.topRadius(preview.layer) + 0.07;
+    this.snapPreviewGroup.position.set(
+      c[preview.tile * 3] * r - camWorld.x,
+      c[preview.tile * 3 + 1] * r - camWorld.y,
+      c[preview.tile * 3 + 2] * r - camWorld.z,
+    );
+    const breathe = 1 + Math.sin(timeSec * 3.1) * 0.025;
+    this.snapPreviewGroup.scale.setScalar(breathe);
+    this.snapPreviewGroup.traverse((child) => {
+      const meshChild = child as THREE.Mesh;
+      if (!meshChild.isMesh) return;
+      const name = child.name;
+      if (name === 'snapPreviewBlockerA' || name === 'snapPreviewBlockerB') {
+        child.visible = !ok;
+        meshChild.material = materials.snapPreviewRingBlocked;
+      } else if (name === 'snapPreviewFootprint' || name === 'snapPreviewFaceTick') {
+        child.visible = true;
+        meshChild.material = ok ? materials.snapPreviewRingOk : materials.snapPreviewRingBlocked;
+      } else {
+        child.visible = true;
+        meshChild.material = ok ? materials.snapPreviewOk : materials.snapPreviewBlocked;
+      }
+    });
+  }
+
+  private makeSnapPreviewObject(item: StructureSave['item']): THREE.Group {
+    const wrapper = new THREE.Group();
+    wrapper.name = 'snapPreview';
+    wrapper.userData.structureReadabilityRole = 'snap preview placement ghost';
+    const footprint = role(mesh(torus, materials.snapPreviewRingOk, [0, 0.04, 0], [0.95, 0.95, 0.95], 'snapPreviewFootprint'), 'snap footprint ring');
+    footprint.rotation.x = Math.PI / 2;
+    const faceTick = role(mesh(box, materials.snapPreviewRingOk, [0, 0.08, -0.55], [0.18, 0.035, 0.22], 'snapPreviewFaceTick'), 'snap facing tick');
+    const blockerA = role(mesh(box, materials.snapPreviewRingBlocked, [0, 0.16, 0], [1.14, 0.04, 0.07], 'snapPreviewBlockerA'), 'blocked snap crossbar');
+    const blockerB = role(mesh(box, materials.snapPreviewRingBlocked, [0, 0.17, 0], [0.07, 0.04, 1.14], 'snapPreviewBlockerB'), 'blocked snap crossbar');
+    blockerA.rotation.y = Math.PI / 4;
+    blockerB.rotation.y = Math.PI / 4;
+    blockerA.visible = false;
+    blockerB.visible = false;
+    const ghost = FACTORIES[item]();
+    ghost.name = `snapPreviewGhost-${item}`;
+    ghost.scale.setScalar(0.92);
+    ghost.traverse((child) => {
+      if ((child as THREE.Mesh).isMesh) {
+        child.name = child.name ? `snapPreviewGhost-${child.name}` : 'snapPreviewGhostPart';
+        child.userData.structureReadabilityRole = 'snap preview prop silhouette';
+      }
+    });
+    wrapper.add(footprint, faceTick, ghost, blockerA, blockerB);
+    return wrapper;
   }
 
   private applyState(obj: THREE.Group, structure: StructureSave, timeSec: number, shelter: ShelterReport): void {
@@ -873,6 +986,17 @@ export class StructureRenderer {
     kilnSkinsLoaded: number;
     kilnSkinsPending: number;
     kilnSkinFallbacks: number;
+    snapPreview: {
+      active: boolean;
+      ok: boolean;
+      mode: StructureSnapPreview['mode'] | null;
+      item: StructureSave['item'] | null;
+      tile: number | null;
+      layer: number | null;
+      blocker: string | null;
+      meshes: number;
+      readabilityRoles: number;
+    };
     kilnAssets?: KilnAssetSnapshot;
   } {
     let meshes = 0;
@@ -891,6 +1015,8 @@ export class StructureRenderer {
     let kilnSkinsLoaded = 0;
     let kilnSkinsPending = 0;
     let kilnSkinFallbacks = 0;
+    let snapPreviewMeshes = 0;
+    const snapPreviewRoles = new Set<string>();
     for (const obj of this.objects.values()) {
       if (typeof obj.userData.structureSilhouette === 'string') routeSilhouettes.add(obj.userData.structureSilhouette);
       if (obj.userData.kilnSkinStatus === 'loaded') kilnSkinsLoaded++;
@@ -913,6 +1039,12 @@ export class StructureRenderer {
         if (child.visible && child.name === 'lanternGlow') homeComfort.litLanterns++;
       });
     }
+    if (this.snapPreviewGroup.visible) {
+      this.snapPreviewGroup.traverse((child) => {
+        if ((child as THREE.Mesh).isMesh && child.visible) snapPreviewMeshes++;
+        if (typeof child.userData.structureReadabilityRole === 'string') snapPreviewRoles.add(child.userData.structureReadabilityRole);
+      });
+    }
     return {
       groups: this.objects.size,
       meshes,
@@ -924,6 +1056,17 @@ export class StructureRenderer {
       kilnSkinsLoaded,
       kilnSkinsPending,
       kilnSkinFallbacks,
+      snapPreview: {
+        active: this.snapPreviewGroup.visible,
+        ok: this.lastSnapPreview?.ok ?? false,
+        mode: this.lastSnapPreview?.mode ?? null,
+        item: this.lastSnapPreview?.item ?? null,
+        tile: this.lastSnapPreview?.tile ?? null,
+        layer: this.lastSnapPreview?.layer ?? null,
+        blocker: this.lastSnapPreview?.blocker ?? null,
+        meshes: snapPreviewMeshes,
+        readabilityRoles: snapPreviewRoles.size,
+      },
       kilnAssets: this.kilnAssets?.snapshot?.(),
     };
   }
