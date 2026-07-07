@@ -8,6 +8,7 @@
     "build": "tsc --noEmit && vite build",
     "preview": "vite preview",
     "proof:route-markers": "node scripts/proof-route-marker-readability.mjs",
+    "proof:panel-ownership": "node scripts/proof-panel-ownership.mjs",
     "test": "vitest run",
     "typecheck": "tsc --noEmit"
   },

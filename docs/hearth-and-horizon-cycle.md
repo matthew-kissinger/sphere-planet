@@ -140,18 +140,19 @@ Current UX audit frontier:
 - **P0 gamepad panel focus, first slice closed**: crafting and chest storage now render
   selected rows/actions, consume D-pad/A/B while focused, confirm craft/place/transfer, and
   block jump/use/hotbar/mine/build leakage behind the panel. Route Slate candidate rows now
-  have their first keyboard, pointer/touch, and gamepad focus contract too. The remaining
-  P1 gap is a single shared panel-owned world-input blocker for Route Slate, crafting, journal,
-  and storage.
-- **P1 panel ownership**: Route Slate, crafting, journal, and storage must share one
-  no-overlap controller and close priority. Opening route or pinning should not leave
-  crafting underneath; storage/crafting/journal should not steal the playfield.
-- **P1 pointer safety**: UI surfaces own their pointers; storage clicks must not start
-  mouse-look or pointer lock, and touch controls must clear held movement/build/use state on
-  pointer loss, blur, and visibility changes.
-- **P2 responsive proof**: add a proof harness for desktop, 1366x720 laptop, tablet
-  portrait/landscape, phone portrait/landscape, and synthetic gamepad screenshots with HUD
-  overlap assertions.
+  have their first keyboard, pointer/touch, and gamepad focus contract too.
+- **P1 panel ownership, shared blocker closed**: Route Slate, crafting, journal, and
+  storage now share a `PanelOwnershipSnapshot` with deterministic owner priority, a
+  `worldInputBlocked` flag, and text/debug readback. Opening a panel gives that panel
+  immediate same-frame ownership, clears held pointer/touch actions, and blocks movement,
+  look, mine, build, use, eat, plane, autopilot, and hotbar leakage.
+- **P1 pointer safety, first slice closed**: UI surfaces own their pointers; panel-owned
+  pointer activity cancels mouse look and exits pointer lock, touch held movement/build/use
+  state clears on pointer loss, blur, visibility changes, and panel ownership, and modal
+  touch panels hide movement/action buttons while keeping explicit panel controls reachable.
+- **P2 responsive proof**: the panel-ownership proof now covers desktop, 1366x720 laptop,
+  tablet portrait, phone portrait, and synthetic gamepad. Remaining P2 work is landscape
+  tablet/phone proof, deeper bbox overlap assertions, and the full all-verbs device matrix.
 
 Current input-accessibility slice proof:
 
@@ -163,9 +164,16 @@ Current input-accessibility slice proof:
 - Gamepad proof: `desktop-gamepad-crafting-focus.png` shows focused crafting with
   A-confirm crafting, and `desktop-gamepad-storage-focus.png` shows focused chest storage
   with A-confirm transfer.
-- Gates passed: `npm test -- gamepad`, `npm run typecheck`, browser proof with no page
-  errors, full `npm test` at 247 tests, `npm run build`, and `git diff --check` with only
-  the known LF-to-CRLF checkout warnings.
+- Panel-ownership proof: `scripts/proof-panel-ownership.mjs`, `npm run
+  proof:panel-ownership`, and `output/playwright/panel-ownership/proof.json` assert one
+  visible owner among Route Slate/crafting/journal/storage, `panels.activePanel`,
+  `worldInputBlocked: true`, blocked player movement while panels are open, no page/console
+  errors, and screenshot pixel probes for PC, laptop, tablet touch, phone touch, and
+  synthetic gamepad.
+- Gates passed for the current panel-owner slice: `npm test -- ux`, `npm run typecheck`,
+  `npm run proof:panel-ownership`, full `npm test` at 252 tests, `npm run build`,
+  `git diff --check` with only the known LF-to-CRLF checkout warnings, and a generic
+  develop-web-game nonblank smoke screenshot at `output/web-game/shot-0.png`.
 
 Add a recurring **Orchestrated Development Track** to Hearth and Horizon. Large slices
 should be planned as a directed acyclic graph instead of a single linear checklist: define
@@ -214,7 +222,7 @@ Critical path:
 | F Travel/wonder | F0 settle afterglow local work; F1 route/itinerary polish; F2 visible event consequences; F3 boat/glider/cave-shortcut logistics | B3, D2, E4 | F0 shipped; F1 selectable Route Slate candidates are closed, with reorder/remove itinerary polish still later |
 | G Native life/combat | G0 behavior state machine; G1 harmless depth; G2 hazard variety; G3 ward/stun/flee tool rules; G4 rewards/anti-farming | B3, D3, E4 | Several native families and ward loops exist; combat stays constrained until route/building loops carry it |
 | H Avatar/art/assets | H0 authored Soft-Facet model brief; H1 prop/socket catalog; H2 animation coverage; H3 asset readability pass; H4 external asset ledger/probes | A4 | Route-marker glyph dialect is the active H3 slice; avatar polish, cave anchors/waystones, and mobile readability remain reviewer-owned |
-| I UX/input | I0 device control matrix; I1 HUD/panel hierarchy; I2 touch/gamepad parity for all verbs; I3 settings/pause/help/accessibility | C0, B3 | Route choice parity is closed; P1 panel ownership and world-input blocking are the next UX node |
+| I UX/input | I0 device control matrix; I1 HUD/panel hierarchy; I2 touch/gamepad parity for all verbs; I3 settings/pause/help/accessibility | C0, B3 | Route choice parity and shared panel ownership are closed for their first slices; P2 responsive/device matrix and future building/combat verbs remain |
 | J QA/release | J0 unit suites; J1 browser proof scripts; J2 screenshot/readability matrix; J3 perf/audio/bundle gates; J4 deploy/live/docs truth | all feature lanes | Unit/build proof is strong; route-marker proof script is now committed for this H3 slice |
 
 Active run ledger, 2026-07-07:
@@ -222,12 +230,12 @@ Active run ledger, 2026-07-07:
 | DAG Node | Owner | Status | Proof Gate |
 | --- | --- | --- | --- |
 | A2 living DAG | Main orchestrator | Done for this slice | Docs show node status, owner, dependencies, proof gate, and next critical path before code edits widen |
-| A3 subagent briefs | Main orchestrator plus explorer lanes | Done for this slice | Two independent lanes audited graph/progress and next-node risk before the commit |
+| A3 subagent briefs | Main orchestrator plus explorer lanes | Done for this slice | Three independent lanes audited panel leakage, proof matrix, and docs/test alignment before the commit |
 | F1 route/itinerary polish | Main implementation lane | Done for selected-candidate slice | Player can choose a Route Slate candidate instead of pinning only the top-ranked stop |
 | I2 touch/gamepad parity | Main implementation lane with reviewer audit | Done for route choice | Same route-candidate choice works by mouse/touch, keyboard, and gamepad without leaking panel input |
 | J1 browser proof scripts | QA/release lane | Done for route choice | `output/playwright/route-selection/proof.json` captures desktop pointer, gamepad, and phone touch proof |
 | H3 route-marker glyph dialect | Main implementation lane with asset-reviewer audit | Done for this slice | Cave anchors and waystones expose distinct route-marker silhouettes, named readability roles, desktop/phone screenshots, and text readback stats |
-| I2/P1 panel ownership | UX/input reviewer lane | Accepted as next follow-up | Shared panel-owned world-input blocker must prevent keyboard, touch, pointer, and gamepad world leakage while panels are open |
+| I2/P1 panel ownership | Main implementation with UX/input reviewers | Done for shared-owner slice | `PanelOwnershipSnapshot`, blocked-input runtime gate, touch/pointer cancellation, `npm test -- ux`, and `npm run proof:panel-ownership` prove panel-owned world-input blocking |
 
 Progress accounting rule: after each substantial slice, move exactly one current node to
 `complete`, `blocked`, or `deferred` with the proof artifact that justifies the state. If
@@ -244,7 +252,7 @@ Living node ledger:
 | I2 | Cross-device parity covers the affected verb | Done for route choice | UX/input lane | C0, B3, F1 | R3 | Desktop pointer, injected gamepad, keyboard, and phone touch route choice paths are wired | Continue all-verbs parity for future building/combat verbs |
 | J1 | Browser proof tracks the actual player path | Done for route choice | QA/release lane | F1, I2 | R5 | `output/playwright/route-selection/proof.json` plus three screenshots | Extend reusable proof harness for the full device matrix |
 | H3 | Route markers read as route tools, not generic glowing props | Done for route-marker glyph dialect | Main implementation plus asset-readability lanes | A4, F1 | R4, R5 | `test/structureRenderer.test.ts`; `npm run proof:route-markers`; `output/playwright/route-marker-readability/proof.json` | Run blind screenshot review and continue to avatar/waystone/cave-anchor polish at normal play distance |
-| I2/P1 | Shared panel ownership blocks world-input leakage | Next follow-up | UX/input lane | C0, B3, F1 | R3, R5 | Gameplay/UX subagent audit; existing `gamepad`, `ux`, `navigation`, `journal` tests | Implement one active-panel world-input contract before widening route itinerary editing |
+| I2/P1 | Shared panel ownership blocks world-input leakage | Done for shared-owner slice | Main implementation plus UX/input reviewer lanes | C0, B3, F1 | R3, R5 | `src/player/panelOwnership.ts`, `test/ux.test.ts`, `scripts/proof-panel-ownership.mjs`, `output/playwright/panel-ownership/proof.json` | Extend to landscape tablet/phone proof and apply the same contract to future building/combat panels |
 
 Subagent decision ledger:
 
@@ -256,6 +264,9 @@ Subagent decision ledger:
 | Asset readability lane | H3, R4 | Review player/avatar, crystal-gate risk, native hazards, cave anchors, waystones, and generated GLBs | Accepted | Driving current implementation | Route markers are weaker than the current Soft-Facet avatar and native-life hooks; use code-authored glyphs before generated GLBs |
 | Gameplay/UX/input lane | I2/P1, F1, J1 | Audit cross-device loop and panel ownership after route choice | Accepted as next node | Deferred from this code slice | Shared panel-owned input blocking is the next UX task; do not mix it into the H3 renderer slice |
 | Music/audio lane | J3 | Re-check soundtrack only if a regression appears | Deferred | No current edits | Prior music integration already streams and enforces a size budget |
+| Panel leakage code audit | I2/P1 | Inspect current main-loop and input-module leakage paths | Accepted | Merged into implementation | Movement, same-frame gamepad, touch mine/build, pointer lock, hotbar, and panel action risks were gated through the shared owner |
+| Panel proof matrix | I2/P1, J1 | Define realistic PC/laptop/tablet/phone/gamepad proof | Accepted | Merged into proof script | Proof now asserts active owner readback, one visible panel, blocked player motion, screenshots, and no page/console errors |
+| Docs/test alignment | A2, I2/P1, J1 | Identify docs, tests, and proof naming needed to close the node | Accepted | Merged into docs/tests | Added pure owner tests and moved I2/P1 from next-follow-up to done-with-evidence |
 
 Gate evidence ledger:
 
@@ -263,9 +274,9 @@ Gate evidence ledger:
 | --- | --- | --- | --- | --- |
 | R0 DAG intake | Current node, owner, dependency, reviewer lane, and proof target named before broad edits | Active run ledger, living node ledger, and subagent decisions above | Passing for this slice | Keep future slices from starting without a node ledger update |
 | R2 Playability gate | Real player loop changes state without debug-only shortcuts | Route Slate row selection pins a non-primary route target into the saved route plan | Passing for this slice | Later itinerary editing still needs reorder/remove polish |
-| R3 Cross-device gate | PC/laptop, touch, and gamepad evidence for affected verbs | Route-marker proof covers desktop and phone screenshots; route-choice proof covers desktop pointer, injected gamepad, and phone touch | Partial for this slice | Tablet/laptop matrix and shared panel-input blocking remain I2/P1 |
+| R3 Cross-device gate | PC/laptop, touch, and gamepad evidence for affected verbs | Panel ownership proof covers PC, 1366x720 laptop, tablet touch portrait, phone touch portrait, and synthetic gamepad with blocked-motion assertions | Passing for the shared panel-owner slice | Landscape tablet/phone and future all-verb building/combat parity remain |
 | R4 Asset readability gate | Reviewer can name the gameplay noun and likely verb from screenshots | Route markers now expose `routeSilhouettes: 2`, `routeReadabilityRoles: 24`, named cave-anchor/waystone glyph roles, desktop/phone screenshots, and readback stats | Passing for route-marker glyph dialect | Blind screenshot review and further avatar/cave-anchor/waystone polish remain open |
-| R5 Performance/release gate | Typecheck, unit suite, build, browser screenshots, console check, canvas proof | `npm test -- structureRenderer structures navigation`, `npm run typecheck`, `npm run proof:route-markers`, and develop-web-game client screenshot pass | Passing for this slice | Full suite/build still required before push |
+| R5 Performance/release gate | Typecheck, unit suite, build, browser screenshots, console check, canvas proof | `npm test -- ux`, `npm run typecheck`, `npm run proof:panel-ownership`, full `npm test` at 252 tests, `npm run build`, and generic develop-web-game smoke pass; screenshot pixel probes and no page/console errors in the panel proof | Passing for the shared panel-owner slice | Production large-chunk warning remains a known bundle-size follow-up |
 
 Board update rule: update the node ledger at the start and end of each substantial
 continuation. No node moves to `Done` without an evidence link. Every subagent output must

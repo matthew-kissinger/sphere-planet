@@ -434,10 +434,12 @@
     body.touch #btn-route { display: flex; }
     body.touch #btn-route-pin { display: flex; }
     body.touch #btn-route-clear { display: flex; }
-    body.touch.crafting-open #btn-jump,
-    body.touch.crafting-open #btn-down,
-    body.touch.crafting-open #btn-use,
-    body.touch.crafting-open #btn-plane { display: none !important; }
+    body.touch.panel-open #btn-jump,
+    body.touch.panel-open #btn-down,
+    body.touch.panel-open #btn-use,
+    body.touch.panel-open #btn-plane { display: none !important; }
+    body.touch:not(.panel-routeSlate) #btn-route-pin,
+    body.touch:not(.panel-routeSlate) #btn-route-clear { display: none !important; }
 
     body.touch #help { display: none; }
     body.touch #crosshair { display: none; }

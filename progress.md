@@ -3,13 +3,33 @@ Current operating goal: Hearth and Horizon full crafting-survival cycle under th
 
 ## 2026-07-07
 
+- Closed the I2/P1 Shared Panel Ownership slice under the DAG/subagent workflow. Three
+  parallel reviewer lanes audited panel leakage, device proof, and docs/test alignment while
+  the main path implemented the shared owner. Route Slate, crafting, Hearth Journal, and
+  chest storage now report one `PanelOwnershipSnapshot` with deterministic owner priority and
+  `worldInputBlocked` readback in `render_game_to_text`, `__world.stats()`, and
+  `__world.controls()`.
+- Hardened the input boundary around that owner: panel-owned frames cancel held pointer and
+  touch state, exit pointer lock, block same-frame movement/look/zoom/hotbar/use/eat/plane/
+  mine/build leakage, neutralize keyboard/touch/gamepad motion while panels are open, and
+  hide touch movement/action buttons behind modal panel owners while keeping explicit panel
+  buttons reachable.
+- Added focused unit coverage for `src/player/panelOwnership.ts` inside `test/ux.test.ts`
+  and committed a new browser proof harness at `scripts/proof-panel-ownership.mjs` exposed as
+  `npm run proof:panel-ownership`. The proof writes
+  `output/playwright/panel-ownership/proof.json` plus PC, laptop, tablet touch, phone touch,
+  and synthetic gamepad screenshots, and asserts one visible panel owner, `worldInputBlocked:
+  true`, blocked player motion, screenshot pixels, and no page/console errors.
+- Verified the panel-owner slice with `npm test -- ux`, `npm run typecheck`, `npm run
+  proof:panel-ownership`, full `npm test` (252 tests), `npm run build`, `git diff --check`
+  (LF-to-CRLF warnings only), and a generic develop-web-game nonblank smoke at
+  `output/web-game/shot-0.png`. The custom panel proof is the authoritative interaction
+  artifact; the generic client did not open the panel reliably through its key vocabulary.
 - Current frontier snapshot: goal outcome is measurable Hearth and Horizon progress under
-  the DAG operating model; F1/I2/J1 route choice is closed, and the current moved node is
-  H3/R4 route-marker glyph readability with committed browser proof. Three current subagent
-  lanes audited the graph/frontier, asset readability, and gameplay/UX: graph and asset lanes
-  selected route-marker readability for this slice, while the UX lane accepted P1 shared
-  panel ownership as the next follow-up. Current gates are R0, R3, R4, and R5; no
-  human-owned decision is blocking the marker slice.
+  the DAG operating model; F1/I2/J1 route choice, H3/R4 route-marker readability, and the
+  first I2/P1 shared-panel ownership slice are now closed with committed proof hooks. The
+  next honest UX frontier is P2 responsive/device-matrix proof plus future all-verb parity
+  for building and combat panels; no human-owned decision blocks that follow-up.
 - Closed the H3/R4 Route Marker Glyph Dialect slice: cave anchors now carry belay/cairn/rope,
   dry-cave, sea-cave, spring, flood, and arch readability roles; waystones now use distinct
   survey bearing, hearth/home, cave arch, shore wave, and forage sprout glyph components; and

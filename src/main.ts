@@ -27,6 +27,7 @@ import { Input } from './player/input';
 import { TouchControls } from './player/touch';
 import { GamepadControls, type GamepadFrame } from './player/gamepad';
 import { UxManager, type UxInputMode, type UxProfile } from './player/ux';
+import { panelOwnershipSnapshot, type PanelOwnershipSnapshot } from './player/panelOwnership';
 import { pick, pickTree, type PickResult, type TreePick } from './edit/pick';
 import { Metrics } from './demo/metrics';
 import { Autopilot, OrbitDemo } from './demo/autopilot';
@@ -1915,6 +1916,20 @@ async function boot(): Promise<void> {
   };
 
   const routeSlateOpen = (): boolean => routeFocusActive && hud.routeVisible();
+  const currentPanelOwnership = (): PanelOwnershipSnapshot => panelOwnershipSnapshot({
+    routeSlateOpen: routeSlateOpen(),
+    craftingOpen,
+    journalOpen,
+    storageOpen: openChestId !== null,
+  });
+  const worldInputBlockedByPanel = (): boolean => currentPanelOwnership().worldInputBlocked;
+  input.setWorldInputBlocked(worldInputBlockedByPanel);
+  const panelOwnerClasses = ['panel-routeSlate', 'panel-crafting', 'panel-journal', 'panel-storage'];
+  const syncPanelOwnershipBody = (): void => {
+    const owner = currentPanelOwnership().activePanel;
+    document.body.classList.toggle('panel-open', owner !== null);
+    for (const className of panelOwnerClasses) document.body.classList.toggle(className, className === `panel-${owner}`);
+  };
 
   const closeRouteSlate = (): void => {
     routeFocusActive = false;
@@ -4206,7 +4221,7 @@ async function boot(): Promise<void> {
       tools: { ...toolSummary(craftedItems, toolWear), wear: { ...toolWear }, lastAction: lastToolAction, reach: playerReach() },
       food: { ...foodCounts(), lastAction: lastFoodAction, nearWater: nearFishingWater(), nearDock: nearDock(), school: currentFishSchool(), forage: currentForage(), crops: cropDiagnostics(), fishTraps: fishTrapDiagnostics(), shoreNets: shoreNetDiagnostics() },
       audio: audio.state(),
-      controls: { ux: uxManager.snapshot(), gamepad: gamepad.snapshot(), touch: touch.enabled, inputActive: input.active(), aimActive: input.active() || gamepad.active() },
+      controls: { ux: uxManager.snapshot(), gamepad: gamepad.snapshot(), touch: touch.enabled, inputActive: input.active(), aimActive: input.active() || gamepad.active(), panels: currentPanelOwnership() },
       survival: { ...survivalSnapshot(), time: { ...timeState }, state: { ...survivalState }, pack: packBurden(), lastAction: lastSurvivalAction },
       caves: { current: currentNaturalVoid(), signal: nearbyCaveSignal(), resonance: caveResonanceDiagnostics(), mouths: caveMouthDiagnostics(), pressure: currentCavePressure(), lastAction: lastCaveAction, echoLantern: itemCount(counts, craftedItems, 'echoLantern') },
       navigation: { horizonChart: horizonChartCount(), signal: visibleHorizonChartSignal(), hearthBeacon: visibleHearthBeaconSignal(), routePlan: currentRoutePlanSignal(), savedRoutePlan: activeRoutePlan, waystones: waystoneRouteSignals(), caveAnchors: caveAnchorRouteSignals(), weatherVane: weatherVaneForecast(), domain: currentPentagonDomain(), site: currentRouteSiteSignal(), thresholdChamber: currentRouteThresholdChamberSignal(), resource: currentRouteResourceSignal(), skyfall: currentRouteSkyfallSignal(), murmur: currentRouteMurmurSignal(), season: currentRouteSeasonSignal(), seasonAfterglow: currentRouteSeasonAfterglowSignal(), seasonRoute: currentSeasonRouteGuides(), guide: currentRouteGuide(), plan: horizonExpeditionPlan(), slate: currentRouteSlate(), lastAction: lastNavigationAction },
@@ -4237,7 +4252,7 @@ async function boot(): Promise<void> {
     characterState: () => character.state(),
     characterIntent: () => characterVisualState(),
     audio: () => audio.state(),
-    controls: () => ({ ux: uxManager.snapshot(), gamepad: gamepad.snapshot(), touch: touch.enabled, inputActive: input.active(), aimActive: input.active() || gamepad.active() }),
+    controls: () => ({ ux: uxManager.snapshot(), gamepad: gamepad.snapshot(), touch: touch.enabled, inputActive: input.active(), aimActive: input.active() || gamepad.active(), panels: currentPanelOwnership() }),
     injectGamepad: (frame: Partial<GamepadFrame>, frames = 2) => {
       gamepad.inject(frame, frames);
       return gamepad.snapshot();
@@ -4804,7 +4819,7 @@ async function boot(): Promise<void> {
         caveMouths: caveMouthDiagnostics(),
         caveResonances: caveResonanceDiagnostics(),
         audio: audio.state(),
-        controls: { ux: uxManager.snapshot(), gamepad: gamepad.snapshot(), touch: touch.enabled },
+        controls: { ux: uxManager.snapshot(), gamepad: gamepad.snapshot(), touch: touch.enabled, panels: currentPanelOwnership() },
         mineProgress: mineProgressDiagnostics(),
         survival: { ...survivalSnapshot(), time: { ...timeState }, pack: packBurden() },
       };
@@ -4814,6 +4829,7 @@ async function boot(): Promise<void> {
   (window as any).render_game_to_text = () => JSON.stringify({
     coordinates: 'world origin at planet core; player radius/AGL are meters',
     mode: player.mode,
+    panels: currentPanelOwnership(),
     player: {
       tile: player.tile,
       speed: Math.round(Math.hypot(player.vx, player.vy, player.vz) * 10) / 10,
@@ -4835,7 +4851,7 @@ async function boot(): Promise<void> {
       food: { ...foodCounts(), lastAction: lastFoodAction, nearWater: nearFishingWater(), nearDock: nearDock(), school: currentFishSchool(), forage: currentForage(), crops: cropDiagnostics(), fishTraps: fishTrapDiagnostics(), shoreNets: shoreNetDiagnostics() },
       survival: { ...survivalSnapshot(), time: { ...timeState }, pack: packBurden(), lastAction: lastSurvivalAction },
       audio: audio.state(),
-      controls: { ux: uxManager.snapshot(), gamepad: gamepad.snapshot(), touch: touch.enabled },
+      controls: { ux: uxManager.snapshot(), gamepad: gamepad.snapshot(), touch: touch.enabled, panels: currentPanelOwnership() },
       caves: { current: currentNaturalVoid(), signal: nearbyCaveSignal(), resonance: caveResonanceDiagnostics(), mouths: caveMouthDiagnostics(), pressure: currentCavePressure(), lastAction: lastCaveAction },
     },
     navigation: {
@@ -4934,12 +4950,26 @@ async function boot(): Promise<void> {
     const drained = input.drain();
     const tf = touch.frame();
     const gp = gamepad.frame(dt);
+    const panelAtFrameStart = currentPanelOwnership();
+    syncPanelOwnershipBody();
     const gpPanelConsumed = handleGamepadPanelInput(gp);
-    const gpWorldBlocked = gpPanelConsumed || routeSlateOpen() || craftingOpen || openChestId !== null || journalOpen;
+    let worldInputBlocked = panelAtFrameStart.worldInputBlocked || gpPanelConsumed;
+    const worldBlocked = (): boolean => worldInputBlocked || currentPanelOwnership().worldInputBlocked;
     const gamepadAimActive = gp.active || gamepad.active();
-    drained.dx += gp.lookX;
-    drained.dy += gp.lookY;
-    if (Math.abs(gp.zoom) > 0.01) {
+    if (worldInputBlocked) {
+      input.cancelWorldInput();
+      touch.cancelWorldInput();
+      drained.dx = 0;
+      drained.dy = 0;
+      drained.wheel = 0;
+      drained.mine = false;
+      drained.place = false;
+      drained.wheelTouched = false;
+    } else {
+      drained.dx += gp.lookX;
+      drained.dy += gp.lookY;
+    }
+    if (!worldInputBlocked && Math.abs(gp.zoom) > 0.01) {
       drained.wheel += gp.zoom * 1300 * dt;
       drained.wheelTouched = true;
     }
@@ -4974,14 +5004,14 @@ async function boot(): Promise<void> {
       input.pressed('Enter'),
       escPressed,
     );
-    if (fPressed && !autopilot.active) {
+    if (fPressed && !worldBlocked() && !autopilot.active) {
       player.toggleFly();
       if (creativeActive) hud.flash(player.mode === 'fly' ? 'creative free-flight' : 'walk mode', 2);
     }
-    if (gPressed) { autopilot.toggle(player); hud.flash(autopilot.active ? 'autopilot lap…' : 'autopilot off', 3); }
-    if (oPressed) { orbitDemo.start(); hud.flash('orbit demo…', 3); }
-    if ((ePressed || tf.plane || (gp.plane && !gpWorldBlocked)) && !autopilot.active) {
-      if (creativeActive && (tf.plane || (gp.plane && !gpWorldBlocked)) && !ePressed) {
+    if (gPressed && !worldBlocked()) { autopilot.toggle(player); hud.flash(autopilot.active ? 'autopilot lap…' : 'autopilot off', 3); }
+    if (oPressed && !worldBlocked()) { orbitDemo.start(); hud.flash('orbit demo…', 3); }
+    if ((ePressed || (tf.plane && !worldBlocked()) || (gp.plane && !worldBlocked())) && !worldBlocked() && !autopilot.active) {
+      if (creativeActive && ((tf.plane && !worldBlocked()) || (gp.plane && !worldBlocked())) && !ePressed) {
         player.toggleFly();
         hud.flash(player.mode === 'fly' ? 'creative free-flight' : 'creative walk mode', 2);
       } else {
@@ -5018,14 +5048,15 @@ async function boot(): Promise<void> {
     if (bPressed || (gp.craft && !gpPanelConsumed)) {
       toggleCraftingPanel();
     }
-    if (((rPressed && input.down('ShiftLeft')) || tf.pack || (gp.pack && !gpWorldBlocked)) && !autopilot.active) tryDismantleStructure();
-    else if ((rPressed || tf.use || (gp.use && !gpWorldBlocked && !gamepadUseConsumed)) && !autopilot.active) useStructure();
-    if ((qPressed || (gp.eat && !gpWorldBlocked)) && !autopilot.active) tryEatPackedFood();
-    if ((mPressed || tf.chart || (gp.chart && !gpWorldBlocked)) && !autopilot.active) {
+    worldInputBlocked = worldBlocked();
+    if (((rPressed && input.down('ShiftLeft')) || (tf.pack && !worldBlocked()) || (gp.pack && !worldBlocked())) && !worldBlocked() && !autopilot.active) tryDismantleStructure();
+    else if ((rPressed || (tf.use && !worldBlocked()) || (gp.use && !worldBlocked() && !gamepadUseConsumed)) && !worldBlocked() && !autopilot.active) useStructure();
+    if ((qPressed || (gp.eat && !worldBlocked())) && !worldBlocked() && !autopilot.active) tryEatPackedFood();
+    if ((mPressed || tf.chart || (gp.chart && !worldBlocked())) && !autopilot.active) {
       openRouteSlateCommand();
     }
-    if ((pPressed || tf.pin || tf.clearPin || ((gp.pin || gp.clearPin) && !gpWorldBlocked)) && !autopilot.active) {
-      if (input.down('ShiftLeft') || tf.clearPin || (gp.clearPin && !gpWorldBlocked)) clearRouteCommand();
+    if ((pPressed || tf.pin || tf.clearPin || ((gp.pin || gp.clearPin) && !worldBlocked())) && (!worldBlocked() || routeSlateOpen()) && !autopilot.active) {
+      if (input.down('ShiftLeft') || tf.clearPin || (gp.clearPin && !worldBlocked())) clearRouteCommand();
       else pinRouteCommand();
     }
     if (nPressed || (gp.mute && !gpPanelConsumed)) {
@@ -5036,8 +5067,20 @@ async function boot(): Promise<void> {
     if (f3Pressed || (gp.diag && !gpPanelConsumed)) showDiag = !showDiag;
     if (hPressed || (gp.help && !gpPanelConsumed)) hud.toggleHelp();
     fWas = fDown; gWas = gDown; oWas = oDown; eWas = eDown; bWas = bDown; rWas = rDown; qWas = qDown; mWas = mDown; pWas = pDown; nWas = nDown; jWas = jDown; escWas = escDown; f3Was = f3Down; hWas = hDown;
+    worldInputBlocked = worldBlocked();
+    if (worldInputBlocked) {
+      input.cancelWorldInput();
+      touch.cancelWorldInput();
+      drained.dx = 0;
+      drained.dy = 0;
+      drained.wheel = 0;
+      drained.mine = false;
+      drained.place = false;
+      drained.wheelTouched = false;
+    }
+    syncPanelOwnershipBody();
     for (let i = 0; i < SLOTS.length; i++) {
-      if (input.down(`Digit${i + 1}`)) {
+      if (!worldBlocked() && input.down(`Digit${i + 1}`)) {
         hotbarSel = i;
         if (selectedStructureItem) {
           selectedStructureItem = null;
@@ -5045,7 +5088,7 @@ async function boot(): Promise<void> {
         }
       }
     }
-    if (!gpWorldBlocked && gp.slotDelta !== 0) {
+    if (!worldBlocked() && gp.slotDelta !== 0) {
       hotbarSel = (hotbarSel + gp.slotDelta + SLOTS.length * 4) % SLOTS.length;
       if (selectedStructureItem) {
         selectedStructureItem = null;
@@ -5063,17 +5106,18 @@ async function boot(): Promise<void> {
     }
 
     // look + move (touch joystick/buttons merge with the keyboard)
-    const aimActive = input.active() || gamepadAimActive;
+    const aimActive = !worldBlocked() && (input.active() || gamepadAimActive);
     if (aimActive && !autopilot.active) player.applyLook(drained.dx, drained.dy);
     if (autopilot.active) {
       autopilot.update(dt, player);
     } else {
-      const fwd = Math.max(-1, Math.min(1, (input.down('KeyW') ? 1 : 0) + (input.down('KeyS') ? -1 : 0) + tf.moveY + gp.moveY));
-      const strafe = Math.max(-1, Math.min(1, (input.down('KeyD') ? 1 : 0) + (input.down('KeyA') ? -1 : 0) + tf.moveX + gp.moveX));
-      const jumpIntent = input.down('Space') || tf.jump || (gp.jump && !gpWorldBlocked);
-      const downIntent = input.down('ControlLeft') || input.down('KeyC') || tf.down || (gp.down && !gpWorldBlocked);
+      const motionBlocked = worldBlocked();
+      const fwd = motionBlocked ? 0 : Math.max(-1, Math.min(1, (input.down('KeyW') ? 1 : 0) + (input.down('KeyS') ? -1 : 0) + tf.moveY + gp.moveY));
+      const strafe = motionBlocked ? 0 : Math.max(-1, Math.min(1, (input.down('KeyD') ? 1 : 0) + (input.down('KeyA') ? -1 : 0) + tf.moveX + gp.moveX));
+      const jumpIntent = !motionBlocked && (input.down('Space') || tf.jump || gp.jump);
+      const downIntent = !motionBlocked && (input.down('ControlLeft') || input.down('KeyC') || tf.down || gp.down);
       const upDown = (jumpIntent ? 1 : 0) + (downIntent ? -1 : 0);
-      const sprintIntent = input.down('ShiftLeft') || tf.sprint || gp.sprint;
+      const sprintIntent = !motionBlocked && (input.down('ShiftLeft') || tf.sprint || gp.sprint);
       const burden = packBurden();
       const sprintAllowed = creativeActive || (survivalState.stamina > 8 && !burden.sprintBlocked);
       player.update(dt, {
@@ -5294,7 +5338,7 @@ async function boot(): Promise<void> {
     }
     if (!aimActive || camDist >= 120) { lastPick = null; treePick = null; }
     // touch: a tap mines at the tapped ray, a long-press builds there
-    if (touch.enabled && camDist < 120 && (tf.mines.length > 0 || tf.places.length > 0)) {
+    if (!worldBlocked() && touch.enabled && camDist < 120 && (tf.mines.length > 0 || tf.places.length > 0)) {
       for (const m of tf.mines) {
         rayV.set((m.x / window.innerWidth) * 2 - 1, -(m.y / window.innerHeight) * 2 + 1, 0.5).unproject(camera).normalize();
         updatePicks(rayV.x, rayV.y, rayV.z);
@@ -5332,8 +5376,8 @@ async function boot(): Promise<void> {
     }
 
     mineTimer -= dt; placeTimer -= dt;
-    if ((drained.mine || (gp.minePressed && !gpWorldBlocked) || ((input.mineHeld || (gp.mine && !gpWorldBlocked)) && mineTimer <= 0)) && (lastPick || treePick)) { tryMine(); mineTimer = nextMineCooldown; }
-    if ((drained.place || (gp.placePressed && !gpWorldBlocked) || ((input.placeHeld || (gp.place && !gpWorldBlocked)) && placeTimer <= 0)) && lastPick) { tryPlace(); placeTimer = 0.17; }
+    if (!worldBlocked() && (drained.mine || gp.minePressed || ((input.mineHeld || gp.mine) && mineTimer <= 0)) && (lastPick || treePick)) { tryMine(); mineTimer = nextMineCooldown; }
+    if (!worldBlocked() && (drained.place || gp.placePressed || ((input.placeHeld || gp.place) && placeTimer <= 0)) && lastPick) { tryPlace(); placeTimer = 0.17; }
 
     saveTimer += dt;
     if (saveEnabled && (saveDirty || saveTimer >= 6) && performance.now() - lastSaveMs > 900) {
@@ -5348,6 +5392,7 @@ async function boot(): Promise<void> {
       routeFocusActive = false;
       routeFocusDirty = false;
     }
+    syncPanelOwnershipBody();
     hudTimer -= dt;
     if (hudTimer <= 0) {
       hudTimer = 0.25;

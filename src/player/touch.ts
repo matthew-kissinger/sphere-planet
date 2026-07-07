@@ -118,9 +118,9 @@ export class TouchControls {
     this.el.addEventListener('pointerup', this.onUp, { passive: false });
     this.el.addEventListener('pointercancel', this.onUp, { passive: false });
     this.el.addEventListener('lostpointercapture', this.onLostPointer, { passive: false });
-    window.addEventListener('blur', this.resetHeldState);
+    window.addEventListener('blur', this.cancelWorldInput);
     document.addEventListener('visibilitychange', () => {
-      if (document.visibilityState === 'hidden') this.resetHeldState();
+      if (document.visibilityState === 'hidden') this.cancelWorldInput();
     });
 
     const bindHold = (el: HTMLElement, set: (v: boolean) => void): void => {
@@ -329,7 +329,7 @@ export class TouchControls {
 
   private onLostPointer = (e: PointerEvent): void => {
     if (e.pointerId === this.joyId || e.pointerId === this.lookId || e.pointerId === this.pinchId) {
-      this.resetHeldState();
+      this.cancelWorldInput();
     }
   };
 
@@ -343,7 +343,7 @@ export class TouchControls {
     this.useDownAt = 0;
   };
 
-  private resetHeldState = (): void => {
+  cancelWorldInput = (): void => {
     this.moveX = 0;
     this.moveY = 0;
     this.sprint = false;

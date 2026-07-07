@@ -28,6 +28,7 @@ export class Input {
   private lastX = 0;
   private lastY = 0;
   private el: HTMLElement;
+  private worldInputBlocked: () => boolean = () => false;
 
   constructor(el: HTMLElement) {
     this.el = el;
@@ -57,6 +58,11 @@ export class Input {
       if (this.touchMode) return;
       // UI elements handle their own pointers
       if (e.target instanceof HTMLElement && e.target.closest('#hotbar, #crafting, #route, #storage, #journal, .tbtn')) return;
+      if (this.worldInputBlocked()) {
+        e.preventDefault();
+        this.cancelWorldInput();
+        return;
+      }
       el.focus();
       if (!this.locked && !this.lockUnavailable) {
         // attempt pointer lock; a denial (embedded preview) flips us to drag-look
@@ -79,6 +85,10 @@ export class Input {
     });
     window.addEventListener('mousemove', (e) => {
       if (this.touchMode) return;
+      if (this.worldInputBlocked()) {
+        this.cancelWorldInput();
+        return;
+      }
       if (this.locked) {
         this.mouseDX += e.movementX;
         this.mouseDY += e.movementY;
@@ -94,6 +104,10 @@ export class Input {
     });
     window.addEventListener('mouseup', (e) => {
       if (this.touchMode) return;
+      if (this.worldInputBlocked()) {
+        this.cancelWorldInput();
+        return;
+      }
       if (this.locked) {
         if (e.button === 0) this.mineHeld = false;
         if (e.button === 2) this.placeHeld = false;
@@ -108,6 +122,10 @@ export class Input {
       }
     });
     window.addEventListener('wheel', (e) => {
+      if (this.worldInputBlocked()) {
+        e.preventDefault();
+        return;
+      }
       this.wheel += e.deltaY;
       this.wheelTouched = true;
       e.preventDefault();
@@ -118,6 +136,30 @@ export class Input {
   /** true when look/move input is live (locked, drag-look fallback, or touch) */
   active(): boolean {
     return this.locked || this.lockUnavailable || this.touchMode;
+  }
+
+  setWorldInputBlocked(blocked: () => boolean): void {
+    this.worldInputBlocked = blocked;
+  }
+
+  cancelWorldInput(): void {
+    if (this.locked && typeof document !== 'undefined' && document.pointerLockElement === this.el) {
+      try {
+        document.exitPointerLock?.();
+      } catch {
+        // Some embedded previews throw while pointer lock is being torn down.
+      }
+    }
+    this.mouseDX = 0;
+    this.mouseDY = 0;
+    this.wheel = 0;
+    this.wheelTouched = false;
+    this.mineHeld = false;
+    this.placeHeld = false;
+    this.minePressed = false;
+    this.placePressed = false;
+    this.dragButton = -1;
+    this.dragMoved = 0;
   }
 
   /** consume per-frame deltas */
