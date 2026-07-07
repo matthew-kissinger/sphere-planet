@@ -248,11 +248,13 @@ Deferred until scale, snap, budget, readability, or animation proof exists:
   screenshot proof before shipping as craftable art.
 - House walls are not solved by the current pack. A `window-frame` is an insert, not a
   wall; a `door-kit` is an opening/threshold, not a full enclosure; a `roof-bundle` needs
-  supports and joins. Before more craftable house pieces ship, add a code-owned wall and
-  shell contract for full wall panels, wall-with-window openings, wall-with-door openings,
-  corners, half walls/rails, roof joins, and optional foundations. New Kiln wall pieces
-  should be generated as one shared-scale house-shell pack and then treated as decorative
-  skins over measured sockets.
+  supports and joins. The first C6 slice now adds code-owned `floorFoundation`,
+  `wallPanel`, and `wallHalfRail` sockets and proves full walls seal while rails/foundations
+  do not. Before more craftable house pieces ship, finish the code-owned wall and shell
+  contract for edge-addressed wall-with-window openings, wall-with-door openings, corners,
+  roof joins, collision, and multi-piece snapping. New Kiln wall pieces should be generated
+  as one shared-scale house-shell pack and then treated as decorative skins over measured
+  sockets.
 - Functional props with warnings or watery placement needs: `workbench`, `rain-cistern`,
   `fish-trap`, `shore-net`, `lantern-post`.
 - Shrines and craters: defer for blind screenshot readability, world-placement scale,

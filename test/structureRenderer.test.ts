@@ -3,7 +3,7 @@ import * as THREE from 'three/webgpu';
 import { Goldberg } from '../src/geo/goldberg';
 import { StructureRenderer } from '../src/render/structures';
 import type { KilnStructureSkinSlug, StructureSkinProvider } from '../src/render/kilnAssets';
-import type { StructureSave, StructureSocketSpec } from '../src/sim/structures';
+import { structureSocketSpec, type StructureSave, type StructureSocketSpec } from '../src/sim/structures';
 import { buildLayers } from '../src/world/layers';
 
 function meshNames(renderer: StructureRenderer): Set<string> {
@@ -342,6 +342,45 @@ describe('structure renderer asset readability', () => {
     ]));
   });
 
+  it('renders procedural wall-shell pieces with distinct foundation, wall, and rail roles', () => {
+    const scene = new THREE.Scene();
+    const geo = new Goldberg(8);
+    const layers = buildLayers();
+    const renderer = new StructureRenderer(scene);
+    const structures: StructureSave[] = [
+      { id: 1, item: 'floorFoundation', tile: 1, layer: 100, yaw: 0 },
+      { id: 2, item: 'wallPanel', tile: 2, layer: 100, yaw: Math.PI / 3 },
+      { id: 3, item: 'wallHalfRail', tile: 3, layer: 100, yaw: Math.PI * 2 / 3 },
+    ];
+
+    renderer.setStructures(structures);
+    renderer.update(structures, geo, layers, { x: 0, y: 0, z: 0 }, 1.5);
+    const stats = renderer.stats();
+
+    expect(stats.wallShell).toMatchObject({
+      foundations: 1,
+      fullWalls: 1,
+      halfRails: 1,
+    });
+    expect(stats.wallShellReadabilityRoles).toBeGreaterThanOrEqual(8);
+    expect(stats.wallShellSignals).toBeGreaterThanOrEqual(8);
+    expect([...meshNames(renderer)]).toEqual(expect.arrayContaining([
+      'foundationFootprint',
+      'foundationLevelBand',
+      'wallPanelFace',
+      'wallPanelTopCap',
+      'halfRailRun',
+      'halfRailOpenGap',
+    ]));
+    expect(stats.wallShell.visibleRoles).toEqual(expect.arrayContaining([
+      'floor foundation level footprint',
+      'full wall panel shelter boundary',
+      'wall shell top cap under roof join',
+      'half rail porch guard',
+      'half rail open weather gap',
+    ]));
+  });
+
   it('renders valid and blocked snap previews without adding saved structure groups', () => {
     const scene = new THREE.Scene();
     const geo = new Goldberg(8);
@@ -490,6 +529,76 @@ describe('structure renderer asset readability', () => {
       expect(stats.visibleReadabilityRoles).toEqual(expect.arrayContaining(testCase.roles));
       expect(stats.visibleReadabilityRoles).not.toContain('blocked snap crossbar');
       expect(stats.meshes).toBeGreaterThanOrEqual(testCase.meshNames.length + 3);
+    }
+  });
+
+  it('exposes socket-specific snap preview silhouettes for wall-shell pieces', () => {
+    const scene = new THREE.Scene();
+    const geo = new Goldberg(8);
+    const layers = buildLayers();
+    const renderer = new StructureRenderer(scene);
+    const cases: Array<{
+      item: 'floorFoundation' | 'wallPanel' | 'wallHalfRail';
+      role: StructureSocketSpec['role'];
+      collider: StructureSocketSpec['collider'];
+      silhouette: string;
+      meshNames: string[];
+      roles: string[];
+    }> = [
+      {
+        item: 'floorFoundation',
+        role: 'foundation',
+        collider: 'hex-cell',
+        silhouette: 'foundation-pad-preview',
+        meshNames: ['snapPreviewFoundationPad', 'snapPreviewFoundationLevelBand', 'snapPreviewFoundationCenterMark'],
+        roles: ['snap preview floor foundation', 'snap preview leveled floor socket', 'snap preview floor center mark'],
+      },
+      {
+        item: 'wallPanel',
+        role: 'wall-panel',
+        collider: 'thin-wall',
+        silhouette: 'wall-panel-preview',
+        meshNames: ['snapPreviewWallPanelFace', 'snapPreviewWallPanelLeftPost', 'snapPreviewWallPanelTopCap'],
+        roles: ['snap preview full wall boundary', 'snap preview full wall post', 'snap preview wall top cap'],
+      },
+      {
+        item: 'wallHalfRail',
+        role: 'half-rail',
+        collider: 'thin-wall',
+        silhouette: 'half-rail-preview',
+        meshNames: ['snapPreviewHalfRailLeftPost', 'snapPreviewHalfRailRun', 'snapPreviewHalfRailOpenGap'],
+        roles: ['snap preview half rail post', 'snap preview porch rail', 'snap preview open weather gap'],
+      },
+    ];
+
+    for (const [index, testCase] of cases.entries()) {
+      renderer.updateSnapPreview({
+        active: true,
+        mode: 'place',
+        ok: true,
+        item: testCase.item,
+        tile: index + 2,
+        layer: 100,
+        yaw: index * Math.PI / 3,
+        turn: index,
+        message: `${testCase.item} can snap here`,
+        blocker: null,
+        blockers: [],
+        socket: structureSocketSpec(testCase.item),
+      }, geo, layers, { x: 0, y: 0, z: 0 }, 2 + index);
+
+      const stats = renderer.stats().snapPreview;
+      expect(stats).toMatchObject({
+        active: true,
+        ok: true,
+        mode: 'place',
+        item: testCase.item,
+        socketRole: testCase.role,
+        socketCollider: testCase.collider,
+        silhouette: testCase.silhouette,
+      });
+      expect(stats.meshNames).toEqual(expect.arrayContaining(testCase.meshNames));
+      expect(stats.visibleReadabilityRoles).toEqual(expect.arrayContaining(testCase.roles));
     }
   });
 });

@@ -6,7 +6,7 @@ import type { KilnAssetSnapshot, KilnSkinFitSnapshot, KilnStructureSkinSlug, Str
 
 type PropFactory = () => THREE.Group;
 type StructureSilhouette = 'cave-anchor-belay-marker' | 'waystone-attuned-marker';
-type SnapPreviewSilhouette = 'door-opening-preview' | 'window-light-preview' | 'roof-cap-preview';
+type SnapPreviewSilhouette = 'foundation-pad-preview' | 'wall-panel-preview' | 'half-rail-preview' | 'door-opening-preview' | 'window-light-preview' | 'roof-cap-preview';
 
 interface SnapPreviewGuidePart {
   name: string;
@@ -115,6 +115,32 @@ function silhouette<T extends THREE.Object3D>(obj: T, silhouetteName: StructureS
 }
 
 const SNAP_PREVIEW_GUIDES: Partial<Record<StructureSave['item'], SnapPreviewGuideSpec>> = {
+  floorFoundation: {
+    silhouette: 'foundation-pad-preview',
+    parts: [
+      { name: 'snapPreviewFoundationPad', role: 'snap preview floor foundation', pos: [0, 0.1, 0], scale: [1.08, 0.08, 1.08] },
+      { name: 'snapPreviewFoundationLevelBand', role: 'snap preview leveled floor socket', pos: [0, 0.2, -0.42], scale: [0.9, 0.06, 0.1] },
+      { name: 'snapPreviewFoundationCenterMark', role: 'snap preview floor center mark', pos: [0, 0.24, 0], scale: [0.24, 0.045, 0.24] },
+    ],
+  },
+  wallPanel: {
+    silhouette: 'wall-panel-preview',
+    parts: [
+      { name: 'snapPreviewWallPanelFace', role: 'snap preview full wall boundary', pos: [0, 0.86, -0.2], scale: [1.04, 1.42, 0.08] },
+      { name: 'snapPreviewWallPanelLeftPost', role: 'snap preview full wall post', pos: [-0.54, 0.84, -0.18], scale: [0.08, 1.58, 0.11] },
+      { name: 'snapPreviewWallPanelRightPost', role: 'snap preview full wall post', pos: [0.54, 0.84, -0.18], scale: [0.08, 1.58, 0.11] },
+      { name: 'snapPreviewWallPanelTopCap', role: 'snap preview wall top cap', pos: [0, 1.58, -0.2], scale: [1.14, 0.08, 0.12] },
+    ],
+  },
+  wallHalfRail: {
+    silhouette: 'half-rail-preview',
+    parts: [
+      { name: 'snapPreviewHalfRailLeftPost', role: 'snap preview half rail post', pos: [-0.52, 0.43, -0.2], scale: [0.08, 0.78, 0.1] },
+      { name: 'snapPreviewHalfRailRightPost', role: 'snap preview half rail post', pos: [0.52, 0.43, -0.2], scale: [0.08, 0.78, 0.1] },
+      { name: 'snapPreviewHalfRailRun', role: 'snap preview porch rail', pos: [0, 0.72, -0.2], scale: [1.06, 0.08, 0.1] },
+      { name: 'snapPreviewHalfRailOpenGap', role: 'snap preview open weather gap', pos: [0, 1.18, -0.2], scale: [0.64, 0.05, 0.08] },
+    ],
+  },
   doorKit: {
     silhouette: 'door-opening-preview',
     parts: [
@@ -381,6 +407,46 @@ function makeCaveAnchor(): THREE.Group {
   g.add(waveA, waveB, tideMouth);
   g.add(role(mesh(box, materials.anchorFlood, [0, 0.44, -0.36], [0.54, 0.04, 0.1], 'caveAnchorFloodMark'), 'set-anchor flood marker'));
   g.add(role(mesh(sphere8, materials.water, [0.24, 1.0, 0.21], [0.055, 0.055, 0.045], 'caveAnchorSpringMark'), 'freshwater spring bead'));
+  return g;
+}
+
+function makeFloorFoundation(): THREE.Group {
+  const g = new THREE.Group();
+  g.name = 'structure-floor-foundation';
+  const footprint = role(mesh(cyl12, materials.stone, [0, 0.06, 0], [0.72, 0.08, 0.72], 'foundationFootprint'), 'floor foundation level footprint');
+  g.add(footprint);
+  g.add(role(mesh(box, materials.darkWood, [0, 0.18, -0.48], [0.96, 0.07, 0.08], 'foundationLevelBand'), 'floor foundation front level band'));
+  g.add(role(mesh(box, materials.darkWood, [0, 0.18, 0.48], [0.96, 0.07, 0.08], 'foundationLevelBand'), 'floor foundation rear level band'));
+  g.add(role(mesh(box, materials.wood, [-0.48, 0.18, 0], [0.08, 0.07, 0.96], 'foundationSideBand'), 'floor foundation side band'));
+  g.add(role(mesh(box, materials.wood, [0.48, 0.18, 0], [0.08, 0.07, 0.96], 'foundationSideBand'), 'floor foundation side band'));
+  g.add(role(mesh(box, materials.rope, [0, 0.25, 0], [0.22, 0.035, 0.22], 'foundationCenterSocket'), 'floor foundation snap center'));
+  return g;
+}
+
+function makeWallPanel(): THREE.Group {
+  const g = new THREE.Group();
+  g.name = 'structure-wall-panel';
+  g.add(role(mesh(box, materials.wood, [0, 0.86, 0], [1.02, 1.36, 0.1], 'wallPanelFace'), 'full wall panel shelter boundary'));
+  g.add(role(post('wallPanelLeftPost', -0.54, 0, 1.62), 'wall shell vertical post'));
+  g.add(role(post('wallPanelRightPost', 0.54, 0, 1.62), 'wall shell vertical post'));
+  g.add(role(mesh(box, materials.darkWood, [0, 1.58, 0], [1.16, 0.09, 0.14], 'wallPanelTopCap'), 'wall shell top cap under roof join'));
+  g.add(role(mesh(box, materials.darkWood, [0, 0.19, 0.02], [1.08, 0.08, 0.16], 'wallPanelSill'), 'wall shell bottom sill'));
+  for (const x of [-0.28, 0.28]) {
+    g.add(role(mesh(box, materials.darkWood, [x, 0.86, 0.065], [0.055, 1.18, 0.04], 'wallPanelBrace'), 'full wall brace'));
+  }
+  return g;
+}
+
+function makeWallHalfRail(): THREE.Group {
+  const g = new THREE.Group();
+  g.name = 'structure-wall-half-rail';
+  g.add(role(post('halfRailLeftPost', -0.52, 0, 0.78), 'half rail porch post'));
+  g.add(role(post('halfRailRightPost', 0.52, 0, 0.78), 'half rail porch post'));
+  g.add(role(mesh(box, materials.wood, [0, 0.68, 0], [1.08, 0.08, 0.1], 'halfRailRun'), 'half rail porch guard'));
+  g.add(role(mesh(box, materials.darkWood, [0, 0.32, 0], [1.0, 0.06, 0.08], 'halfRailLowerRun'), 'half rail lower guard'));
+  const gap = role(mesh(box, materials.weatherRibbon, [0, 1.12, 0.02], [0.64, 0.045, 0.04], 'halfRailOpenGap'), 'half rail open weather gap');
+  gap.visible = true;
+  g.add(gap);
   return g;
 }
 
@@ -653,6 +719,9 @@ const FACTORIES: Record<StructureSave['item'], PropFactory> = {
   rainCistern: makeRainCistern,
   rootCellar: makeRootCellar,
   caveAnchor: makeCaveAnchor,
+  floorFoundation: makeFloorFoundation,
+  wallPanel: makeWallPanel,
+  wallHalfRail: makeWallHalfRail,
   doorKit: makeDoorKit,
   windowFrame: makeWindowFrame,
   roofBundle: makeRoofBundle,
@@ -705,6 +774,7 @@ export class StructureRenderer {
       if (this.objects.has(s.id)) continue;
       const obj = FACTORIES[s.item]();
       obj.userData.structureId = s.id;
+      obj.userData.structureItem = s.item;
       this.objects.set(s.id, obj);
       this.group.add(obj);
       this.attachKilnSkin(s, obj);
@@ -1074,6 +1144,14 @@ export class StructureRenderer {
     routeSilhouettes: number;
     routeReadabilityRoles: number;
     shelterReadabilityRoles: number;
+    wallShellReadabilityRoles: number;
+    wallShellSignals: number;
+    wallShell: {
+      foundations: number;
+      fullWalls: number;
+      halfRails: number;
+      visibleRoles: string[];
+    };
     homeComfortSignals: number;
     homeComfort: {
       visibleWarmthMeshes: number;
@@ -1110,6 +1188,15 @@ export class StructureRenderer {
     const routeSilhouettes = new Set<string>();
     const routeReadabilityRoles = new Set<string>();
     const shelterReadabilityRoles = new Set<string>();
+    const wallShellReadabilityRoles = new Set<string>();
+    const wallShellVisibleRoles = new Set<string>();
+    let wallShellSignals = 0;
+    const wallShell = {
+      foundations: 0,
+      fullWalls: 0,
+      halfRails: 0,
+      visibleRoles: [] as string[],
+    };
     let homeComfortSignals = 0;
     const homeComfort = {
       visibleWarmthMeshes: 0,
@@ -1130,6 +1217,9 @@ export class StructureRenderer {
     const snapPreviewMeshNames = new Set<string>();
     for (const obj of this.objects.values()) {
       if (typeof obj.userData.structureSilhouette === 'string') routeSilhouettes.add(obj.userData.structureSilhouette);
+      if (obj.userData.structureItem === 'floorFoundation') wallShell.foundations++;
+      if (obj.userData.structureItem === 'wallPanel') wallShell.fullWalls++;
+      if (obj.userData.structureItem === 'wallHalfRail') wallShell.halfRails++;
       const skinStatus = obj.userData.kilnSkinStatus as KilnSkinStatus | undefined;
       const skinSlug = obj.userData.kilnAssetSlug as KilnStructureSkinSlug | undefined;
       if (skinStatus === 'loaded') kilnSkinsLoaded++;
@@ -1146,6 +1236,13 @@ export class StructureRenderer {
         if (typeof child.userData.structureReadabilityRole === 'string') routeReadabilityRoles.add(child.userData.structureReadabilityRole);
         if (typeof child.userData.structureReadabilityRole === 'string' && /shelter|warmth|roof coverage|window warm/.test(child.userData.structureReadabilityRole)) {
           shelterReadabilityRoles.add(child.userData.structureReadabilityRole);
+        }
+        if (typeof child.userData.structureReadabilityRole === 'string' && /floor foundation|wall shell|full wall|half rail|shelter boundary|porch/.test(child.userData.structureReadabilityRole)) {
+          wallShellReadabilityRoles.add(child.userData.structureReadabilityRole);
+          if (child.visible) {
+            wallShellSignals++;
+            wallShellVisibleRoles.add(child.userData.structureReadabilityRole);
+          }
         }
         if (child.visible && (child.name === 'homeComfortRing' || child.name === 'hearthWarmthHalo' || child.name === 'roofShelterGlow' || child.name === 'windowWarmLight')) {
           homeComfortSignals++;
@@ -1179,6 +1276,12 @@ export class StructureRenderer {
       routeSilhouettes: routeSilhouettes.size,
       routeReadabilityRoles: routeReadabilityRoles.size,
       shelterReadabilityRoles: shelterReadabilityRoles.size,
+      wallShellReadabilityRoles: wallShellReadabilityRoles.size,
+      wallShellSignals,
+      wallShell: {
+        ...wallShell,
+        visibleRoles: [...wallShellVisibleRoles].sort(),
+      },
       homeComfortSignals,
       homeComfort,
       kilnSkinsLoaded,

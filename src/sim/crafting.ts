@@ -41,6 +41,9 @@ export type CraftedItemId =
   | 'rainCistern'
   | 'rootCellar'
   | 'caveAnchor'
+  | 'floorFoundation'
+  | 'wallPanel'
+  | 'wallHalfRail'
   | 'doorKit'
   | 'windowFrame'
   | 'roofBundle'
@@ -145,6 +148,9 @@ export const ITEM_DEFS: Record<ItemId, ItemDef> = {
   rainCistern: { id: 'rainCistern', name: 'Rain Cistern', kind: 'placeable', css: '#5faed2', description: 'A camp basin that catches storm water and irrigates dry inland gardens.' },
   rootCellar: { id: 'rootCellar', name: 'Root Cellar', kind: 'placeable', css: '#7b6a8f', description: 'A cool home cache for staging preserved food and cave forage before expeditions.' },
   caveAnchor: { id: 'caveAnchor', name: 'Cave Anchor', kind: 'placeable', css: '#70d6d1', description: 'A rope-and-crystal marker that records cave mouths for planned return trips.' },
+  floorFoundation: { id: 'floorFoundation', name: 'Floor Foundation', kind: 'placeable', css: '#8c806e', description: 'A leveled house-floor socket that supports snug wall placement without acting like a wall.' },
+  wallPanel: { id: 'wallPanel', name: 'Wall Panel', kind: 'placeable', css: '#9b7448', description: 'A code-owned full wall segment for real shelter boundaries and future decorative skins.' },
+  wallHalfRail: { id: 'wallHalfRail', name: 'Half Rail', kind: 'placeable', css: '#b58b52', description: 'A low rail for porches, lofts, and decks; useful but not enough to seal a shelter.' },
   doorKit: { id: 'doorKit', name: 'Door Kit', kind: 'placeable', css: '#9a6335', description: 'The first shelter boundary prop.' },
   windowFrame: { id: 'windowFrame', name: 'Window Frame', kind: 'placeable', css: '#b8d4df', description: 'A future sand-to-glass shelter prop.' },
   roofBundle: { id: 'roofBundle', name: 'Roof Bundle', kind: 'placeable', css: '#7f5a35', description: 'A functional roof part for shelter detection.' },
@@ -381,6 +387,33 @@ export const BASIC_RECIPES: RecipeDef[] = [
     station: 'workbench',
     requires: { rock: 3, sticks: 2, glowCrystal: 1 },
     description: 'Turns a found cave mouth into a persistent expedition marker for Route Slate and the route ribbon.',
+  },
+  {
+    id: 'floor_foundation',
+    name: 'Floor Foundation',
+    result: 'floorFoundation',
+    count: 2,
+    station: 'workbench',
+    requires: { wood: 2, rock: 4, dirt: 2 },
+    description: 'Builds leveled floor sockets for snug, readable house shells.',
+  },
+  {
+    id: 'wall_panel',
+    name: 'Wall Panel',
+    result: 'wallPanel',
+    count: 2,
+    station: 'workbench',
+    requires: { wood: 5, sticks: 2, rock: 1 },
+    description: 'Builds full wall segments that count toward real shelter enclosure.',
+  },
+  {
+    id: 'wall_half_rail',
+    name: 'Half Rail',
+    result: 'wallHalfRail',
+    count: 2,
+    station: 'workbench',
+    requires: { wood: 3, sticks: 3 },
+    description: 'Builds low porch and loft rails that guide space without sealing the weather out.',
   },
   {
     id: 'door_kit',

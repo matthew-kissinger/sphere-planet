@@ -22,6 +22,7 @@ import {
   structureYawTurn,
   structureStationInventory,
   transferChestMaterial,
+  wallShellSocketCatalog,
   waystoneMarkLabel,
   type CropPlotEnvironment,
   type StructureTopology,
@@ -39,6 +40,9 @@ describe('Hearth and Horizon structures', () => {
     const raw = [
       { id: 4, item: 'campfire', tile: 10, layer: 3, yaw: 0.5 },
       { id: 4, item: 'chest', tile: 11, layer: 4, yaw: 1, state: { storage: { wood: 3, nope: 9 } } },
+      { id: 12, item: 'floorFoundation', tile: 12, layer: 4, yaw: 0.2, state: { lit: true } },
+      { id: 13, item: 'wallPanel', tile: 13, layer: 4, yaw: 0.4, state: { storage: { wood: 5 } } },
+      { id: 14, item: 'wallHalfRail', tile: 14, layer: 4, yaw: 0.6 },
       { id: 7, item: 'missingThing', tile: 12, layer: 4, yaw: 1 },
       { id: 8, item: 'bedroll', tile: 10, layer: 4, yaw: 1 },
       { id: 9, item: 'lantern', tile: 999, layer: 4, yaw: 1 },
@@ -48,6 +52,9 @@ describe('Hearth and Horizon structures', () => {
     expect(structures).toEqual([
       { id: 4, item: 'campfire', tile: 10, layer: 3, yaw: 0.5 },
       { id: 5, item: 'chest', tile: 11, layer: 4, yaw: 1, state: { storage: { wood: 3 } } },
+      { id: 12, item: 'floorFoundation', tile: 12, layer: 4, yaw: 0.2 },
+      { id: 13, item: 'wallPanel', tile: 13, layer: 4, yaw: 0.4 },
+      { id: 14, item: 'wallHalfRail', tile: 14, layer: 4, yaw: 0.6 },
     ]);
   });
 
@@ -175,6 +182,32 @@ describe('Hearth and Horizon structures', () => {
       role: 'roof-cap',
       collider: 'roof-shell',
       gridDepth: 1.12,
+    });
+  });
+
+  it('defines code-owned wall-shell sockets separately from decorative house-kit inserts', () => {
+    const catalog = wallShellSocketCatalog();
+    expect(catalog.map((entry) => entry.item)).toEqual(['floorFoundation', 'wallPanel', 'wallHalfRail']);
+    expect(structureSocketSpec('floorFoundation')).toMatchObject({
+      role: 'foundation',
+      modularKit: true,
+      pivot: 'center',
+      collider: 'hex-cell',
+      loadBearing: 'code-socket',
+      glbPolicy: 'procedural-only',
+    });
+    expect(structureSocketSpec('wallPanel')).toMatchObject({
+      role: 'wall-panel',
+      modularKit: true,
+      pivot: 'wall-center',
+      collider: 'thin-wall',
+      loadBearing: 'code-socket',
+    });
+    expect(structureSocketSpec('wallHalfRail')).toMatchObject({
+      role: 'half-rail',
+      pivot: 'wall-center',
+      collider: 'thin-wall',
+      visualScale: 'procedural rail stays visibly lower than full walls',
     });
   });
 
@@ -1001,6 +1034,62 @@ describe('Hearth and Horizon structures', () => {
       },
     });
     expect(shelter.missing).toEqual(['workbench', 'chest']);
+  });
+
+  it('counts full wall panels as the first C6 shell boundary authority', () => {
+    const structures: StructureSave[] = [
+      { id: 1, item: 'bedroll', tile: 100, layer: 2, yaw: 0, state: { home: true } },
+      { id: 2, item: 'roofBundle', tile: 101, layer: 2, yaw: 0 },
+      { id: 3, item: 'roofBundle', tile: 102, layer: 2, yaw: 0 },
+      { id: 4, item: 'doorKit', tile: 103, layer: 2, yaw: 0 },
+      { id: 5, item: 'wallPanel', tile: 104, layer: 2, yaw: 0 },
+      { id: 6, item: 'wallPanel', tile: 105, layer: 2, yaw: 0 },
+      { id: 7, item: 'campfire', tile: 106, layer: 2, yaw: 0, state: { lit: true } },
+      { id: 8, item: 'floorFoundation', tile: 200, layer: 2, yaw: 0 },
+    ];
+
+    const shelter = shelterReport(structures, hubTopology);
+    expect(shelter).toMatchObject({
+      protected: true,
+      functional: false,
+      label: 'weather safe',
+      enclosure: {
+        wallTiles: [104, 105],
+        railTiles: [],
+        foundationTiles: [],
+        roofTiles: [101, 102],
+        openingTiles: [103],
+        boundaryCoverage: 0.75,
+        enclosed: true,
+        comfortTier: 'weather-safe',
+      },
+    });
+    expect(shelter.missing).toEqual(['workbench', 'chest']);
+  });
+
+  it('keeps foundations and half rails from pretending to be sealed walls', () => {
+    const structures: StructureSave[] = [
+      { id: 1, item: 'bedroll', tile: 100, layer: 2, yaw: 0, state: { home: true } },
+      { id: 2, item: 'roofBundle', tile: 101, layer: 2, yaw: 0 },
+      { id: 3, item: 'roofBundle', tile: 102, layer: 2, yaw: 0 },
+      { id: 4, item: 'doorKit', tile: 103, layer: 2, yaw: 0 },
+      { id: 5, item: 'wallHalfRail', tile: 104, layer: 2, yaw: 0 },
+      { id: 6, item: 'floorFoundation', tile: 105, layer: 2, yaw: 0 },
+      { id: 7, item: 'campfire', tile: 106, layer: 2, yaw: 0, state: { lit: true } },
+    ];
+
+    const shelter = shelterReport(structures, hubTopology);
+    expect(shelter.protected).toBe(false);
+    expect(shelter.missing).toContain('room boundary');
+    expect(shelter.enclosure).toMatchObject({
+      wallTiles: [],
+      railTiles: [104],
+      foundationTiles: [105],
+      boundaryCoverage: 0.25,
+      enclosed: false,
+      comfortTier: 'rough',
+      label: 'open room needs room boundary',
+    });
   });
 
   it('keeps incomplete or distant shelter props from granting full shelter rest', () => {

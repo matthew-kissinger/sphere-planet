@@ -18,6 +18,7 @@
     "proof:c1-build-placement": "node scripts/proof-c1-build-placement.mjs",
     "proof:c2-room-enclosure": "node scripts/proof-c2-room-enclosure.mjs",
     "proof:c2-c3-building-snap-grid": "node scripts/proof-c2-c3-building-snap-grid.mjs",
+    "proof:c6-wall-shells": "node scripts/proof-c6-wall-shells.mjs",
     "proof:k1-resource-drops": "node scripts/proof-k1-resource-drop-skins.mjs",
     "proof:k2-domain-resources": "node scripts/proof-k2-domain-resource-skins.mjs",
     "proof:k5-trees": "node scripts/proof-k5-tree-skins.mjs",

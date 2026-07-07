@@ -11,6 +11,9 @@ export const PLACEABLE_ITEM_IDS = [
   'rainCistern',
   'rootCellar',
   'caveAnchor',
+  'floorFoundation',
+  'wallPanel',
+  'wallHalfRail',
   'doorKit',
   'windowFrame',
   'roofBundle',
@@ -208,6 +211,9 @@ export interface ShelterEnclosureReport {
   roomTiles: number[];
   boundaryTiles: number[];
   supportTiles: number[];
+  foundationTiles: number[];
+  wallTiles: number[];
+  railTiles: number[];
   roofTiles: number[];
   openingTiles: number[];
   utilityTiles: number[];
@@ -270,7 +276,7 @@ export interface StructureRelocationResult {
   blockers?: string[];
 }
 
-export type StructureSocketRole = 'floor' | 'wall-opening' | 'wall-light' | 'roof-cap' | 'shore-edge' | 'route-marker';
+export type StructureSocketRole = 'floor' | 'foundation' | 'wall-panel' | 'half-rail' | 'wall-opening' | 'wall-light' | 'roof-cap' | 'shore-edge' | 'route-marker';
 
 export interface StructureSocketSpec {
   item: PlaceableItemId;
@@ -341,6 +347,39 @@ const DEFAULT_SOCKET_SPEC = {
 };
 
 const STRUCTURE_SOCKET_SPEC_OVERRIDES: Partial<Record<PlaceableItemId, Partial<Omit<StructureSocketSpec, 'item' | 'name'>>>> = {
+  floorFoundation: {
+    role: 'foundation',
+    modularKit: true,
+    gridWidth: 1.08,
+    gridDepth: 1.08,
+    height: 0.16,
+    pivot: 'center',
+    collider: 'hex-cell',
+    snap: ['centered under a house socket', 'levels one hex footprint', 'does not count as weather boundary'],
+    visualScale: 'procedural pad defines floor height and future skin footprint',
+  },
+  wallPanel: {
+    role: 'wall-panel',
+    modularKit: true,
+    gridWidth: 1,
+    gridDepth: 0.2,
+    height: 1.65,
+    pivot: 'wall-center',
+    collider: 'thin-wall',
+    snap: ['front edge on hex face', 'full panel counts as shelter boundary', 'top cap stays under roof socket'],
+    visualScale: 'procedural full wall owns boundary and future skin footprint',
+  },
+  wallHalfRail: {
+    role: 'half-rail',
+    modularKit: true,
+    gridWidth: 1,
+    gridDepth: 0.16,
+    height: 0.82,
+    pivot: 'wall-center',
+    collider: 'thin-wall',
+    snap: ['front edge on hex face', 'porch rail leaves weather gap open', 'does not satisfy full shelter boundary'],
+    visualScale: 'procedural rail stays visibly lower than full walls',
+  },
   doorKit: {
     role: 'wall-opening',
     modularKit: true,
@@ -434,6 +473,10 @@ export function structureSocketCatalog(items: readonly PlaceableItemId[] = PLACE
 
 export function houseKitSocketCatalog(): StructureSocketSpec[] {
   return structureSocketCatalog(['doorKit', 'windowFrame', 'roofBundle']);
+}
+
+export function wallShellSocketCatalog(): StructureSocketSpec[] {
+  return structureSocketCatalog(['floorFoundation', 'wallPanel', 'wallHalfRail']);
 }
 
 export function normalizeStructureYaw(yaw: number): number {
@@ -938,6 +981,9 @@ function emptyShelterEnclosure(): ShelterEnclosureReport {
     roomTiles: [],
     boundaryTiles: [],
     supportTiles: [],
+    foundationTiles: [],
+    wallTiles: [],
+    railTiles: [],
     roofTiles: [],
     openingTiles: [],
     utilityTiles: [],
@@ -997,6 +1043,9 @@ export function shelterReport(structures: readonly StructureSave[], topology?: S
   const supportTiles = tilesWithin(topology, home.tile, 2);
   const support = new Set(supportTiles);
   const nearby = structures.filter((s) => local.has(s.tile));
+  const foundationTiles = nearby.filter((s) => s.item === 'floorFoundation').map((s) => s.tile);
+  const wallTiles = nearby.filter((s) => s.item === 'wallPanel').map((s) => s.tile);
+  const railTiles = nearby.filter((s) => s.item === 'wallHalfRail').map((s) => s.tile);
   const roofTiles = nearby.filter((s) => s.item === 'roofBundle').map((s) => s.tile);
   const openingTiles = nearby.filter((s) => s.item === 'doorKit' || s.item === 'windowFrame').map((s) => s.tile);
   const utilityTiles = nearby.filter((s) => s.item === 'campfire' || s.item === 'lantern' || s.item === 'workbench' || s.item === 'chest').map((s) => s.tile);
@@ -1011,9 +1060,11 @@ export function shelterReport(structures: readonly StructureSave[], topology?: S
   const cellarProvisions = supportStructures.reduce((sum, s) => s.item === 'rootCellar' ? sum + rootCellarProvisionCount([s], undefined, false) : sum, 0);
   const hasCellar = supportStructures.some((s) => s.item === 'rootCellar');
   const hasLight = hasWarmth || nearby.some((s) => s.item === 'lantern' && s.state?.lit === true);
-  const comfort = (hasWindow ? 1 : 0) + (hasLight ? 1 : 0) + (hasStation ? 1 : 0) + (hasStorage ? 1 : 0) + (hasCellar ? 1 : 0) + Math.min(2, roofPieces);
+  const comfort = (hasWindow ? 1 : 0) + (hasLight ? 1 : 0) + (hasStation ? 1 : 0) + (hasStorage ? 1 : 0) + (hasCellar ? 1 : 0) + (foundationTiles.length > 0 ? 1 : 0) + Math.min(2, roofPieces);
   const boundaryNeed = Math.max(1, Math.min(4, boundaryTiles.length || 1));
-  const boundaryCoverage = Math.min(1, (roofTiles.filter((tile) => boundary.has(tile)).length + openingTiles.filter((tile) => boundary.has(tile)).length) / boundaryNeed);
+  const shellBoundaryAttempt = wallTiles.length > 0 || railTiles.length > 0;
+  const boundaryContributorTiles = shellBoundaryAttempt ? [...wallTiles, ...openingTiles] : [...roofTiles, ...openingTiles];
+  const boundaryCoverage = Math.min(1, boundaryContributorTiles.filter((tile) => boundary.has(tile)).length / boundaryNeed);
   const utilityCoverage = Math.min(1, (Number(hasWarmth) + Number(hasStation) + Number(hasStorage)) / 3);
   const spatiallyEnclosed = roofPieces >= ROOF_NEED && boundaryCoverage >= 0.75 && doorOnBoundary;
   const weatherSafe = spatiallyEnclosed && hasWarmth;
@@ -1032,6 +1083,9 @@ export function shelterReport(structures: readonly StructureSave[], topology?: S
     roomTiles: tiles,
     boundaryTiles,
     supportTiles,
+    foundationTiles,
+    wallTiles,
+    railTiles,
     roofTiles,
     openingTiles,
     utilityTiles,

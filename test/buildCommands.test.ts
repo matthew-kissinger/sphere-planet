@@ -439,4 +439,89 @@ describe('Hearth and Horizon build commands', () => {
     });
     expect(structures.find((s) => s.id === door.id)).toMatchObject({ tile: 6, layer: 2 });
   });
+
+  it('uses the wall-shell socket contract for new procedural house pieces', () => {
+    const materials = [0, 0, 0, 0, 0];
+    const crafted: InventoryItems = { wallPanel: 1, floorFoundation: 1, wallHalfRail: 1 };
+    const structures: StructureSave[] = [];
+
+    expect(selectStructurePlacementCommand(materials, crafted, 'wallPanel')).toMatchObject({
+      ok: true,
+      action: 'wallPanel:select',
+      selected: 'wallPanel',
+    });
+    expect(previewPlaceStructureCommand({
+      structures,
+      item: 'wallPanel',
+      tile: 12,
+      layer: 2,
+      yaw: Math.PI / 3,
+      placementTurn: 1,
+      materialCounts: materials,
+      craftedItems: crafted,
+      creative: false,
+      playerTile: 4,
+    })).toMatchObject({
+      active: true,
+      ok: true,
+      item: 'wallPanel',
+      socket: { role: 'wall-panel', collider: 'thin-wall', modularKit: true },
+    });
+
+    const placed = placeStructureCommand({
+      structures,
+      item: 'wallPanel',
+      tile: 12,
+      layer: 2,
+      yaw: Math.PI / 3,
+      placementTurn: 1,
+      materialCounts: materials,
+      craftedItems: crafted,
+      creative: false,
+      playerTile: 4,
+    });
+    expect(placed).toMatchObject({
+      ok: true,
+      item: 'wallPanel',
+      selected: null,
+      action: 'wallPanel:placed:hex face 2:placement face 2',
+    });
+    expect(crafted.wallPanel).toBeUndefined();
+    expect(previewRelocateStructureCommand({
+      structures,
+      target: placed.placed!,
+      tile: 13,
+      layer: 2,
+      yaw: Math.PI * 2 / 3,
+      playerTile: 4,
+    })).toMatchObject({
+      ok: true,
+      item: 'wallPanel',
+      socket: { role: 'wall-panel', collider: 'thin-wall' },
+      turn: 2,
+    });
+
+    const moved = relocateStructureCommand({
+      structures,
+      target: placed.placed!,
+      tile: 13,
+      layer: 2,
+      yaw: Math.PI * 2 / 3,
+      playerTile: 4,
+    });
+    expect(moved).toMatchObject({
+      ok: true,
+      item: 'wallPanel',
+      toTile: 13,
+      turn: 2,
+      action: 'wallPanel:relocate:moved wall panel to snap hex',
+    });
+    expect(packStructureCommand(structures, placed.placed!, crafted, false)).toMatchObject({
+      ok: true,
+      item: 'wallPanel',
+      selected: 'wallPanel',
+      action: 'wallPanel:pack:packed wall panel',
+    });
+    expect(crafted.wallPanel).toBe(1);
+  });
 });

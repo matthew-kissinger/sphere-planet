@@ -3,6 +3,17 @@ Current operating goal: Hearth and Horizon full crafting-survival cycle under th
 
 ## 2026-07-07
 
+- Closed the first C6 wall/shell socket slice. `floorFoundation`, `wallPanel`, and
+  `wallHalfRail` are now craftable/placeable code-owned building pieces with separate
+  wall-shell socket specs, renderer silhouettes, avatar prop colors, and diagnostics.
+  Shelter reporting now counts full wall panels plus door/window openings as the C6 boundary
+  authority when wall-shell pieces are present, while half rails and foundations stay useful
+  but do not fake sealed walls. `npm run proof:c6-wall-shells` captures ready and weakened
+  browser screenshots under `output/playwright/c6-wall-shells/`, proves the room is
+  weather-safe at 0.75 wall coverage, then relocates one wall so the shelter drops to
+  `room boundary` missing. True edge-addressed sockets, corners, wall-with-door/window
+  panels, roof joins, multi-piece-per-tile building, and GLB skins for shared-scale house
+  shells remain future C6 work.
 - Promoted and wired the K11 singleton bird pack. `bird-sky-kite`, `bird-shore-gull`,
   `bird-forest-flutter`, and `bird-storm-finch` now live under committed
   `public/assets/kiln/models/`, and the manifest is rebuilt at 73 total records: 70 ready,
