@@ -31,6 +31,14 @@ function namedObject(renderer: StructureRenderer, name: string): THREE.Object3D 
   return found;
 }
 
+function visibleNameCount(renderer: StructureRenderer, name: string): number {
+  let count = 0;
+  renderer.group.traverse((part) => {
+    if (part.name === name && part.visible) count += 1;
+  });
+  return count;
+}
+
 function previewObject(renderer: StructureRenderer, name: string): THREE.Object3D | null {
   let found: THREE.Object3D | null = null;
   renderer.snapPreviewGroup.traverse((part) => {
@@ -53,8 +61,15 @@ const FAKE_KILN_SKIN_ITEMS: Record<KilnStructureSkinSlug, StructureSave['item']>
   chest: 'chest',
   bedroll: 'bedroll',
   'crop-plot': 'cropPlot',
+  'compost-bin': 'compostBin',
+  'rain-cistern': 'rainCistern',
+  'root-cellar': 'rootCellar',
+  'dock-segment': 'dockSegment',
+  'fish-trap': 'fishTrap',
+  'shore-net': 'shoreNet',
   'drying-rack': 'dryingRack',
   'weather-vane': 'weatherVane',
+  'lantern-post': 'lantern',
 };
 
 const FAKE_KILN_SOCKET_ROLES: Record<KilnStructureSkinSlug, string> = {
@@ -67,8 +82,15 @@ const FAKE_KILN_SOCKET_ROLES: Record<KilnStructureSkinSlug, string> = {
   chest: 'storage-station',
   bedroll: 'home-rest',
   'crop-plot': 'food-plot',
+  'compost-bin': 'compost-station',
+  'rain-cistern': 'water-cistern',
+  'root-cellar': 'provision-cache',
+  'dock-segment': 'shore-edge',
+  'fish-trap': 'shore-edge',
+  'shore-net': 'shore-edge',
   'drying-rack': 'food-preserve',
   'weather-vane': 'weather-readback',
+  'lantern-post': 'light-post',
 };
 
 const FAKE_KILN_HIDE_NAMES: Record<KilnStructureSkinSlug, string[]> = {
@@ -81,8 +103,15 @@ const FAKE_KILN_HIDE_NAMES: Record<KilnStructureSkinSlug, string[]> = {
   chest: ['chestBox', 'chestLid', 'leftBand', 'rightBand'],
   bedroll: ['sleepMat', 'rolledBlanket', 'strap'],
   'crop-plot': ['woodFrame', 'tilledSoil'],
+  'compost-bin': ['compostBinBase', 'compostBinPost', 'compostBinSlat', 'compostBinSideSlat', 'compostBinFrontLip'],
+  'rain-cistern': ['rainCisternStoneBase', 'rainCisternBarrel', 'rainCisternRim', 'rainCisternStave', 'rainCisternGutter', 'rainCisternSpout'],
+  'root-cellar': ['rootCellarStoneLip', 'rootCellarDarkMouth', 'rootCellarLadderRung', 'rootCellarCoolStone', 'rootCellarBrace'],
+  'dock-segment': ['dockDeckPlank', 'dockLeftStringer', 'dockRightStringer', 'dockPiling', 'dockRopeRail'],
+  'fish-trap': ['fishTrapSkid', 'fishTrapHoop', 'fishTrapLongSlat', 'fishTrapSideSlat', 'fishTrapFunnel'],
+  'shore-net': ['shoreNetFootRail', 'shoreNetPole', 'shoreNetTopCord', 'shoreNetStrand', 'shoreNetCrossCord'],
   'drying-rack': ['dryingRackLeg', 'dryingRackRail', 'dryingRackBrace'],
   'weather-vane': ['weatherVaneStoneBase', 'weatherVanePost', 'weatherVaneCompassDisk', 'weatherVaneCompassTick'],
+  'lantern-post': ['lanternPost', 'arm', 'lanternCage'],
 };
 
 const ALL_FAKE_KILN_STRUCTURE_SKINS = Object.keys(FAKE_KILN_SKIN_ITEMS) as KilnStructureSkinSlug[];
@@ -395,6 +424,100 @@ describe('structure renderer asset readability', () => {
     expect(stats.kilnSkinsLoaded).toBe(0);
     expect(stats.kilnSkinFallbacks).toBe(7);
     for (const slug of ['workbench', 'campfire', 'chest', 'bedroll', 'crop-plot', 'drying-rack', 'weather-vane'] as const) {
+      expect(stats.kilnSkinsBySlug[slug]).toMatchObject({ loaded: 0, pending: 0, fallback: 1 });
+    }
+  });
+
+  it('skins K4 utility and waterline props while preserving procedural state overlays', async () => {
+    const scene = new THREE.Scene();
+    const geo = new Goldberg(8);
+    const layers = buildLayers();
+    const renderer = new StructureRenderer(scene, new FakeKilnAssets());
+    const structures: StructureSave[] = [
+      { id: 1, item: 'compostBin', tile: 1, layer: 100, yaw: 0, state: { composts: 1 } },
+      { id: 2, item: 'rainCistern', tile: 2, layer: 100, yaw: 0, state: { water: 3 } },
+      { id: 3, item: 'rootCellar', tile: 3, layer: 100, yaw: 0, state: { provisions: 3 } },
+      { id: 4, item: 'dockSegment', tile: 4, layer: 100, yaw: 0 },
+      { id: 5, item: 'fishTrap', tile: 5, layer: 100, yaw: 0, state: { trapSetDay: 2, trapSetMinute: 30, trapBaited: true } },
+      { id: 6, item: 'shoreNet', tile: 6, layer: 100, yaw: 0, state: { netSetDay: 2, netSetMinute: 40 } },
+      { id: 7, item: 'lantern', tile: 7, layer: 100, yaw: 0, state: { lit: true } },
+    ];
+
+    renderer.setStructures(structures);
+    await flushAsyncSkinLoads();
+    renderer.update(structures, geo, layers, { x: 0, y: 0, z: 0 }, 0.5);
+    const stats = renderer.stats();
+
+    for (const slug of ['compost-bin', 'rain-cistern', 'root-cellar', 'dock-segment', 'fish-trap', 'shore-net', 'lantern-post'] as const) {
+      expect(namedObject(renderer, `kiln-skin-${slug}`)).toBeTruthy();
+      expect(stats.kilnSkinsBySlug[slug]).toMatchObject({ loaded: 1, pending: 0, fallback: 0 });
+    }
+    for (const name of ['compostBinBase', 'rainCisternBarrel', 'rootCellarStoneLip', 'dockDeckPlank', 'fishTrapHoop', 'shoreNetStrand', 'lanternPost']) {
+      expect(namedObject(renderer, name)?.visible).toBe(false);
+    }
+    for (const name of [
+      'compostBinHeap',
+      'compostBinScrap',
+      'compostBinSteam0',
+      'rainCisternWater',
+      'rainCisternRing0',
+      'rootCellarHatch',
+      'rootCellarCoolGlow',
+      'dockFishingMark',
+      'fishTrapBait',
+      'fishTrapFloat',
+      'fishTrapTether',
+      'fishTrapSoakRing0',
+      'shoreNetFloat',
+      'shoreNetSoakRing0',
+      'lanternGlow',
+    ]) {
+      expect(namedObject(renderer, name)?.visible, name).toBe(true);
+    }
+    expect(visibleNameCount(renderer, 'rootCellarProvisionBundle')).toBeGreaterThan(0);
+    expect(stats.kilnSkinsLoaded).toBe(7);
+    expect(stats.kilnSkinFallbacks).toBe(0);
+    expect(stats.kilnSkinFits['shore-net']).toMatchObject({
+      item: 'shoreNet',
+      socketRole: 'shore-edge',
+      glbPolicy: 'decorative-skin-after-normalization',
+    });
+    expect(stats.kilnSkinFits['lantern-post']).toMatchObject({
+      item: 'lantern',
+      socketRole: 'light-post',
+    });
+  });
+
+  it('keeps procedural K4 utility and waterline props visible when GLB skins fall back', async () => {
+    const scene = new THREE.Scene();
+    const geo = new Goldberg(8);
+    const layers = buildLayers();
+    const renderer = new StructureRenderer(scene, new FailingKilnAssets());
+    const structures: StructureSave[] = [
+      { id: 1, item: 'compostBin', tile: 1, layer: 100, yaw: 0, state: { composts: 1 } },
+      { id: 2, item: 'rainCistern', tile: 2, layer: 100, yaw: 0, state: { water: 3 } },
+      { id: 3, item: 'rootCellar', tile: 3, layer: 100, yaw: 0, state: { provisions: 3 } },
+      { id: 4, item: 'dockSegment', tile: 4, layer: 100, yaw: 0 },
+      { id: 5, item: 'fishTrap', tile: 5, layer: 100, yaw: 0, state: { trapSetDay: 2, trapSetMinute: 30, trapBaited: true } },
+      { id: 6, item: 'shoreNet', tile: 6, layer: 100, yaw: 0, state: { netSetDay: 2, netSetMinute: 40 } },
+      { id: 7, item: 'lantern', tile: 7, layer: 100, yaw: 0, state: { lit: true } },
+    ];
+
+    renderer.setStructures(structures);
+    await flushAsyncSkinLoads();
+    renderer.update(structures, geo, layers, { x: 0, y: 0, z: 0 }, 0.5);
+    const stats = renderer.stats();
+
+    expect(namedObject(renderer, 'kiln-skin-compost-bin')).toBeNull();
+    for (const name of ['compostBinBase', 'rainCisternBarrel', 'rootCellarStoneLip', 'dockDeckPlank', 'fishTrapHoop', 'shoreNetStrand', 'lanternPost']) {
+      expect(namedObject(renderer, name)?.visible).toBe(true);
+    }
+    for (const name of ['compostBinHeap', 'rainCisternWater', 'rootCellarCoolGlow', 'dockFishingMark', 'fishTrapBait', 'shoreNetFloat', 'lanternGlow']) {
+      expect(namedObject(renderer, name)?.visible).toBe(true);
+    }
+    expect(stats.kilnSkinsLoaded).toBe(0);
+    expect(stats.kilnSkinFallbacks).toBe(7);
+    for (const slug of ['compost-bin', 'rain-cistern', 'root-cellar', 'dock-segment', 'fish-trap', 'shore-net', 'lantern-post'] as const) {
       expect(stats.kilnSkinsBySlug[slug]).toMatchObject({ loaded: 0, pending: 0, fallback: 1 });
     }
   });

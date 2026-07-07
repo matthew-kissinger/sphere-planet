@@ -115,6 +115,7 @@ import {
   houseKitSocketCatalog,
   homeScore,
   isPlaceableItemId,
+  k4UtilitySocketCatalog,
   nearestStructureOnTiles,
   normalizeStructureSaves,
   placeableName,
@@ -1983,12 +1984,14 @@ async function boot(): Promise<void> {
     );
   };
 
+  const isWaterlineUtilityItem = (item: PlaceableItemId): boolean => item === 'dockSegment' || item === 'fishTrap' || item === 'shoreNet';
+
   const structureSnapTarget = (item: PlaceableItemId, tile: number, layer?: number): { layer: number; blocker: string | null } => {
     let k = layer ?? columns.groundLayerBelow(tile, layers.bounds[0]);
     let blocker: string | null = nativePlacementBlocker(tile);
-    if (!blocker && item === 'dockSegment') {
+    if (!blocker && isWaterlineUtilityItem(item)) {
       if (!waterNearTile(tile, 1)) {
-        blocker = 'dock needs a shore or water edge';
+        blocker = `${placeableName(item).toLowerCase()} needs a shore or water edge`;
       } else {
         const groundK = columns.groundLayerBelow(tile, layers.bounds[0]);
         const groundTop = layers.topRadius(groundK);
@@ -5445,7 +5448,7 @@ async function boot(): Promise<void> {
     }),
     craft: (recipeId: string) => craftSelected(recipeId),
     crafting: () => ({ open: craftingOpen, crafted: { ...craftedItems }, recipes: craftingRows(), ledger: packLedger() }),
-    structures: () => ({ items: structures.map((s) => ({ ...s, state: s.state ? { ...s.state } : undefined, turn: structureYawTurn(s.yaw), socket: structureSocketOccupancy(s) })), placement: placementDiagnostics(), relocation: relocationDiagnostics(), snapPreview: currentStructureSnapPreview(), commands: buildCommandDiagnostics(), sockets: { houseKit: houseKitSocketCatalog(), wallShell: wallShellSocketCatalog() }, crops: cropDiagnostics(), compostBins: compostBinDiagnostics(), rainCisterns: rainCisternDiagnostics(), rootCellars: rootCellarDiagnostics(), caveAnchors: caveAnchorDiagnostics(), waystones: waystoneDiagnostics(), weatherVanes: weatherVaneDiagnostics(), fishTraps: fishTrapDiagnostics(), shoreNets: shoreNetDiagnostics(), storage: { open: openChestId !== null, chestId: openChestId, state: currentChestStorage() }, home: homeScore(structures, geo), renderer: structureRenderer.stats(), lastAction: lastStructureAction }),
+    structures: () => ({ items: structures.map((s) => ({ ...s, state: s.state ? { ...s.state } : undefined, turn: structureYawTurn(s.yaw), socket: structureSocketOccupancy(s) })), placement: placementDiagnostics(), relocation: relocationDiagnostics(), snapPreview: currentStructureSnapPreview(), commands: buildCommandDiagnostics(), sockets: { houseKit: houseKitSocketCatalog(), wallShell: wallShellSocketCatalog(), k4Utilities: k4UtilitySocketCatalog() }, crops: cropDiagnostics(), compostBins: compostBinDiagnostics(), rainCisterns: rainCisternDiagnostics(), rootCellars: rootCellarDiagnostics(), caveAnchors: caveAnchorDiagnostics(), waystones: waystoneDiagnostics(), weatherVanes: weatherVaneDiagnostics(), fishTraps: fishTrapDiagnostics(), shoreNets: shoreNetDiagnostics(), storage: { open: openChestId !== null, chestId: openChestId, state: currentChestStorage() }, home: homeScore(structures, geo), renderer: structureRenderer.stats(), lastAction: lastStructureAction }),
     buildCommands: () => buildCommandDiagnostics(),
     selectStructure: (item: string) => selectStructureForPlacement(item),
     placeStructure: (item: string, tile?: number) => {
@@ -5855,7 +5858,7 @@ async function boot(): Promise<void> {
       relocation: relocationDiagnostics(),
       snapPreview: currentStructureSnapPreview(),
       commands: buildCommandDiagnostics(),
-      sockets: { houseKit: houseKitSocketCatalog(), wallShell: wallShellSocketCatalog() },
+      sockets: { houseKit: houseKitSocketCatalog(), wallShell: wallShellSocketCatalog(), k4Utilities: k4UtilitySocketCatalog() },
       yawTurns: structures.map((s) => ({ id: s.id, item: s.item, tile: s.tile, turn: structureYawTurn(s.yaw), yaw: s.yaw })),
       crops: cropDiagnostics(),
       compostBins: compostBinDiagnostics(),

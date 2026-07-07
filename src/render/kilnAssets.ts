@@ -16,8 +16,15 @@ export type KilnStructureSkinSlug =
   | 'chest'
   | 'bedroll'
   | 'crop-plot'
+  | 'compost-bin'
+  | 'rain-cistern'
+  | 'root-cellar'
+  | 'dock-segment'
+  | 'fish-trap'
+  | 'shore-net'
   | 'drying-rack'
-  | 'weather-vane';
+  | 'weather-vane'
+  | 'lantern-post';
 export type KilnResourceDropSkinSlug = 'drop-wood-logs' | 'drop-ore-chunk';
 export type KilnDomainResourceSkinSlug =
   | 'node-hearth-coal'
@@ -93,6 +100,7 @@ interface KilnSkinTransform {
   position: [number, number, number];
   rotation: [number, number, number];
   hideProceduralNames: readonly string[];
+  hideGlbNames?: readonly string[];
   socket: {
     item: string;
     role: string;
@@ -586,6 +594,128 @@ const RUNTIME_STRUCTURE_SKINS: Record<KilnStructureSkinSlug, KilnSkinTransform> 
     },
     acceptanceNote: 'accepted as decorative weather-vane body; spinning needle, ribbons, storm glow, and forecast state remain procedural',
   },
+  'compost-bin': {
+    scale: [1, 1, 1],
+    fitSourceSize: [1.08, 0.92, 1.08],
+    position: [0, 0.02, 0],
+    rotation: [0, 0, 0],
+    hideProceduralNames: ['compostBinBase', 'compostBinPost', 'compostBinSlat', 'compostBinSideSlat', 'compostBinFrontLip'],
+    socket: {
+      item: 'compostBin',
+      role: 'compost-station',
+      gridWidth: 1.08,
+      gridDepth: 1.08,
+      height: 0.92,
+      loadBearing: 'code-socket',
+      glbPolicy: 'decorative-skin-after-normalization',
+    },
+    acceptanceNote: 'accepted as decorative compost station body; compost heap, scraps, steam, and recipe state remain procedural',
+  },
+  'rain-cistern': {
+    scale: [1, 1, 1],
+    fitSourceSize: [0.95, 1.05, 0.76],
+    position: [0, 0.02, 0],
+    rotation: [0, 0, 0],
+    hideProceduralNames: ['rainCisternStoneBase', 'rainCisternBarrel', 'rainCisternRim', 'rainCisternStave', 'rainCisternGutter', 'rainCisternSpout'],
+    hideGlbNames: ['Mesh_WaterInside', 'Mesh_GutterWater', 'Mesh_BucketWater', 'Mesh_WaterDrip'],
+    socket: {
+      item: 'rainCistern',
+      role: 'water-cistern',
+      gridWidth: 0.95,
+      gridDepth: 0.76,
+      height: 1.05,
+      loadBearing: 'code-socket',
+      glbPolicy: 'decorative-skin-after-normalization',
+    },
+    acceptanceNote: 'accepted as decorative cistern body with baked GLB water hidden; water fill, ripple rings, weather collection, and crop irrigation remain procedural',
+  },
+  'root-cellar': {
+    scale: [1, 1, 1],
+    fitSourceSize: [1.28, 0.76, 1.12],
+    position: [0, 0.02, 0],
+    rotation: [0, 0, 0],
+    hideProceduralNames: ['rootCellarStoneLip', 'rootCellarDarkMouth', 'rootCellarLadderRung', 'rootCellarCoolStone', 'rootCellarBrace'],
+    hideGlbNames: ['CellarRoom', 'EntranceStairs', 'Joint_Shelf', 'Joint_Barrel', 'Joint_Lantern'],
+    socket: {
+      item: 'rootCellar',
+      role: 'provision-cache',
+      gridWidth: 1.28,
+      gridDepth: 1.12,
+      height: 0.76,
+      loadBearing: 'code-socket',
+      glbPolicy: 'decorative-skin-after-normalization',
+    },
+    acceptanceNote: 'accepted as decorative cellar mouth shell with internal-room groups hidden; hatch angle, cool glow, provision bundles, and route food accounting remain procedural',
+  },
+  'dock-segment': {
+    scale: [1, 1, 1],
+    fitSourceSize: [1.5, 0.72, 0.86],
+    position: [0, 0.02, 0],
+    rotation: [0, 0, 0],
+    hideProceduralNames: ['dockDeckPlank', 'dockLeftStringer', 'dockRightStringer', 'dockPiling', 'dockRopeRail'],
+    socket: {
+      item: 'dockSegment',
+      role: 'shore-edge',
+      gridWidth: 1.5,
+      gridDepth: 0.86,
+      height: 0.72,
+      loadBearing: 'code-socket',
+      glbPolicy: 'decorative-skin-after-normalization',
+    },
+    acceptanceNote: 'accepted as decorative dock skin; waterline placement, fishing casts, edge socket, and dock marker remain code-authored',
+  },
+  'fish-trap': {
+    scale: [1, 1, 1],
+    fitSourceSize: [1.0, 0.45, 0.62],
+    position: [0, 0.02, 0],
+    rotation: [0, 0, 0],
+    hideProceduralNames: ['fishTrapSkid', 'fishTrapHoop', 'fishTrapLongSlat', 'fishTrapSideSlat', 'fishTrapFunnel'],
+    socket: {
+      item: 'fishTrap',
+      role: 'shore-edge',
+      gridWidth: 1.0,
+      gridDepth: 0.62,
+      height: 0.45,
+      loadBearing: 'code-socket',
+      glbPolicy: 'decorative-skin-after-normalization',
+    },
+    acceptanceNote: 'accepted as decorative fish-trap body; bait, float, tether, soak rings, catches, and waterline rules remain procedural',
+  },
+  'shore-net': {
+    scale: [1, 1, 1],
+    fitSourceSize: [0.22, 0.96, 1.12],
+    position: [0, 0.02, 0],
+    rotation: [0, Math.PI / 2, 0],
+    hideProceduralNames: ['shoreNetFootRail', 'shoreNetPole', 'shoreNetTopCord', 'shoreNetStrand', 'shoreNetCrossCord'],
+    socket: {
+      item: 'shoreNet',
+      role: 'shore-edge',
+      gridWidth: 1.12,
+      gridDepth: 0.22,
+      height: 0.96,
+      loadBearing: 'code-socket',
+      glbPolicy: 'decorative-skin-after-normalization',
+    },
+    acceptanceNote: 'accepted with 90-degree Y correction as decorative shore-net body; floats, soak rings, catch scraps, and combing state remain procedural',
+  },
+  'lantern-post': {
+    scale: [1, 1, 1],
+    fitSourceSize: [0.45, 1.25, 0.45],
+    position: [0, 0.02, 0],
+    rotation: [0, 0, 0],
+    hideProceduralNames: ['lanternPost', 'arm', 'lanternCage'],
+    hideGlbNames: ['Mesh_LanternGlow'],
+    socket: {
+      item: 'lantern',
+      role: 'light-post',
+      gridWidth: 0.45,
+      gridDepth: 0.45,
+      height: 1.25,
+      loadBearing: 'code-socket',
+      glbPolicy: 'decorative-skin-after-normalization',
+    },
+    acceptanceNote: 'accepted as decorative lantern-post body with baked GLB glow hidden; lit glow, shelter light accounting, and douse/toggle state remain procedural',
+  },
 };
 
 const RUNTIME_RESOURCE_DROP_SKINS: Record<KilnResourceDropSkinSlug, {
@@ -823,8 +953,10 @@ function cloneTemplate(template: THREE.Object3D, slug: KilnStructureSkinSlug, tr
 
   const body = template.clone(true);
   body.name = `kiln-body-${slug}`;
+  const hiddenGlbNames = new Set(transform.hideGlbNames ?? []);
   body.traverse((child) => {
     child.userData.kilnAssetSlug = slug;
+    if (hiddenGlbNames.has(child.name)) child.visible = false;
     if ((child as THREE.Mesh).isMesh) {
       const mesh = child as THREE.Mesh;
       mesh.castShadow = false;
@@ -1286,8 +1418,15 @@ export class KilnRuntimeAssets implements StructureSkinProvider, ResourceDropSki
     'chest',
     'bedroll',
     'crop-plot',
+    'compost-bin',
+    'rain-cistern',
+    'root-cellar',
+    'dock-segment',
+    'fish-trap',
+    'shore-net',
     'drying-rack',
     'weather-vane',
+    'lantern-post',
   ]);
   private readonly enabledResourceDrops = new Set<KilnResourceDropSkinSlug>(['drop-wood-logs', 'drop-ore-chunk']);
   private readonly enabledDomainResourceSkins = new Set<KilnDomainResourceSkinSlug>([

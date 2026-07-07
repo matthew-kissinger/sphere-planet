@@ -3,6 +3,20 @@ Current operating goal: Hearth and Horizon full crafting-survival cycle under th
 
 ## 2026-07-07
 
+- Closed the H5/K4 utility and waterline GLB adoption slice. `compost-bin`,
+  `rain-cistern`, `root-cellar`, `dock-segment`, `fish-trap`, `shore-net`, and
+  `lantern-post` now load approved Kiln GLBs as decorative skins over code-owned center
+  and shore sockets. The renderer hides duplicated procedural bodies plus baked GLB
+  water/glow/interior groups that would conflict with live state overlays, while
+  trap/net/cistern/cellar/lantern rules remain sim-owned. `npm run proof:k4-utilities`
+  passes on desktop and phone with seven loaded skins, zero fallback, zero generated-path
+  runtime requests, and screenshots under
+  `output/playwright/k4-utility-structure-skins/`.
+- Repaired the Kiln alignment viewer overview layout for the expanded structure family.
+  Structures now wrap to six columns by default instead of flattening into one unreadable
+  row, and `npm run proof:kiln-asset-viewer` passes for 54 adopted GLBs, all 70 ready
+  single-asset screenshots, zero page/console errors, and zero generated-path runtime
+  requests.
 - Closed the K3 camp/home prop skin slice. `workbench`, `campfire`, `chest`, `bedroll`,
   `crop-plot`, `drying-rack`, and `weather-vane` now load approved GLBs as decorative
   skins over code-owned structure sockets. The renderer hides only duplicated procedural

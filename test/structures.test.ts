@@ -9,6 +9,7 @@ import {
   homeScore,
   houseKitSocketCatalog,
   interactStructure,
+  k4UtilitySocketCatalog,
   normalizeStructureSaves,
   normalizeStructureYaw,
   relocateStructure,
@@ -271,6 +272,58 @@ describe('Hearth and Horizon structures', () => {
       gridWidth: 0.5,
       height: 1.25,
       glbPolicy: 'decorative-skin-after-normalization',
+    });
+  });
+
+  it('defines K4 utility and waterline sockets as code-owned decorative GLB targets', () => {
+    const catalog = k4UtilitySocketCatalog();
+    expect(catalog.map((entry) => entry.item)).toEqual(['compostBin', 'rainCistern', 'rootCellar', 'dockSegment', 'fishTrap', 'shoreNet', 'lantern']);
+    expect(structureSocketSpec('compostBin')).toMatchObject({
+      role: 'compost-station',
+      gridWidth: 1.08,
+      loadBearing: 'code-socket',
+      glbPolicy: 'decorative-skin-after-normalization',
+    });
+    expect(structureSocketSpec('rainCistern')).toMatchObject({
+      role: 'water-cistern',
+      height: 1.05,
+      glbPolicy: 'decorative-skin-after-normalization',
+    });
+    expect(structureSocketSpec('rootCellar')).toMatchObject({
+      role: 'provision-cache',
+      gridDepth: 1.12,
+      glbPolicy: 'decorative-skin-after-normalization',
+    });
+    expect(structureSocketSpec('dockSegment')).toMatchObject({
+      role: 'shore-edge',
+      pivot: 'shore-center',
+      collider: 'edge-strip',
+      glbPolicy: 'decorative-skin-after-normalization',
+    });
+    expect(structureSocketSpec('fishTrap')).toMatchObject({
+      role: 'shore-edge',
+      pivot: 'shore-center',
+      collider: 'edge-strip',
+      glbPolicy: 'decorative-skin-after-normalization',
+    });
+    expect(structureSocketSpec('shoreNet')).toMatchObject({
+      role: 'shore-edge',
+      gridDepth: 0.22,
+      visualScale: 'normalize approved GLB along one waterline edge with a 90-degree visual correction',
+    });
+    expect(structureSocketSpec('lantern')).toMatchObject({
+      role: 'light-post',
+      height: 1.25,
+      glbPolicy: 'decorative-skin-after-normalization',
+    });
+    expect(structureSocketPlacement({ item: 'fishTrap', yaw: STRUCTURE_YAW_STEP * 2 })).toMatchObject({
+      kind: 'edge',
+      edge: 2,
+      occupies: ['edge:2'],
+    });
+    expect(structureSocketPlacement({ item: 'compostBin', yaw: STRUCTURE_YAW_STEP * 2 })).toMatchObject({
+      kind: 'center',
+      occupies: ['center'],
     });
   });
 

@@ -311,7 +311,11 @@ export type StructureSocketRole =
   | 'home-rest'
   | 'food-plot'
   | 'food-preserve'
-  | 'weather-readback';
+  | 'compost-station'
+  | 'water-cistern'
+  | 'provision-cache'
+  | 'weather-readback'
+  | 'light-post';
 
 export interface StructureSocketSpec {
   item: PlaceableItemId;
@@ -427,6 +431,33 @@ const STRUCTURE_SOCKET_SPEC_OVERRIDES: Partial<Record<PlaceableItemId, Partial<O
     visualScale: 'normalize approved GLB to one planted food-bed socket',
     glbPolicy: 'decorative-skin-after-normalization',
   },
+  compostBin: {
+    role: 'compost-station',
+    gridWidth: 1.08,
+    gridDepth: 1.08,
+    height: 0.92,
+    snap: ['center of one hex', 'compost recipe and fertility state stay code-owned', 'decorative GLB keeps heap, scraps, and steam overlays visible'],
+    visualScale: 'normalize approved GLB to one compost utility socket',
+    glbPolicy: 'decorative-skin-after-normalization',
+  },
+  rainCistern: {
+    role: 'water-cistern',
+    gridWidth: 0.95,
+    gridDepth: 0.76,
+    height: 1.05,
+    snap: ['center of one hex', 'weather collection and crop irrigation stay code-owned', 'decorative GLB keeps water-fill readback visible'],
+    visualScale: 'normalize approved GLB to one water-storage socket',
+    glbPolicy: 'decorative-skin-after-normalization',
+  },
+  rootCellar: {
+    role: 'provision-cache',
+    gridWidth: 1.28,
+    gridDepth: 1.12,
+    height: 0.76,
+    snap: ['center of one hex', 'provision storage and route-food accounting stay code-owned', 'decorative GLB keeps hatch, glow, and bundles visible'],
+    visualScale: 'normalize approved GLB to one provision-cache socket',
+    glbPolicy: 'decorative-skin-after-normalization',
+  },
   dryingRack: {
     role: 'food-preserve',
     gridWidth: 1.2,
@@ -443,6 +474,15 @@ const STRUCTURE_SOCKET_SPEC_OVERRIDES: Partial<Record<PlaceableItemId, Partial<O
     height: 1.25,
     snap: ['center of one hex', 'forecast state stays code-owned', 'decorative GLB keeps needle, ribbon, and storm overlays visible'],
     visualScale: 'normalize approved GLB to one weather instrument socket',
+    glbPolicy: 'decorative-skin-after-normalization',
+  },
+  lantern: {
+    role: 'light-post',
+    gridWidth: 0.45,
+    gridDepth: 0.45,
+    height: 1.25,
+    snap: ['center of one hex', 'lit state and shelter light accounting stay code-owned', 'decorative GLB keeps lantern glow overlay visible'],
+    visualScale: 'normalize approved GLB to one light-post socket',
     glbPolicy: 'decorative-skin-after-normalization',
   },
   floorFoundation: {
@@ -568,13 +608,36 @@ const STRUCTURE_SOCKET_SPEC_OVERRIDES: Partial<Record<PlaceableItemId, Partial<O
   },
   dockSegment: {
     role: 'shore-edge',
-    gridWidth: 1.05,
-    gridDepth: 0.55,
-    height: 0.28,
+    gridWidth: 1.5,
+    gridDepth: 0.86,
+    height: 0.72,
     pivot: 'shore-center',
     collider: 'edge-strip',
-    snap: ['edge must touch shore or waterline'],
-    visualScale: 'fit along one waterline edge',
+    snap: ['edge must touch shore or waterline', 'dock cast target and waterline blocker stay code-owned', 'decorative GLB keeps fishing mark visible'],
+    visualScale: 'normalize approved GLB along one waterline edge without changing cast rules',
+    glbPolicy: 'decorative-skin-after-normalization',
+  },
+  fishTrap: {
+    role: 'shore-edge',
+    gridWidth: 1,
+    gridDepth: 0.62,
+    height: 0.45,
+    pivot: 'shore-center',
+    collider: 'edge-strip',
+    snap: ['edge must touch shore or waterline', 'set/check/collect timing stays code-owned', 'decorative GLB keeps bait, float, tether, and soak overlays visible'],
+    visualScale: 'normalize approved GLB along one waterline edge without changing trap payout',
+    glbPolicy: 'decorative-skin-after-normalization',
+  },
+  shoreNet: {
+    role: 'shore-edge',
+    gridWidth: 1.12,
+    gridDepth: 0.22,
+    height: 0.96,
+    pivot: 'shore-center',
+    collider: 'edge-strip',
+    snap: ['edge must touch shore or waterline', 'comb timing and waterline blocker stay code-owned', 'decorative GLB keeps floats, soak rings, fish, and scrap overlays visible'],
+    visualScale: 'normalize approved GLB along one waterline edge with a 90-degree visual correction',
+    glbPolicy: 'decorative-skin-after-normalization',
   },
   caveAnchor: {
     role: 'route-marker',
@@ -623,6 +686,10 @@ export function houseKitSocketCatalog(): StructureSocketSpec[] {
 
 export function wallShellSocketCatalog(): StructureSocketSpec[] {
   return structureSocketCatalog(['floorFoundation', 'wallPanel', 'wallDoorPanel', 'wallWindowPanel', 'wallCorner', 'wallHalfRail', 'roofJoin']);
+}
+
+export function k4UtilitySocketCatalog(): StructureSocketSpec[] {
+  return structureSocketCatalog(['compostBin', 'rainCistern', 'rootCellar', 'dockSegment', 'fishTrap', 'shoreNet', 'lantern']);
 }
 
 export function normalizeStructureYaw(yaw: number): number {

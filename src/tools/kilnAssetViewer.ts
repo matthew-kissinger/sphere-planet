@@ -90,8 +90,15 @@ const FAMILY_SLUGS: Record<KilnViewerFamily, readonly string[]> = {
     'chest',
     'bedroll',
     'crop-plot',
+    'compost-bin',
+    'rain-cistern',
+    'root-cellar',
+    'dock-segment',
+    'fish-trap',
+    'shore-net',
     'drying-rack',
     'weather-vane',
+    'lantern-post',
   ],
   drops: ['drop-wood-logs', 'drop-ore-chunk'],
   nodes: [
@@ -208,6 +215,10 @@ function socketProfileFor(slug: string, family: KilnViewerFamily, asset?: KilnMa
   if (slug === 'shore-net') return { role: 'shoreline utility', grid: 'edge-aligned shore socket', footprint: 3.6, height: 2.4, ringColor: 0x87d9e8 };
   if (slug === 'dock-segment') return { role: 'waterline build socket', grid: 'edge-aligned shore socket', footprint: 4.7, height: 1.8, ringColor: 0x87d9e8 };
   if (slug === 'fish-trap') return { role: 'waterline trap', grid: 'edge-aligned shore socket', footprint: 2.2, height: 1.4, ringColor: 0x87d9e8 };
+  if (slug === 'compost-bin') return { role: 'compost-station decorative skin', grid: 'code-authored center prop socket', footprint: 2.35, height: 1.75, ringColor: 0x9bd77b };
+  if (slug === 'rain-cistern') return { role: 'water-cistern decorative skin', grid: 'code-authored center prop socket', footprint: 2.05, height: 2.25, ringColor: 0x87d9e8 };
+  if (slug === 'root-cellar') return { role: 'provision-cache decorative shell', grid: 'code-authored center prop socket', footprint: 3.2, height: 1.55, ringColor: 0xc9d7a1 };
+  if (slug === 'lantern-post') return { role: 'light-post decorative skin', grid: 'code-authored center prop socket', footprint: 1.25, height: 2.45, ringColor: 0xffd889 };
   if (slug === 'workbench') return { role: 'crafting-station decorative skin', grid: 'code-authored center prop socket', footprint: 2.7, height: 1.6, ringColor: 0xc9d7a1 };
   if (slug === 'campfire') return { role: 'warmth-station decorative skin', grid: 'code-authored center prop socket', footprint: 2.25, height: 0.8, ringColor: 0xffb578 };
   if (slug === 'chest') return { role: 'storage-station decorative skin', grid: 'code-authored center prop socket', footprint: 2.1, height: 1.4, ringColor: 0xc9d7a1 };
@@ -478,7 +489,8 @@ function makeNormalizedAnimatedObject(
 
 function defaultColumnsFor(family: KilnViewerFamily, count: number): number {
   if (count <= 2) return count;
-  if (family === 'structures' || family === 'trees') return count;
+  if (family === 'structures') return Math.min(6, count);
+  if (family === 'trees') return count;
   if (family === 'ready') return Math.min(8, count);
   if (family === 'adopted') return Math.min(6, count);
   return Math.min(4, count);
