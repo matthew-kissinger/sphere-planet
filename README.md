@@ -119,8 +119,10 @@ hex face at a time, gamepad `LB+D-pad` rotates selected build pieces, and inacti
 props can now be moved through the relocation cursor with `V`/`Shift+E`, the touch move
 button, or gamepad `LB+RT`. The C1 and C2/C3 browser proofs verify rotated placement, safe
 pack-back, lit-prop pack refusal, snap-preview and blocked-preview diagnostics/screenshots,
-snap-grid relocation blockers, and state-preserving snap-back across desktop, laptop,
-tablet, phone, and injected synthetic gamepad profiles. Stone axe, pick,
+snap-grid relocation blockers, promoted Kiln door/window/roof skin requests and fitted
+decorative bounds over code-owned sockets, and state-preserving snap-back across desktop,
+laptop, tablet, phone, and injected synthetic gamepad profiles. Real hardware gamepad
+validation is still not claimed by this automated proof. Stone axe, pick,
 shovel, and hatchet now matter in play: matching tools reach a little farther, repeat
 faster while held, and track saved wear. The Stone Hatchet is a short-reach, quick,
 fragile one-handed chopping and brambleback-warding sidearm that sits below the full stone

@@ -3,6 +3,24 @@ Current operating goal: Hearth and Horizon full crafting-survival cycle under th
 
 ## 2026-07-07
 
+- Advanced the H4/C2-C3 generated house-kit intake node under the DAG/subagent workflow.
+  The promoted Kiln `door-kit`, `window-frame`, and `roof-bundle` GLBs now load through
+  `KilnRuntimeAssets` as decorative skins over the existing code-owned `doorKit`,
+  `windowFrame`, and `roofBundle` sockets. Runtime fitting measures each loaded GLB's real
+  bounding box before computing scale, because the manifest bboxes were not reliable enough
+  for proportions. Snap, collision, save shape, relocation, shelter detection, comfort
+  light/glow overlays, and house utility rules remain procedural.
+- Added per-slug house-kit diagnostics to the structure renderer: loaded/pending/fallback
+  counts by slug, source manifest bbox, measured runtime source bbox, fitted bbox, scale,
+  rotation, socket role, load-bearing policy, instanceability, and acceptance note. Unit
+  tests now prove both success and forced-fallback behavior, including that procedural
+  door/window/roof silhouettes stay visible when GLB loading fails and that shelter overlays
+  such as `windowWarmLight` and `roofShelterGlow` are not hidden by the skin swap.
+- Extended `npm run proof:c2-c3-building-snap-grid` so the same building proof now places
+  a real window frame, waits for door/window/roof Kiln skin diagnostics, asserts fitted
+  decorative bounds against the socket sizes, records successful `assets/kiln/models/*.glb`
+  responses, rejects generated or signed runtime requests, and still leaves real hardware
+  gamepad validation unclaimed.
 - Closed the first C2 single-room shelter enclosure and comfort-readability slice under
   the DAG/subagent workflow. `ShelterReport.enclosure` now derives room, boundary,
   support, roof, opening, and utility tiles around the claimed home bedroll; separates

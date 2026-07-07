@@ -24,6 +24,7 @@ const proofClaim = process.env.PROOF_CLAIM || 'C2/C3 building relocation and cod
 const outDir = path.join(root, 'output', 'playwright', proofSlug);
 const requestedPort = Number(process.env.PROOF_PORT || 0);
 const profileFilter = (process.env.PROOF_PROFILE || '').trim().toLowerCase();
+const requiredHouseKitModels = ['door-kit.glb', 'window-frame.glb', 'roof-bundle.glb'];
 
 async function getFreePort() {
   if (requestedPort > 0) return requestedPort;
@@ -568,6 +569,7 @@ async function runSnapGridContract(page, name) {
     const campfire = place('campfire', local);
     const workbench = place('workbench', local);
     const chest = place('chest', local);
+    const windowFrame = place('windowFrame', support);
     if (!world.useStructure(campfire.id)) throw new Error('failed to light campfire');
     if (!world.useStructure(bedroll.id)) throw new Error('failed to claim home bedroll');
     await window.advanceTime(180);
@@ -613,7 +615,7 @@ async function runSnapGridContract(page, name) {
     const sockets = movedBack.sockets.houseKit;
     const text = JSON.parse(window.render_game_to_text());
     return {
-      setup: { bedroll, roofA, roofB, door, campfire, workbench, chest },
+      setup: { bedroll, roofA, roofB, door, windowFrame, campfire, workbench, chest },
       readyHome: ready.home,
       movedOut: {
         ok: movedOutOk,
@@ -684,6 +686,56 @@ async function runSnapGridContract(page, name) {
   }
   if (JSON.stringify(result.sockets) !== JSON.stringify(result.textSockets)) throw new Error(`${name}: text socket diagnostics drifted`);
 
+  const skinHandle = await page.waitForFunction(() => {
+    const text = JSON.parse(window.render_game_to_text());
+    const renderer = text.structures?.renderer;
+    const bySlug = renderer?.kilnSkinsBySlug ?? {};
+    const fits = renderer?.kilnSkinFits ?? {};
+    const expectedFit = {
+      'door-kit': [1, 1.9, 0.22],
+      'window-frame': [0.92, 1.45, 0.18],
+      'roof-bundle': [1.12, 0.62, 1.12],
+    };
+    const withinFit = (slug) => {
+      const fit = fits[slug];
+      const target = expectedFit[slug];
+      if (!fit || !Array.isArray(fit.fittedBboxSize) || fit.fittedBboxSize.length !== 3) return false;
+      return fit.fittedBboxSize.every((value, index) => Math.abs(value - target[index]) <= 0.08);
+    };
+    const loaded =
+      (bySlug['door-kit']?.loaded ?? 0) >= 1
+      && (bySlug['window-frame']?.loaded ?? 0) >= 1
+      && (bySlug['roof-bundle']?.loaded ?? 0) >= 1;
+    const fallbacks =
+      (bySlug['door-kit']?.fallback ?? 0)
+      + (bySlug['window-frame']?.fallback ?? 0)
+      + (bySlug['roof-bundle']?.fallback ?? 0);
+    const fitReady = ['door-kit', 'window-frame', 'roof-bundle'].every((slug) => {
+      const fit = fits[slug];
+      return fit
+        && fit.loadBearing === 'code-socket'
+        && fit.glbPolicy === 'decorative-skin-after-normalization'
+        && Array.isArray(fit.sourceBboxSize)
+        && fit.sourceBboxSize.length === 3
+        && Array.isArray(fit.runtimeSourceBboxSize)
+        && fit.runtimeSourceBboxSize.length === 3
+        && Array.isArray(fit.fittedBboxSize)
+        && fit.fittedBboxSize.length === 3
+        && withinFit(slug);
+    });
+    return loaded && fallbacks === 0 && fitReady ? { renderer, bySlug, fits, kilnAssets: renderer?.kilnAssets } : false;
+  }, null, { timeout: 15000 });
+  const houseKitSkins = await skinHandle.jsonValue();
+  const modelRequests = houseKitSkins.kilnAssets?.modelRequests ?? [];
+  for (const model of requiredHouseKitModels) {
+    if (!modelRequests.some((url) => url.includes(`/assets/kiln/models/${model}`))) {
+      throw new Error(`${name}: Kiln runtime diagnostics did not request ${model} ${JSON.stringify(modelRequests)}`);
+    }
+  }
+  if (modelRequests.some((url) => url.includes('/assets/kiln/generated/') || url.includes('/tools/kiln/generated/'))) {
+    throw new Error(`${name}: Kiln runtime diagnostics requested raw generated assets ${JSON.stringify(modelRequests)}`);
+  }
+
   const shot = await screenshot(page, `${name}-snap-grid`);
   return {
     name,
@@ -693,14 +745,43 @@ async function runSnapGridContract(page, name) {
     player: result.player.command,
     movedBack: result.movedBack,
     sockets: result.sockets,
-    renderer: result.renderer,
+    renderer: houseKitSkins.renderer,
+    houseKitSkins,
     screenshot: shot,
+  };
+}
+
+function assertHouseKitAssetNetwork(name, requests, responses) {
+  const generatedRequests = requests.filter((url) =>
+    url.includes('/assets/kiln/generated/')
+    || url.includes('/tools/kiln/generated/')
+    || url.includes('X-Amz-Signature')
+    || url.includes('sig=')
+  );
+  if (generatedRequests.length > 0) {
+    throw new Error(`${name}: runtime requested raw/generated or signed Kiln URLs ${JSON.stringify(generatedRequests)}`);
+  }
+  const modelResponses = {};
+  for (const model of requiredHouseKitModels) {
+    modelResponses[model] = responses.filter((asset) => asset.url.includes(`/assets/kiln/models/${model}`));
+    if (!modelResponses[model].some((asset) => asset.status >= 200 && asset.status < 300)) {
+      throw new Error(`${name}: missing successful ${model} response ${JSON.stringify(modelResponses[model])}`);
+    }
+  }
+  return {
+    requests,
+    responses,
+    modelResponses,
+    generatedRequests,
+    acceptanceNote: 'door/window/roof GLBs loaded only from promoted models/ and fitted as decorative skins over code-owned sockets',
   };
 }
 
 async function runProfile(browser, url, profile) {
   const consoleErrors = [];
   const pageErrors = [];
+  const kilnAssetRequests = [];
+  const kilnAssetResponses = [];
   const page = await browser.newPage({
     viewport: profile.viewport,
     isMobile: !!profile.touch,
@@ -710,14 +791,24 @@ async function runProfile(browser, url, profile) {
     if (msg.type() === 'error') consoleErrors.push(msg.text());
   });
   page.on('pageerror', (err) => pageErrors.push(err.message));
+  page.on('request', (request) => {
+    const requestUrl = request.url();
+    if (requestUrl.includes('/assets/kiln/')) kilnAssetRequests.push(requestUrl);
+  });
+  page.on('response', (response) => {
+    const responseUrl = response.url();
+    if (responseUrl.includes('/assets/kiln/')) kilnAssetResponses.push({ url: responseUrl, status: response.status() });
+  });
   try {
     await page.goto(url, { waitUntil: 'domcontentloaded' });
     const result = await runSnapGridContract(page, profile.name);
     const playerRelocation = await runPlayerRelocationControls(page, profile, profile.name);
+    const kilnAssets = assertHouseKitAssetNetwork(profile.name, kilnAssetRequests, kilnAssetResponses);
     if (consoleErrors.length || pageErrors.length) throw new Error(`${profile.name}: browser errors ${JSON.stringify({ consoleErrors, pageErrors })}`);
     return {
       ...result,
       playerRelocation,
+      kilnAssets,
       url,
       viewport: profile.viewport,
       touch: !!profile.touch,

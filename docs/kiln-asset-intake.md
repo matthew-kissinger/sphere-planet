@@ -102,6 +102,15 @@ First wired pilot:
   the code-authored waystone, with `waystoneBase`, `waystoneCore`, and `waystoneBand`
   hidden only after GLB success. Attuned route glyph overlays, placement, collision, route
   readback, and fallback remain procedural.
+- `door-kit`, `window-frame`, and `roof-bundle`: conditionally accepted as the first
+  modular house-kit skins only after runtime normalization to the code-owned C2/C3 sockets.
+  The game measures each loaded GLB template, computes the decorative scale from the actual
+  runtime bounding box rather than the raw manifest bbox, and fits the final visible shell
+  to the `doorKit`, `windowFrame`, or `roofBundle` socket. Collision, snap, opening,
+  shelter, save, relocation, and comfort-light truth remain procedural. `window-frame`
+  keeps its C-grade instanceability note, but the current acceptance is explicit because it
+  remaps the wide local axis to wall width and is browser-proofed in
+  `npm run proof:c2-c3-building-snap-grid`.
 
 Runtime pilot candidates from the proof:
 
@@ -114,14 +123,14 @@ Runtime pilot candidates from the proof:
 
 Deferred until scale, snap, budget, readability, or animation proof exists:
 
-- Modular house/build pieces: `door-kit`, `window-frame`, `dock-segment`, `roof-bundle`,
-  `compost-bin`, `root-cellar`. These were generated independently and do not share wall
-  heights, opening sizes, wall thickness, or grid units. The game must impose the
-  dimensional contract. Cheapest safe path: keep the procedural socket/collider/snap volume
-  as load-bearing and use a GLB only as decoration inside that socket. The first code-owned
-  door/window/roof socket contract now lives in `src/sim/structures.ts` and is proved by
-  `npm run proof:c2-c3-building-snap-grid`; raw modular GLBs remain deferred until each
-  asset is normalized to that socket and screenshot-proved.
+- Remaining modular house/build pieces: `dock-segment`, `compost-bin`, and `root-cellar`.
+  The house-kit warning still applies: independently generated pieces do not share wall
+  heights, opening sizes, wall thickness, or grid units unless the game imposes that
+  contract. The accepted door/window/roof skins prove the cheapest safe path: keep the
+  procedural socket/collider/snap volume as load-bearing, measure each loaded GLB template,
+  normalize it to the socket, and hide duplicated procedural body parts only after GLB
+  success. Future pieces need the same fitted-bbox diagnostics, fallback proof, and
+  screenshot proof before shipping as craftable art.
 - Functional props with warnings or watery placement needs: `workbench`, `rain-cistern`,
   `fish-trap`, `shore-net`, `lantern-post`.
 - Shrines, craters, and trees: defer for blind screenshot readability, world-placement

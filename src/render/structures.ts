@@ -2,7 +2,7 @@ import * as THREE from 'three/webgpu';
 import type { Goldberg } from '../geo/goldberg';
 import type { Layers } from '../world/layers';
 import { homeScore, type ShelterReport, type StructureSave, type StructureSocketSpec } from '../sim/structures';
-import type { KilnAssetSnapshot, StructureSkinProvider } from './kilnAssets';
+import type { KilnAssetSnapshot, KilnSkinFitSnapshot, KilnStructureSkinSlug, StructureSkinProvider } from './kilnAssets';
 
 type PropFactory = () => THREE.Group;
 type StructureSilhouette = 'cave-anchor-belay-marker' | 'waystone-attuned-marker';
@@ -599,11 +599,20 @@ const FACTORIES: Record<StructureSave['item'], PropFactory> = {
   waystone: makeWaystone,
 };
 
+const KILN_SKIN_BY_STRUCTURE_ITEM: Partial<Record<StructureSave['item'], KilnStructureSkinSlug>> = {
+  waystone: 'waystone',
+  doorKit: 'door-kit',
+  windowFrame: 'window-frame',
+  roofBundle: 'roof-bundle',
+};
+
+type KilnSkinStatus = 'pending' | 'loaded' | 'fallback';
+
 export class StructureRenderer {
   readonly group = new THREE.Group();
   readonly snapPreviewGroup = new THREE.Group();
   private readonly objects = new Map<number, THREE.Group>();
-  private readonly kilnSkinStatus = new Map<number, 'pending' | 'loaded' | 'fallback'>();
+  private readonly kilnSkinStatus = new Map<number, KilnSkinStatus>();
   private snapPreviewObject: THREE.Group | null = null;
   private snapPreviewItem: StructureSave['item'] | null = null;
   private lastSnapPreview: StructureSnapPreview | null = null;
@@ -933,10 +942,13 @@ export class StructureRenderer {
   }
 
   private attachKilnSkin(structure: StructureSave, obj: THREE.Group): void {
-    if (!this.kilnAssets || structure.item !== 'waystone') return;
+    const slug = KILN_SKIN_BY_STRUCTURE_ITEM[structure.item];
+    if (!this.kilnAssets || !slug) return;
     this.kilnSkinStatus.set(structure.id, 'pending');
     obj.userData.kilnSkinStatus = 'pending';
-    void this.kilnAssets.createStructureSkin('waystone')
+    obj.userData.kilnAssetSlug = slug;
+    obj.userData.kilnSkinItem = structure.item;
+    void this.kilnAssets.createStructureSkin(slug)
       .then((skin) => {
         const current = this.objects.get(structure.id);
         if (current !== obj || obj.parent !== this.group) return;
@@ -951,6 +963,8 @@ export class StructureRenderer {
         obj.userData.kilnSkinStatus = 'loaded';
         obj.userData.kilnAssetSlug = skin.slug;
         obj.userData.kilnAssetFile = skin.manifest.file;
+        obj.userData.kilnAssetSourceUrl = skin.sourceUrl;
+        obj.userData.kilnSkinFit = skin.fit;
       })
       .catch((err: unknown) => {
         const current = this.objects.get(structure.id);
@@ -964,6 +978,7 @@ export class StructureRenderer {
   private hideProceduralParts(obj: THREE.Group, names: readonly string[]): void {
     const hidden = new Set(names);
     obj.traverse((child) => {
+      if (child.userData.kilnAssetSlug) return;
       if (hidden.has(child.name)) child.visible = false;
     });
   }
@@ -986,6 +1001,8 @@ export class StructureRenderer {
     kilnSkinsLoaded: number;
     kilnSkinsPending: number;
     kilnSkinFallbacks: number;
+    kilnSkinsBySlug: Partial<Record<KilnStructureSkinSlug, { loaded: number; pending: number; fallback: number }>>;
+    kilnSkinFits: Partial<Record<KilnStructureSkinSlug, KilnSkinFitSnapshot>>;
     snapPreview: {
       active: boolean;
       ok: boolean;
@@ -1015,13 +1032,23 @@ export class StructureRenderer {
     let kilnSkinsLoaded = 0;
     let kilnSkinsPending = 0;
     let kilnSkinFallbacks = 0;
+    const kilnSkinsBySlug: Partial<Record<KilnStructureSkinSlug, { loaded: number; pending: number; fallback: number }>> = {};
+    const kilnSkinFits: Partial<Record<KilnStructureSkinSlug, KilnSkinFitSnapshot>> = {};
     let snapPreviewMeshes = 0;
     const snapPreviewRoles = new Set<string>();
     for (const obj of this.objects.values()) {
       if (typeof obj.userData.structureSilhouette === 'string') routeSilhouettes.add(obj.userData.structureSilhouette);
-      if (obj.userData.kilnSkinStatus === 'loaded') kilnSkinsLoaded++;
-      if (obj.userData.kilnSkinStatus === 'pending') kilnSkinsPending++;
-      if (obj.userData.kilnSkinStatus === 'fallback') kilnSkinFallbacks++;
+      const skinStatus = obj.userData.kilnSkinStatus as KilnSkinStatus | undefined;
+      const skinSlug = obj.userData.kilnAssetSlug as KilnStructureSkinSlug | undefined;
+      if (skinStatus === 'loaded') kilnSkinsLoaded++;
+      if (skinStatus === 'pending') kilnSkinsPending++;
+      if (skinStatus === 'fallback') kilnSkinFallbacks++;
+      if (skinSlug && skinStatus) {
+        const entry = kilnSkinsBySlug[skinSlug] ?? { loaded: 0, pending: 0, fallback: 0 };
+        entry[skinStatus] += 1;
+        kilnSkinsBySlug[skinSlug] = entry;
+      }
+      if (skinSlug && obj.userData.kilnSkinFit) kilnSkinFits[skinSlug] = obj.userData.kilnSkinFit as KilnSkinFitSnapshot;
       obj.traverse((child) => {
         if ((child as THREE.Mesh).isMesh) meshes++;
         if (typeof child.userData.structureReadabilityRole === 'string') routeReadabilityRoles.add(child.userData.structureReadabilityRole);
@@ -1056,6 +1083,8 @@ export class StructureRenderer {
       kilnSkinsLoaded,
       kilnSkinsPending,
       kilnSkinFallbacks,
+      kilnSkinsBySlug,
+      kilnSkinFits,
       snapPreview: {
         active: this.snapPreviewGroup.visible,
         ok: this.lastSnapPreview?.ok ?? false,

@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import * as THREE from 'three/webgpu';
 import { Goldberg } from '../src/geo/goldberg';
 import { StructureRenderer } from '../src/render/structures';
-import type { StructureSkinProvider } from '../src/render/kilnAssets';
+import type { KilnStructureSkinSlug, StructureSkinProvider } from '../src/render/kilnAssets';
 import type { StructureSave } from '../src/sim/structures';
 import { buildLayers } from '../src/world/layers';
 
@@ -44,17 +44,60 @@ async function flushAsyncSkinLoads(): Promise<void> {
 }
 
 class FakeKilnAssets implements StructureSkinProvider {
-  async createStructureSkin() {
+  async createStructureSkin(slug: KilnStructureSkinSlug) {
     const object = new THREE.Group();
-    object.name = 'kiln-skin-waystone';
+    object.name = `kiln-skin-${slug}`;
+    object.userData.kilnAssetSlug = slug;
     object.add(new THREE.Mesh(new THREE.BoxGeometry(1, 1, 1), new THREE.MeshBasicMaterial()));
-    return {
-      slug: 'waystone' as const,
-      object,
-      manifest: { slug: 'waystone', status: 'ready' as const, file: 'models/waystone.glb' },
-      sourceUrl: '/assets/kiln/models/waystone.glb',
-      hideProceduralNames: ['waystoneBase', 'waystoneCore', 'waystoneBand'],
+    const fit = {
+      slug,
+      item: slug === 'door-kit' ? 'doorKit' : slug === 'window-frame' ? 'windowFrame' : slug === 'roof-bundle' ? 'roofBundle' : 'waystone',
+      socketRole: slug === 'door-kit' ? 'wall-opening' : slug === 'window-frame' ? 'wall-light' : slug === 'roof-bundle' ? 'roof-cap' : 'route-marker',
+      sourceBboxSize: [1, 1, 1],
+      fittedBboxSize: [1, 1, 1],
+      scale: 1,
+      position: [0, 0, 0] as const,
+      rotation: [0, 0, 0] as const,
+      loadBearing: 'code-socket' as const,
+      glbPolicy: 'decorative-skin-after-normalization' as const,
+      instanceability: slug === 'window-frame' ? 'C' : 'B',
+      modularKit: slug !== 'waystone',
+      acceptanceNote: 'fake normalized decorative skin',
+      sourceUrl: `/assets/kiln/models/${slug}.glb`,
     };
+    object.userData.kilnSkinFit = fit;
+    const hideProceduralNames: Record<KilnStructureSkinSlug, string[]> = {
+      waystone: ['waystoneBase', 'waystoneCore', 'waystoneBand'],
+      'door-kit': ['leftJamb', 'rightJamb', 'lintel', 'doorSlab', 'knob'],
+      'window-frame': ['topRail', 'bottomRail', 'leftRail', 'rightRail', 'glassPane'],
+      'roof-bundle': ['leftRoofPlane', 'rightRoofPlane', 'ridgeBeam'],
+    };
+    return {
+      slug,
+      object,
+      manifest: { slug, status: 'ready' as const, file: `models/${slug}.glb` },
+      sourceUrl: `/assets/kiln/models/${slug}.glb`,
+      hideProceduralNames: hideProceduralNames[slug],
+      fit,
+    };
+  }
+
+  snapshot() {
+    return {
+      enabled: ['waystone', 'door-kit', 'window-frame', 'roof-bundle'] as KilnStructureSkinSlug[],
+      manifestUrl: '/assets/kiln/ASSET_MANIFEST.json',
+      modelRequests: [],
+      manifestLoaded: true,
+      loaded: ['waystone', 'door-kit', 'window-frame', 'roof-bundle'] as KilnStructureSkinSlug[],
+      failed: [],
+      structureSkins: {},
+    };
+  }
+}
+
+class FailingKilnAssets implements StructureSkinProvider {
+  async createStructureSkin() {
+    return null;
   }
 }
 
@@ -130,6 +173,79 @@ describe('structure renderer asset readability', () => {
     expect(namedObject(renderer, 'waystoneGlyph-survey')?.visible).toBe(false);
     expect(renderer.stats().kilnSkinsLoaded).toBe(1);
     expect(renderer.stats().kilnSkinFallbacks).toBe(0);
+    expect(renderer.stats().kilnSkinsBySlug.waystone).toMatchObject({ loaded: 1, pending: 0, fallback: 0 });
+  });
+
+  it('skins modular house-kit sockets with Kiln GLBs while preserving functional shelter overlays', async () => {
+    const scene = new THREE.Scene();
+    const geo = new Goldberg(8);
+    const layers = buildLayers();
+    const renderer = new StructureRenderer(scene, new FakeKilnAssets());
+    const homeTile = Array.from({ length: geo.count }, (_, tile) => tile).find((tile) => geo.degreeOf(tile) >= 6);
+    if (homeTile === undefined) throw new Error('test Goldberg lacks a six-neighbor home tile');
+    const local = Array.from({ length: geo.degreeOf(homeTile) }, (_, edge) => geo.neighbor(homeTile, edge));
+    const structures: StructureSave[] = [
+      { id: 1, item: 'bedroll', tile: homeTile, layer: 100, yaw: 0, state: { home: true } },
+      { id: 2, item: 'roofBundle', tile: local[0], layer: 100, yaw: 0 },
+      { id: 3, item: 'roofBundle', tile: local[1], layer: 100, yaw: 0 },
+      { id: 4, item: 'doorKit', tile: local[2], layer: 100, yaw: 0 },
+      { id: 5, item: 'campfire', tile: local[3], layer: 100, yaw: 0, state: { lit: true } },
+      { id: 6, item: 'workbench', tile: local[4], layer: 100, yaw: 0 },
+      { id: 7, item: 'chest', tile: local[5], layer: 100, yaw: 0 },
+      { id: 8, item: 'windowFrame', tile: homeTile, layer: 100, yaw: 0 },
+    ];
+
+    renderer.setStructures(structures);
+    await flushAsyncSkinLoads();
+    renderer.update(structures, geo, layers, { x: 0, y: 0, z: 0 }, 0.5);
+    const stats = renderer.stats();
+
+    expect(namedObject(renderer, 'kiln-skin-door-kit')).toBeTruthy();
+    expect(namedObject(renderer, 'kiln-skin-window-frame')).toBeTruthy();
+    expect(namedObject(renderer, 'kiln-skin-roof-bundle')).toBeTruthy();
+    expect(namedObject(renderer, 'leftJamb')?.visible).toBe(false);
+    expect(namedObject(renderer, 'glassPane')?.visible).toBe(false);
+    expect(namedObject(renderer, 'leftRoofPlane')?.visible).toBe(false);
+    expect(namedObject(renderer, 'windowWarmLight')?.visible).toBe(true);
+    expect(namedObject(renderer, 'roofShelterGlow')?.visible).toBe(true);
+    expect(stats.kilnSkinsLoaded).toBe(4);
+    expect(stats.kilnSkinFallbacks).toBe(0);
+    expect(stats.kilnSkinsBySlug['door-kit']).toMatchObject({ loaded: 1, pending: 0, fallback: 0 });
+    expect(stats.kilnSkinsBySlug['window-frame']).toMatchObject({ loaded: 1, pending: 0, fallback: 0 });
+    expect(stats.kilnSkinsBySlug['roof-bundle']).toMatchObject({ loaded: 2, pending: 0, fallback: 0 });
+    expect(stats.kilnSkinFits['window-frame']).toMatchObject({
+      item: 'windowFrame',
+      socketRole: 'wall-light',
+      glbPolicy: 'decorative-skin-after-normalization',
+      instanceability: 'C',
+    });
+  });
+
+  it('keeps procedural house-kit silhouettes visible when Kiln skin loading falls back', async () => {
+    const scene = new THREE.Scene();
+    const geo = new Goldberg(8);
+    const layers = buildLayers();
+    const renderer = new StructureRenderer(scene, new FailingKilnAssets());
+    const structures: StructureSave[] = [
+      { id: 1, item: 'doorKit', tile: 1, layer: 100, yaw: 0 },
+      { id: 2, item: 'windowFrame', tile: 2, layer: 100, yaw: 0 },
+      { id: 3, item: 'roofBundle', tile: 3, layer: 100, yaw: 0 },
+    ];
+
+    renderer.setStructures(structures);
+    await flushAsyncSkinLoads();
+    renderer.update(structures, geo, layers, { x: 0, y: 0, z: 0 }, 0.5);
+    const stats = renderer.stats();
+
+    expect(namedObject(renderer, 'kiln-skin-door-kit')).toBeNull();
+    expect(namedObject(renderer, 'leftJamb')?.visible).toBe(true);
+    expect(namedObject(renderer, 'glassPane')?.visible).toBe(true);
+    expect(namedObject(renderer, 'leftRoofPlane')?.visible).toBe(true);
+    expect(stats.kilnSkinsLoaded).toBe(0);
+    expect(stats.kilnSkinFallbacks).toBe(3);
+    expect(stats.kilnSkinsBySlug['door-kit']).toMatchObject({ loaded: 0, pending: 0, fallback: 1 });
+    expect(stats.kilnSkinsBySlug['window-frame']).toMatchObject({ loaded: 0, pending: 0, fallback: 1 });
+    expect(stats.kilnSkinsBySlug['roof-bundle']).toMatchObject({ loaded: 0, pending: 0, fallback: 1 });
   });
 
   it('renders functional shelter warmth and comfort signals from the room report', () => {
