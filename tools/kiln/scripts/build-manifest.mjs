@@ -51,6 +51,8 @@ function replacementFor(a) {
   if (REPLACES[a.slug]) return REPLACES[a.slug];
   if (a.slug.startsWith('shrine-')) return `src/render/landmarks.ts makeLandmark() / ${a.title} domain landmark shell`;
   if (a.slug.startsWith('node-')) return `src/render/domainResources.ts ${a.slug.replace(/^node-/, '')} resource silhouette`;
+  if (a.slug.startsWith('fish-') || a.slug === 'creature-driftjelly') return `src/render/fishSchools.ts ${a.title} singleton fish-school body`;
+  if (a.slug.startsWith('bird-')) return `future SkyLifeRenderer ${a.title} singleton bird/flock body`;
   if (a.slug.startsWith('creature-')) return `src/render/nativeLife.ts ${a.title} node-transform replacement candidate`;
   if (a.slug.startsWith('tree-')) return `src/world/trees.ts + src/render/mesher.ts emitTree() / ${a.title} instanced scatter replacement candidate`;
   if (a.slug.startsWith('crater-')) return `src/render/skyfall.ts ${a.title} crater shell`;

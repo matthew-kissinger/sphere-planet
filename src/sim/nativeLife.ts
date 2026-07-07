@@ -7,11 +7,26 @@ import type { ItemId } from './crafting';
 
 export type NativeCreatureKind = 'mossPuff' | 'shellSkitter' | 'reedbackGrazer' | 'caveBlinker' | 'tideLurker' | 'caveBelljaw' | 'screeSnapper' | 'stormBurr' | 'brambleback';
 export type NativeCreatureTemperament = 'harmless' | 'territorial' | 'combative';
+export type NativeCreatureRoamState = 'settled' | 'graze' | 'wander' | 'watch' | 'patrol' | 'warn' | 'prowl' | 'recover';
+
+export interface NativeCreatureMotion {
+  homeTile: number;
+  fromTile: number;
+  toTile: number;
+  currentTile: number;
+  targetTile: number;
+  progress: number;
+  moving: boolean;
+  state: NativeCreatureRoamState;
+  clip: 'idle' | 'walk';
+  leashRings: number;
+}
 
 export interface NativeCreatureSite {
   id: number;
   kind: NativeCreatureKind;
   tile: number;
+  homeTile?: number;
   slot: number;
   label: string;
   detail: string;
@@ -22,6 +37,7 @@ export interface NativeCreatureSite {
   hint: string;
   pressure?: { stamina: number; exposure: number; interval: number; radiusRings: number; label: string };
   combat?: { telegraph: string; weakness: string; result: string };
+  motion?: NativeCreatureMotion;
 }
 
 export interface NativeCreatureTendResult {
@@ -134,6 +150,197 @@ function tileEntriesAround(geo: Goldberg, centerTile: number, rings: number): { 
     }
   }
   return queue;
+}
+
+function nearSeaCave(geo: Goldberg, columns: Columns, tile: number): boolean {
+  if (caveMouthInfoAt(columns, tile)?.kind === 'seaCave') return true;
+  const deg = geo.degreeOf(tile);
+  for (let k = 0; k < deg; k++) {
+    if (caveMouthInfoAt(columns, geo.neighbor(tile, k))?.kind === 'seaCave') return true;
+  }
+  return false;
+}
+
+function creatureHabitatScore(
+  site: NativeCreatureSite,
+  seedHash: number,
+  geo: Goldberg,
+  columns: Columns,
+  terrain: Terrain,
+  tile: number,
+): number {
+  if (tile < 0 || tile >= geo.count) return Infinity;
+  const homeHeight = columns.heightOf(site.homeTile ?? site.tile);
+  const height = columns.heightOf(tile);
+  const slope = Math.abs(height - homeHeight);
+  if (slope > 10) return Infinity;
+  const material = terrain.surfaceMaterial(height);
+  const c = geo.centers;
+  const forest = terrain.forestAt(c[tile * 3], c[tile * 3 + 1], c[tile * 3 + 2]);
+  const water = waterNeighborCount(geo, columns, tile);
+  const caveLinks = naturalVoidNeighborCount(geo, columns, tile);
+  const mouth = caveMouthInfoAt(columns, tile);
+  const jitter = hash01(seedHash, site.id, 900 + tile % 997) * 0.12;
+
+  if (site.kind === 'mossPuff') {
+    if (height < 2.5 || height > 46 || material !== MAT.GRASS || forest < 0.2) return Infinity;
+    return slope * 0.5 + Math.max(0, 0.42 - forest) + jitter;
+  }
+  if (site.kind === 'shellSkitter') {
+    if (height < -1.4 || height > 3.8 || material !== MAT.SAND || water <= 0) return Infinity;
+    return slope * 0.25 + Math.abs(height) * 0.2 - Math.min(4, water) * 0.12 + jitter;
+  }
+  if (site.kind === 'reedbackGrazer') {
+    if (height < 1 || height > 20 || material !== MAT.GRASS || water <= 0 || forest > 0.65) return Infinity;
+    return slope * 0.3 + Math.max(0, forest - 0.35) + Math.abs(height - 3.5) * 0.04 + jitter;
+  }
+  if (site.kind === 'caveBlinker') {
+    if (height < -2.5 || height > 44 || !mouth) return Infinity;
+    if (material !== MAT.GRASS && material !== MAT.SAND && material !== MAT.SNOW && material !== MAT.ROCK) return Infinity;
+    return slope * 0.35 + (mouth.kind === 'dryCave' ? 0 : 0.5) - Math.min(1, mouth.clearance / 8) + jitter;
+  }
+  if (site.kind === 'caveBelljaw') {
+    if (height < -1.5 || height > 42 || !mouth) return Infinity;
+    if (material !== MAT.GRASS && material !== MAT.SAND && material !== MAT.SNOW && material !== MAT.ROCK) return Infinity;
+    return slope * 0.4 + (mouth.spring ? -0.2 : 0) + (mouth.kind === 'dryCave' ? 0 : 0.35) + jitter;
+  }
+  if (site.kind === 'tideLurker') {
+    if (height < -2.5 || height > 18 || !nearSeaCave(geo, columns, tile) || water <= 0) return Infinity;
+    if (material !== MAT.SAND && material !== MAT.ROCK && material !== MAT.GRASS) return Infinity;
+    return slope * 0.28 + Math.abs(height - 1.4) * 0.05 - Math.min(4, water) * 0.1 + jitter;
+  }
+  if (site.kind === 'screeSnapper') {
+    if (height < 30 || height > 92 || (material !== MAT.ROCK && material !== MAT.SNOW)) return Infinity;
+    if (caveLinks <= 0 && height < 54) return Infinity;
+    return slope * 0.45 - Math.min(3, caveLinks) * 0.14 + jitter;
+  }
+  if (site.kind === 'stormBurr') {
+    if (height < 16 || height > 76 || (material !== MAT.GRASS && material !== MAT.SNOW) || forest > 0.42 || water > 2) return Infinity;
+    return slope * 0.34 + Math.max(0, forest - 0.18) + jitter;
+  }
+  if (site.kind === 'brambleback') {
+    if (height < 7 || height > 60 || (material !== MAT.GRASS && material !== MAT.SNOW) || forest > 0.7) return Infinity;
+    return slope * 0.35 + Math.max(0, 0.28 - forest) * -0.25 + jitter;
+  }
+  return Infinity;
+}
+
+function roamLeashRings(site: NativeCreatureSite): number {
+  if (site.kind === 'caveBelljaw' || site.kind === 'caveBlinker') return 1;
+  if (site.kind === 'tideLurker' || site.kind === 'shellSkitter') return 1;
+  if (site.temperament === 'combative') return 1;
+  return 2;
+}
+
+function candidateRoamTiles(
+  site: NativeCreatureSite,
+  seedHash: number,
+  geo: Goldberg,
+  columns: Columns,
+  terrain: Terrain,
+): number[] {
+  const home = site.homeTile ?? site.tile;
+  const candidates = new Map<number, number>([[home, 0]]);
+  for (const entry of tileEntriesAround(geo, home, roamLeashRings(site))) {
+    const score = creatureHabitatScore(site, seedHash, geo, columns, terrain, entry.tile);
+    if (Number.isFinite(score)) candidates.set(entry.tile, score + entry.ring * 0.08);
+  }
+  return [...candidates.entries()]
+    .sort((a, b) => a[1] - b[1] || a[0] - b[0])
+    .map(([tile]) => tile)
+    .slice(0, 7);
+}
+
+function roamStateFor(site: NativeCreatureSite, moving: boolean): NativeCreatureRoamState {
+  if (site.tended) return 'settled';
+  if (site.warded) return 'recover';
+  if (site.temperament === 'harmless') return moving ? 'wander' : 'graze';
+  if (site.temperament === 'combative') return moving ? 'prowl' : 'warn';
+  return moving ? 'patrol' : 'watch';
+}
+
+function smooth01(t: number): number {
+  const x = Math.max(0, Math.min(1, t));
+  return x * x * (3 - 2 * x);
+}
+
+export function withNativeCreatureRoaming(
+  seed: string,
+  geo: Goldberg,
+  columns: Columns,
+  terrain: Terrain,
+  site: NativeCreatureSite,
+  seconds: number,
+): NativeCreatureSite {
+  const homeTile = site.homeTile ?? site.tile;
+  if (!Number.isFinite(seconds) || site.tended || site.warded) {
+    return {
+      ...site,
+      tile: homeTile,
+      homeTile,
+      motion: {
+        homeTile,
+        fromTile: homeTile,
+        toTile: homeTile,
+        currentTile: homeTile,
+        targetTile: homeTile,
+        progress: 1,
+        moving: false,
+        state: roamStateFor(site, false),
+        clip: 'idle',
+        leashRings: roamLeashRings(site),
+      },
+    };
+  }
+
+  const seedHash = hashString(`${seed}:native-life-roaming`);
+  const candidates = candidateRoamTiles(site, seedHash, geo, columns, terrain);
+  if (candidates.length <= 1) {
+    return {
+      ...site,
+      tile: homeTile,
+      homeTile,
+      motion: {
+        homeTile,
+        fromTile: homeTile,
+        toTile: homeTile,
+        currentTile: homeTile,
+        targetTile: homeTile,
+        progress: 1,
+        moving: false,
+        state: roamStateFor(site, false),
+        clip: 'idle',
+        leashRings: roamLeashRings(site),
+      },
+    };
+  }
+
+  const period = 6.5 + hash01(seedHash, site.id, 940) * 4.5;
+  const phase = Math.floor(Math.max(0, seconds + hash01(seedHash, site.id, 941) * period) / period);
+  const local = ((seconds + hash01(seedHash, site.id, 941) * period) / period) - phase;
+  const roamIndex = 1 + (Math.floor(hash01(seedHash, site.id, 960 + Math.floor(phase / 2)) * (candidates.length - 1)) % (candidates.length - 1));
+  const roamTile = candidates[roamIndex] ?? homeTile;
+  const outbound = phase % 2 === 0;
+  const travelFrac = site.temperament === 'harmless' ? 0.52 : 0.62;
+  const moving = local < travelFrac && roamTile !== homeTile;
+  const progress = moving ? smooth01(local / travelFrac) : 1;
+  const fromTile = outbound ? homeTile : roamTile;
+  const toTile = outbound ? roamTile : homeTile;
+  const restTile = outbound ? roamTile : homeTile;
+  const currentTile = moving ? (progress < 0.5 ? fromTile : toTile) : restTile;
+  const motion: NativeCreatureMotion = {
+    homeTile,
+    fromTile: moving ? fromTile : restTile,
+    toTile: moving ? toTile : restTile,
+    currentTile,
+    targetTile: toTile,
+    progress,
+    moving,
+    state: roamStateFor(site, moving),
+    clip: moving ? 'walk' : 'idle',
+    leashRings: roamLeashRings(site),
+  };
+  return { ...site, tile: currentTile, homeTile, motion };
 }
 
 export function normalizeNativeCreatureTends(raw: unknown): number[] {
@@ -615,13 +822,22 @@ export function nativeCreatureSitesAround(
   warded: ReadonlySet<number> = new Set(),
   maxSites = 6,
   kind: NativeCreatureKind | 'any' = 'any',
+  roamingSeconds?: number,
 ): NativeCreatureSite[] {
   const sites: NativeCreatureSite[] = [];
-  for (const entry of tileEntriesAround(geo, centerTile, Math.max(0, Math.trunc(rings)))) {
+  const baseRings = Math.max(0, Math.trunc(rings));
+  const withRoaming = Number.isFinite(roamingSeconds);
+  const visibleTiles = withRoaming ? new Set(tileEntriesAround(geo, centerTile, baseRings).map((entry) => entry.tile)) : null;
+  const scanRings = withRoaming ? baseRings + 2 : baseRings;
+  for (const entry of tileEntriesAround(geo, centerTile, scanRings)) {
     const site = nativeCreatureAt(seed, geo, columns, terrain, entry.tile, tended, warded);
     if (!site) continue;
     if (kind !== 'any' && site.kind !== kind) continue;
-    sites.push(site);
+    const finalSite = withRoaming
+      ? withNativeCreatureRoaming(seed, geo, columns, terrain, site, roamingSeconds!)
+      : site;
+    if (visibleTiles && !visibleTiles.has(finalSite.tile) && !visibleTiles.has(finalSite.homeTile ?? finalSite.tile)) continue;
+    sites.push(finalSite);
     if (sites.length >= maxSites) break;
   }
   return sites;

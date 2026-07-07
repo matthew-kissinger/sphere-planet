@@ -84,4 +84,48 @@ describe('native-life ray picking', () => {
       20,
     )).toBeNull();
   });
+
+  it('picks roaming actors at their current tile instead of their home tile', () => {
+    const geo = new Goldberg(8);
+    const layers = buildLayers();
+    const terrain = new Terrain('native-life-pick-roaming');
+    const columns = new Columns(geo, layers, terrain);
+    const homeTile = 0;
+    const currentTile = geo.neighbor(homeTile, 0);
+    const moving = site(homeTile);
+    moving.homeTile = homeTile;
+    moving.motion = {
+      homeTile,
+      fromTile: homeTile,
+      toTile: currentTile,
+      currentTile,
+      targetTile: currentTile,
+      progress: 1,
+      moving: false,
+      state: 'watch',
+      clip: 'idle',
+      leashRings: 1,
+    };
+    const c = geo.centers;
+    const nx = c[currentTile * 3];
+    const ny = c[currentTile * 3 + 1];
+    const nz = c[currentTile * 3 + 2];
+    const ground = layers.topRadius(columns.groundLayerBelow(currentTile, layers.bounds[0]));
+
+    const hit = pickNativeCreature(
+      geo,
+      layers,
+      columns,
+      [moving],
+      nx * (ground + 7),
+      ny * (ground + 7),
+      nz * (ground + 7),
+      -nx,
+      -ny,
+      -nz,
+      20,
+    );
+
+    expect(hit).toMatchObject({ tile: currentTile, site: { id: 101, tile: homeTile } });
+  });
 });

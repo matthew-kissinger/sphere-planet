@@ -502,6 +502,56 @@
       "prompt": "A flat lurking sea-cave creature: a wide low body, two eyes on stalks, big side paddle-fins, whiskers, a row of little crest spines, a wet amphibious look, goofy."
     },
     {
+      "slug": "fish-shore-minnow",
+      "title": "Fish · Shore Minnow",
+      "category": "character",
+      "role": "prop",
+      "tier": "standard",
+      "footprint": "small",
+      "animate": true,
+      "prompt": "Exactly one goofy low-poly shore fish character body for instancing: rounded single fish, tiny fins, big simple eyes, one or two color accents, centered at origin, no other fish, no school, no plants, no rocks, no water, no base, no scene."
+    },
+    {
+      "slug": "fish-storm-runner",
+      "title": "Fish · Storm Runner",
+      "category": "character",
+      "role": "prop",
+      "tier": "standard",
+      "footprint": "small",
+      "animate": true,
+      "prompt": "Exactly one low-poly storm-run fish character body for instancing: angular fast-looking single fish, bright fins, tiny glow accents on the body, centered at origin, no other fish, no school, no water, no weather effects, no base, no scene."
+    },
+    {
+      "slug": "fish-cave-shimmer",
+      "title": "Fish · Cave Shimmer",
+      "category": "character",
+      "role": "prop",
+      "tier": "standard",
+      "footprint": "small",
+      "animate": true,
+      "prompt": "Exactly one low-poly cave shimmer fish character body for instancing: rounded dark single fish, soft glowing belly, small fins, big curious eyes, centered at origin, no other fish, no school, no cave rocks, no water, no base, no scene."
+    },
+    {
+      "slug": "creature-driftjelly",
+      "title": "Creature · Driftjelly",
+      "category": "character",
+      "role": "prop",
+      "tier": "standard",
+      "footprint": "small",
+      "animate": true,
+      "prompt": "Exactly one gentle goofy open-ocean driftjelly creature character body: soft low-poly bell, dangling ribbon tendrils attached to the body, little face, glowing underside, centered at origin, no other creatures, no water, no plants, no base, no scene."
+    },
+    {
+      "slug": "fish-reed-fry",
+      "title": "Fish · Reed Fry",
+      "category": "character",
+      "role": "prop",
+      "tier": "background",
+      "footprint": "small",
+      "animate": true,
+      "prompt": "Exactly one tiny reed-water fry fish character body for instancing: small rounded single bait fish, simple eyes, short fins, compact readable silhouette, centered at origin, no other fish, no reed scrap, no plants, no water, no base, no scene."
+    },
+    {
       "slug": "cave-mouth-arch",
       "title": "Cave Mouth · Arch",
       "category": "prop",

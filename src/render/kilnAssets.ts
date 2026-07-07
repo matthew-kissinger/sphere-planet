@@ -2,6 +2,7 @@ import * as THREE from 'three/webgpu';
 import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';
 import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js';
 import type { DomainResourceKind } from '../sim/domainResources';
+import type { FishSchoolKind } from '../sim/fishing';
 import type { NativeCreatureKind } from '../sim/nativeLife';
 import type { TreeVisualKind } from '../world/trees';
 
@@ -31,6 +32,12 @@ export type KilnCreatureSkinSlug =
   | 'creature-scree-snapper'
   | 'creature-storm-burr'
   | 'creature-tide-lurker';
+export type KilnFishSkinSlug =
+  | 'fish-shore-minnow'
+  | 'fish-storm-runner'
+  | 'fish-cave-shimmer'
+  | 'creature-driftjelly'
+  | 'fish-reed-fry';
 
 type KilnAssetStatus = 'ready' | 'unused' | 'missing';
 
@@ -140,6 +147,10 @@ export interface KilnAssetSnapshot {
     enabled: readonly KilnCreatureSkinSlug[];
     loaded: readonly KilnCreatureSkinSlug[];
   };
+  fishSkins?: {
+    enabled: readonly KilnFishSkinSlug[];
+    loaded: readonly KilnFishSkinSlug[];
+  };
 }
 
 export interface StructureSkinProvider {
@@ -155,7 +166,7 @@ export interface KilnInstancedAssetPart {
   material: THREE.Material | THREE.Material[];
 }
 
-export type KilnInstancedOrientationPolicy = 'preserve-y-up' | 'longest-axis-to-y';
+export type KilnInstancedOrientationPolicy = 'preserve-y-up' | 'longest-axis-to-y' | 'longest-axis-to-z';
 export type KilnSourceUpAxis = 'x' | 'y' | 'z';
 
 export interface KilnInstancedOrientationSnapshot {
@@ -293,6 +304,42 @@ export interface KilnCreatureSkinTemplate {
 
 export interface CreatureSkinProvider {
   createCreatureSkinTemplate(slug: KilnCreatureSkinSlug): Promise<KilnCreatureSkinTemplate | null>;
+  snapshot?(): KilnAssetSnapshot;
+}
+
+export interface KilnFishSkinFitSnapshot {
+  slug: KilnFishSkinSlug;
+  schoolKind: FishSchoolKind;
+  socketRole: 'fish-school-body';
+  sourceBboxSize: readonly number[];
+  runtimeSourceBboxSize: readonly number[];
+  orientedSourceBboxSize: readonly number[];
+  normalizedBboxSize: readonly number[];
+  normalizePolicy: 'center-xyz-fit-length-longest-axis-forward';
+  orientation: KilnInstancedOrientationSnapshot;
+  animationPolicy: 'single-animated-anchors-plus-point-school-near-freeze-far';
+  sourceUrl: string;
+  sourceMeshCount: number;
+  materialCount?: number;
+  animationClips: readonly { name: string; channels: number; durationSec: number }[];
+  activeMixerRadius: number;
+  lowRateMixerRadius: number;
+  frozenMixerRadius: number;
+  acceptanceNote: string;
+}
+
+export interface KilnFishSkinTemplate {
+  slug: KilnFishSkinSlug;
+  schoolKind: FishSchoolKind;
+  manifest: KilnManifestAsset;
+  sourceUrl: string;
+  template: THREE.Object3D;
+  clips: readonly THREE.AnimationClip[];
+  fit: KilnFishSkinFitSnapshot;
+}
+
+export interface FishSkinProvider {
+  createFishSkinTemplate(slug: KilnFishSkinSlug): Promise<KilnFishSkinTemplate | null>;
   snapshot?(): KilnAssetSnapshot;
 }
 
@@ -464,6 +511,9 @@ const RUNTIME_TREE_SKINS: Record<KilnTreeSkinSlug, {
 export const CREATURE_ACTIVE_MIXER_RADIUS = 90;
 export const CREATURE_LOW_RATE_MIXER_RADIUS = 135;
 export const CREATURE_FROZEN_MIXER_RADIUS = 180;
+export const FISH_ACTIVE_MIXER_RADIUS = 110;
+export const FISH_LOW_RATE_MIXER_RADIUS = 165;
+export const FISH_FROZEN_MIXER_RADIUS = 230;
 
 const RUNTIME_CREATURE_SKINS: Record<KilnCreatureSkinSlug, {
   kind: NativeCreatureKind;
@@ -514,6 +564,38 @@ const RUNTIME_CREATURE_SKINS: Record<KilnCreatureSkinSlug, {
     kind: 'tideLurker',
     fitHeight: 0.76,
     acceptanceNote: 'accepted as an animated tide-lurker body; fishing pressure, warding, and splash telegraph remain code-authored',
+  },
+};
+
+const RUNTIME_FISH_SKINS: Record<KilnFishSkinSlug, {
+  schoolKind: FishSchoolKind;
+  fitLength: number;
+  acceptanceNote: string;
+}> = {
+  'fish-shore-minnow': {
+    schoolKind: 'shore',
+    fitLength: 0.72,
+    acceptanceNote: 'accepted as the animated singleton shore-fish body; school count, water placement, points, and catch rules remain code-authored',
+  },
+  'fish-storm-runner': {
+    schoolKind: 'storm',
+    fitLength: 0.86,
+    acceptanceNote: 'accepted as the animated singleton storm-run body; surge timing, rarity, and catch payout remain code-authored',
+  },
+  'fish-cave-shimmer': {
+    schoolKind: 'cave',
+    fitLength: 0.78,
+    acceptanceNote: 'accepted as the animated singleton cave-shimmer body; sea-cave hazard and fishing pressure remain code-authored',
+  },
+  'creature-driftjelly': {
+    schoolKind: 'run',
+    fitLength: 0.84,
+    acceptanceNote: 'accepted as the animated singleton tide-run driftjelly body; flocking and tide-domain selection remain code-authored',
+  },
+  'fish-reed-fry': {
+    schoolKind: 'run',
+    fitLength: 0.52,
+    acceptanceNote: 'accepted as the animated singleton reed-fry body; school size and bait behavior remain code-authored',
   },
 };
 
@@ -679,6 +761,12 @@ function axisCorrectionFor(sourceUpAxis: KilnSourceUpAxis): { matrix: THREE.Matr
   };
 }
 
+function axisCorrectionToForward(sourceAxis: KilnSourceUpAxis): { euler: [number, number, number] } {
+  if (sourceAxis === 'x') return { euler: [0, Number((-Math.PI / 2).toFixed(6)), 0] };
+  if (sourceAxis === 'y') return { euler: [Number((Math.PI / 2).toFixed(6)), 0, 0] };
+  return { euler: [0, 0, 0] };
+}
+
 function dominantAxis(size: THREE.Vector3, policy: KilnInstancedOrientationPolicy): KilnSourceUpAxis {
   if (policy !== 'longest-axis-to-y') return 'y';
   const axes: { axis: KilnSourceUpAxis; value: number }[] = [
@@ -689,6 +777,16 @@ function dominantAxis(size: THREE.Vector3, policy: KilnInstancedOrientationPolic
   axes.sort((a, b) => b.value - a.value);
   const largest = axes[0];
   return largest.value > size.y * 1.12 ? largest.axis : 'y';
+}
+
+function longestAxis(size: THREE.Vector3): KilnSourceUpAxis {
+  const axes: { axis: KilnSourceUpAxis; value: number }[] = [
+    { axis: 'x', value: size.x },
+    { axis: 'y', value: size.y },
+    { axis: 'z', value: size.z },
+  ];
+  axes.sort((a, b) => b.value - a.value);
+  return axes[0]?.axis ?? 'z';
 }
 
 export function makeInstancedAssetParts(
@@ -853,7 +951,77 @@ function normalizeCreatureTemplate(source: THREE.Object3D, slug: string, targetH
   return { template: root, runtimeSourceBboxSize, normalizedBboxSize, sourceMeshCount };
 }
 
-export class KilnRuntimeAssets implements StructureSkinProvider, ResourceDropSkinProvider, DomainResourceSkinProvider, TreeSkinProvider, CreatureSkinProvider {
+function normalizeFishTemplate(source: THREE.Object3D, slug: string, targetLength: number): {
+  template: THREE.Object3D;
+  runtimeSourceBboxSize: number[];
+  orientedSourceBboxSize: number[];
+  normalizedBboxSize: number[];
+  sourceMeshCount: number;
+  orientation: KilnInstancedOrientationSnapshot;
+} {
+  source.updateMatrixWorld(true);
+  const sourceBox = new THREE.Box3().setFromObject(source);
+  const runtimeSourceBboxSize = bboxSizeOfBox(sourceBox);
+  const sourceSize = new THREE.Vector3();
+  sourceBox.getSize(sourceSize);
+  const sourceUpAxis = longestAxis(sourceSize);
+  const correction = axisCorrectionToForward(sourceUpAxis);
+
+  const root = new THREE.Group();
+  root.name = `kiln-fish-template-${slug}`;
+  const scaled = new THREE.Group();
+  scaled.name = `kiln-fish-scale-${slug}`;
+  const offset = new THREE.Group();
+  offset.name = `kiln-fish-center-${slug}`;
+  const corrected = new THREE.Group();
+  corrected.name = `kiln-fish-forward-${slug}`;
+  corrected.rotation.set(...correction.euler);
+  const body = source.clone(true);
+  body.name = `kiln-fish-body-${slug}`;
+  let sourceMeshCount = 0;
+  body.traverse((child) => {
+    child.userData.kilnAssetSlug = slug;
+    if ((child as THREE.Mesh).isMesh) {
+      const mesh = child as THREE.Mesh;
+      sourceMeshCount += 1;
+      mesh.castShadow = false;
+      mesh.receiveShadow = true;
+      mesh.frustumCulled = false;
+    }
+  });
+  corrected.add(body);
+  offset.add(corrected);
+  scaled.add(offset);
+  root.add(scaled);
+
+  root.updateMatrixWorld(true);
+  const orientedBox = new THREE.Box3().setFromObject(corrected);
+  const orientedSourceBboxSize = bboxSizeOfBox(orientedBox);
+  const orientedSize = new THREE.Vector3();
+  orientedBox.getSize(orientedSize);
+  const orientedCenter = new THREE.Vector3();
+  orientedBox.getCenter(orientedCenter);
+  const forwardLength = Math.max(orientedSize.z, orientedSize.x, orientedSize.y);
+  const scale = forwardLength > 0 ? Math.max(0.01, targetLength / forwardLength) : 1;
+  offset.position.set(-orientedCenter.x, -orientedCenter.y, -orientedCenter.z);
+  scaled.scale.setScalar(scale);
+  root.updateMatrixWorld(true);
+  const normalizedBboxSize = fittedSize(root);
+  return {
+    template: root,
+    runtimeSourceBboxSize,
+    orientedSourceBboxSize,
+    normalizedBboxSize,
+    sourceMeshCount,
+    orientation: {
+      policy: 'longest-axis-to-z',
+      sourceUpAxis,
+      axisCorrection: correction.euler,
+    },
+  };
+}
+
+export class KilnRuntimeAssets implements StructureSkinProvider, ResourceDropSkinProvider, DomainResourceSkinProvider, TreeSkinProvider, CreatureSkinProvider, FishSkinProvider {
   private readonly enabled = new Set<KilnStructureSkinSlug>(['waystone', 'door-kit', 'window-frame', 'roof-bundle']);
   private readonly enabledResourceDrops = new Set<KilnResourceDropSkinSlug>(['drop-wood-logs', 'drop-ore-chunk']);
   private readonly enabledDomainResourceSkins = new Set<KilnDomainResourceSkinSlug>([
@@ -882,12 +1050,20 @@ export class KilnRuntimeAssets implements StructureSkinProvider, ResourceDropSki
     'creature-storm-burr',
     'creature-tide-lurker',
   ]);
+  private readonly enabledFishSkins = new Set<KilnFishSkinSlug>([
+    'fish-shore-minnow',
+    'fish-storm-runner',
+    'fish-cave-shimmer',
+    'creature-driftjelly',
+    'fish-reed-fry',
+  ]);
   private readonly loader = new GLTFLoader();
   private readonly loaded = new Set<KilnStructureSkinSlug>();
   private readonly loadedResourceDrops = new Set<KilnResourceDropSkinSlug>();
   private readonly loadedDomainResourceSkins = new Set<KilnDomainResourceSkinSlug>();
   private readonly loadedTreeSkins = new Set<KilnTreeSkinSlug>();
   private readonly loadedCreatureSkins = new Set<KilnCreatureSkinSlug>();
+  private readonly loadedFishSkins = new Set<KilnFishSkinSlug>();
   private readonly failed: string[] = [];
   private readonly modelRequests: string[] = [];
   private manifestPromise: Promise<KilnManifest | null> | null = null;
@@ -897,6 +1073,7 @@ export class KilnRuntimeAssets implements StructureSkinProvider, ResourceDropSki
   private readonly domainResourceTemplates = new Map<KilnDomainResourceSkinSlug, Promise<KilnDomainResourceSkinTemplate | null>>();
   private readonly treeTemplates = new Map<KilnTreeSkinSlug, Promise<KilnTreeSkinTemplate | null>>();
   private readonly creatureTemplates = new Map<KilnCreatureSkinSlug, Promise<KilnCreatureSkinTemplate | null>>();
+  private readonly fishTemplates = new Map<KilnFishSkinSlug, Promise<KilnFishSkinTemplate | null>>();
   private readonly baseUrl: string;
 
   readonly manifestUrl: string;
@@ -944,6 +1121,10 @@ export class KilnRuntimeAssets implements StructureSkinProvider, ResourceDropSki
     return this.loadCreatureTemplate(slug);
   }
 
+  async createFishSkinTemplate(slug: KilnFishSkinSlug): Promise<KilnFishSkinTemplate | null> {
+    return this.loadFishTemplate(slug);
+  }
+
   snapshot(): KilnAssetSnapshot {
     return {
       enabled: [...this.enabled],
@@ -973,6 +1154,10 @@ export class KilnRuntimeAssets implements StructureSkinProvider, ResourceDropSki
       creatureSkins: {
         enabled: [...this.enabledCreatureSkins],
         loaded: [...this.loadedCreatureSkins],
+      },
+      fishSkins: {
+        enabled: [...this.enabledFishSkins],
+        loaded: [...this.loadedFishSkins],
       },
     };
   }
@@ -1277,6 +1462,81 @@ export class KilnRuntimeAssets implements StructureSkinProvider, ResourceDropSki
       });
 
     this.creatureTemplates.set(slug, promise);
+    return promise;
+  }
+
+  private loadFishTemplate(slug: KilnFishSkinSlug): Promise<KilnFishSkinTemplate | null> {
+    if (!this.enabledFishSkins.has(slug)) return Promise.resolve(null);
+    const existing = this.fishTemplates.get(slug);
+    if (existing) return existing;
+
+    const promise = this.loadManifest()
+      .then(async (manifest) => {
+        const asset = manifest?.assets?.find((entry) => entry.slug === slug);
+        if (!asset || asset.status !== 'ready' || !asset.file) {
+          this.failed.push(`${slug}: missing ready manifest record`);
+          return null;
+        }
+        const sourceUrl = publicAssetUrl(`assets/kiln/${asset.file}`, this.baseUrl);
+        this.modelRequests.push(sourceUrl);
+        const gltf = await this.loader.loadAsync(sourceUrl);
+        const fish = RUNTIME_FISH_SKINS[slug];
+        const { template, runtimeSourceBboxSize, orientedSourceBboxSize, normalizedBboxSize, sourceMeshCount, orientation } =
+          normalizeFishTemplate(gltf.scene as unknown as THREE.Object3D, slug, fish.fitLength);
+        const clips = gltf.animations ?? [];
+        if (clips.length === 0) {
+          this.failed.push(`${slug}: missing animation clips`);
+          return null;
+        }
+        const loadedClipNames = new Set(clips.map((clip) => clip.name));
+        if (!loadedClipNames.has('idle') || (!loadedClipNames.has('swim') && !loadedClipNames.has('pulse'))) {
+          this.failed.push(`${slug}: missing required idle plus swim/pulse clips`);
+          return null;
+        }
+        const animationClips = (asset.animations ?? clips.map((clip) => ({ name: clip.name, durationSec: clip.duration, channels: 0 })))
+          .filter((clip) => typeof clip.name === 'string')
+          .map((clip) => ({
+            name: String(clip.name),
+            channels: Math.max(0, Math.trunc(clip.channels ?? 0)),
+            durationSec: Number((Number(clip.durationSec ?? clips.find((loadedClip) => loadedClip.name === clip.name)?.duration ?? 0)).toFixed(3)),
+          }));
+        this.loadedFishSkins.add(slug);
+        const fit: KilnFishSkinFitSnapshot = {
+          slug,
+          schoolKind: fish.schoolKind,
+          socketRole: 'fish-school-body',
+          sourceBboxSize: sourceBboxSize(asset),
+          runtimeSourceBboxSize,
+          orientedSourceBboxSize,
+          normalizedBboxSize,
+          normalizePolicy: 'center-xyz-fit-length-longest-axis-forward',
+          orientation,
+          animationPolicy: 'single-animated-anchors-plus-point-school-near-freeze-far',
+          sourceUrl,
+          sourceMeshCount,
+          materialCount: asset.geometry?.materialCount,
+          animationClips,
+          activeMixerRadius: FISH_ACTIVE_MIXER_RADIUS,
+          lowRateMixerRadius: FISH_LOW_RATE_MIXER_RADIUS,
+          frozenMixerRadius: FISH_FROZEN_MIXER_RADIUS,
+          acceptanceNote: fish.acceptanceNote,
+        };
+        return {
+          slug,
+          schoolKind: fish.schoolKind,
+          manifest: asset,
+          sourceUrl,
+          template,
+          clips,
+          fit,
+        };
+      })
+      .catch((err: unknown) => {
+        this.failed.push(`${slug}: ${err instanceof Error ? err.message : String(err)}`);
+        return null;
+      });
+
+    this.fishTemplates.set(slug, promise);
     return promise;
   }
 }

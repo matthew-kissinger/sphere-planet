@@ -11,6 +11,7 @@ import {
   normalizeNativeCreatureWards,
   tendNativeCreature,
   wardNativeCreature,
+  withNativeCreatureRoaming,
 } from '../src/sim/nativeLife';
 
 describe('planet-native harmless life', () => {
@@ -30,6 +31,46 @@ describe('planet-native harmless life', () => {
     expect(aroundA.length).toBeGreaterThan(0);
     expect(aroundA.map((site) => ({ id: site.id, tile: site.tile, label: site.label, reward: site.reward })))
       .toEqual(aroundB.map((site) => ({ id: site.id, tile: site.tile, label: site.label, reward: site.reward })));
+  });
+
+  it('derives stable roaming actors without changing native-life identity', () => {
+    const seed = 'native-life-roaming';
+    const terrain = new Terrain(seed);
+    const columns = new Columns(geo, layers, terrain);
+    const candidates = nativeCreatureSitesAround(seed, geo, columns, terrain, 0, 180, new Set(), new Set(), 64);
+    let sample: { home: NonNullable<(typeof candidates)[number]>; roaming: NonNullable<(typeof candidates)[number]>; seconds: number } | null = null;
+    for (const home of candidates) {
+      for (let seconds = 0; seconds <= 80; seconds += 0.5) {
+        const roaming = withNativeCreatureRoaming(seed, geo, columns, terrain, home, seconds);
+        if (roaming.motion?.moving && roaming.motion.fromTile !== roaming.motion.toTile) {
+          sample = { home, roaming, seconds };
+          break;
+        }
+      }
+      if (sample) break;
+    }
+
+    expect(sample).not.toBeNull();
+    expect(sample!.roaming.id).toBe(sample!.home.id);
+    expect(sample!.roaming.homeTile).toBe(sample!.home.tile);
+    expect(sample!.roaming.motion).toMatchObject({
+      homeTile: sample!.home.tile,
+      moving: true,
+      clip: 'walk',
+    });
+    expect([sample!.roaming.motion!.fromTile, sample!.roaming.motion!.toTile]).toContain(sample!.home.tile);
+    expect(sample!.roaming.motion!.progress).toBeGreaterThanOrEqual(0);
+    expect(sample!.roaming.motion!.progress).toBeLessThanOrEqual(1);
+    expect(sample!.seconds).toBeGreaterThanOrEqual(0);
+
+    const tended = withNativeCreatureRoaming(seed, geo, columns, terrain, { ...sample!.home, tended: true }, sample!.seconds + 5);
+    expect(tended.tile).toBe(sample!.home.tile);
+    expect(tended.motion).toMatchObject({
+      currentTile: sample!.home.tile,
+      moving: false,
+      state: 'settled',
+      clip: 'idle',
+    });
   });
 
   it('tends once, returns seed rewards, and normalizes saved tend ids', () => {

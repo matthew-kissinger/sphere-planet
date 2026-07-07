@@ -107,9 +107,9 @@ export function pickTree(
 }
 
 /**
- * Ray test against tile-anchored native life. It treats each visible creature as an upright
- * local-normal capsule, which is intentionally a little generous because the GLB skins bob
- * and graze around their owning hex.
+ * Ray test against visible native life. Roaming actors use their current tile, while older
+ * static sites stay anchored to their owning hex. The capsule is intentionally a little
+ * generous because the GLB skins bob, graze, and now walk between neighboring hexes.
  */
 export function pickNativeCreature(
   geo: Goldberg, layers: Layers, columns: Columns,
@@ -121,7 +121,7 @@ export function pickNativeCreature(
   const c = geo.centers;
   let best: NativeCreaturePick | null = null;
   for (const site of sites) {
-    const tile = Math.max(0, Math.min(geo.count - 1, Math.trunc(site.tile)));
+    const tile = Math.max(0, Math.min(geo.count - 1, Math.trunc(site.motion?.currentTile ?? site.tile)));
     const profile = nativeCreatureProfile[site.kind];
     const ux = c[tile * 3];
     const uy = c[tile * 3 + 1];

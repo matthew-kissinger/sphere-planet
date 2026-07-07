@@ -7,7 +7,7 @@ import {
   type KilnInstancedOrientationSnapshot,
 } from '../render/kilnAssets';
 
-type KilnViewerFamily = 'structures' | 'drops' | 'nodes' | 'trees' | 'creatures' | 'adopted' | 'ready';
+type KilnViewerFamily = 'structures' | 'drops' | 'nodes' | 'trees' | 'creatures' | 'fish' | 'adopted' | 'ready' | 'generated';
 
 interface KilnManifestAsset {
   slug: string;
@@ -108,8 +108,21 @@ const FAMILY_SLUGS: Record<KilnViewerFamily, readonly string[]> = {
     'creature-storm-burr',
     'creature-tide-lurker',
   ],
+  fish: [
+    'fish-shore-minnow',
+    'fish-storm-runner',
+    'fish-cave-shimmer',
+    'creature-driftjelly',
+    'fish-reed-fry',
+  ],
   adopted: [],
   ready: [],
+  generated: [
+    'bird-sky-kite',
+    'bird-shore-gull',
+    'bird-forest-flutter',
+    'bird-storm-finch',
+  ],
 };
 
 FAMILY_SLUGS.adopted = [
@@ -118,6 +131,7 @@ FAMILY_SLUGS.adopted = [
   ...FAMILY_SLUGS.nodes,
   ...FAMILY_SLUGS.trees,
   ...FAMILY_SLUGS.creatures,
+  ...FAMILY_SLUGS.fish,
 ];
 
 function publicAssetUrl(relativePath: string): string {
@@ -128,13 +142,13 @@ function publicAssetUrl(relativePath: string): string {
 
 function selectedFamily(params: URLSearchParams): KilnViewerFamily {
   const raw = params.get('family') ?? 'ready';
-  return raw === 'structures' || raw === 'drops' || raw === 'nodes' || raw === 'trees' || raw === 'creatures' || raw === 'adopted' || raw === 'ready'
+  return raw === 'structures' || raw === 'drops' || raw === 'nodes' || raw === 'trees' || raw === 'creatures' || raw === 'fish' || raw === 'adopted' || raw === 'ready' || raw === 'generated'
     ? raw
     : 'ready';
 }
 
 function familyForSlug(slug: string): KilnViewerFamily {
-  for (const family of ['structures', 'drops', 'nodes', 'trees', 'creatures'] as KilnViewerFamily[]) {
+  for (const family of ['structures', 'drops', 'nodes', 'trees', 'creatures', 'fish'] as KilnViewerFamily[]) {
     if (FAMILY_SLUGS[family].includes(slug)) return family;
   }
   return 'ready';
@@ -153,8 +167,17 @@ function socketProfileFor(slug: string, family: KilnViewerFamily, asset?: KilnMa
       ? { role: 'low vegetation on one hex', grid: 'single-hex scatter', footprint: 1.55, height: 1.05, ringColor: 0x7ccf7a }
       : { role: 'upright tree on one hex', grid: 'single-hex scatter', footprint: 3.1, height: 4.4, ringColor: 0x7ccf7a };
   }
+  if (slug.startsWith('fish-') || slug === 'creature-driftjelly') {
+    return { role: 'instanced aquatic body', grid: 'waterline/underwater school anchor socket', footprint: 1.65, height: 1.0, ringColor: 0x87d9e8 };
+  }
+  if (slug.startsWith('bird-')) {
+    return { role: 'generated single bird body review', grid: 'instanced sky-life/boid body socket', footprint: 1.8, height: 1.15, ringColor: 0xb6d7ff };
+  }
   if (slug.startsWith('creature-') || family === 'creatures') {
     return { role: 'tile-anchored native creature', grid: 'single-hex occupied tile', footprint: 1.75, height: 1.25, ringColor: 0xe4a85c };
+  }
+  if (family === 'generated') {
+    return { role: 'generated quarantine review', grid: 'review socket before cataloging', footprint: 1.65, height: 1.0, ringColor: 0xcfc7ff };
   }
   if (slug.startsWith('drop-') || family === 'drops') {
     return { role: 'ground pickup', grid: 'single-hex loose item', footprint: 1.05, height: 0.55, ringColor: 0xf1d27a };
@@ -187,10 +210,49 @@ function readyManifestSlugs(manifest: KilnManifest): string[] {
     .map((asset) => asset.slug);
 }
 
-function slugsForSelection(family: KilnViewerFamily, manifest: KilnManifest, requestedSlug: string | null): string[] {
+function generatedSlugsFromParams(params: URLSearchParams): string[] {
+  const raw = params.get('slugs');
+  if (!raw) return [...FAMILY_SLUGS.generated];
+  return raw.split(',')
+    .map((slug) => slug.trim())
+    .filter((slug) => /^[a-zA-Z0-9_-]+$/.test(slug));
+}
+
+function slugsForSelection(family: KilnViewerFamily, manifest: KilnManifest, requestedSlug: string | null, params: URLSearchParams): string[] {
   if (requestedSlug) return [requestedSlug];
+  if (family === 'generated') return generatedSlugsFromParams(params);
   if (family === 'ready') return readyManifestSlugs(manifest);
   return [...FAMILY_SLUGS[family]];
+}
+
+async function generatedReviewAsset(slug: string): Promise<KilnManifestAsset> {
+  let meta: any = null;
+  try {
+    const res = await fetch(publicAssetUrl(`assets/kiln/generated/${slug}/asset.json`));
+    if (res.ok) meta = await res.json();
+  } catch {
+    meta = null;
+  }
+  const requested = meta?.requestedItem ?? {};
+  const animationNames = Array.isArray(requested.animationClips)
+    ? requested.animationClips.filter((name: unknown) => typeof name === 'string')
+    : [];
+  return {
+    slug,
+    title: requested.name ?? meta?.name ?? slug,
+    category: meta?.category ?? requested.category,
+    role: meta?.role ?? requested.role ?? 'generated-review',
+    status: 'ready',
+    file: `generated/${slug}/model.glb`,
+    wiringRisk: 'generated quarantine: review before catalog, promotion, and runtime wiring',
+    geometry: {
+      triangles: typeof meta?.quality?.tris === 'number' ? meta.quality.tris : undefined,
+      materialCount: typeof meta?.quality?.optimizedPalette?.materialsAfter === 'number'
+        ? meta.quality.optimizedPalette.materialsAfter
+        : undefined,
+    },
+    animations: animationNames.map((name: string) => ({ name })),
+  };
 }
 
 function bboxSizeOfObject(object: THREE.Object3D): number[] {
@@ -501,7 +563,7 @@ export async function bootKilnAssetViewer(): Promise<void> {
 
   const manifest = await fetch(publicAssetUrl('assets/kiln/ASSET_MANIFEST.json')).then((res) => res.json() as Promise<KilnManifest>);
   const bySlug = new Map((manifest.assets ?? []).map((asset) => [asset.slug, asset]));
-  const slugs = slugsForSelection(family, manifest, requestedSlug);
+  const slugs = slugsForSelection(family, manifest, requestedSlug, params);
   panel.textContent = `Kiln alignment viewer\nfamily ${family}\nloading ${slugs.length} asset${slugs.length === 1 ? '' : 's'}`;
   const loader = new GLTFLoader();
   const content = new THREE.Group();
@@ -514,8 +576,8 @@ export async function bootKilnAssetViewer(): Promise<void> {
   const mixers: THREE.AnimationMixer[] = [];
   for (let i = 0; i < slugs.length; i += 1) {
     const slug = slugs[i];
-    const asset = bySlug.get(slug);
-    const assetFamily = familyForSlug(slug);
+    const asset = bySlug.get(slug) ?? (family === 'generated' ? await generatedReviewAsset(slug) : undefined);
+    const assetFamily = family === 'generated' ? 'generated' : familyForSlug(slug);
     const profile = socketProfileFor(slug, assetFamily, asset);
     const cell = new THREE.Group();
     cell.name = `viewer-cell-${slug}`;

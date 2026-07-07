@@ -112,7 +112,7 @@
       "id": "k9-aquatic-life",
       "priority": 2,
       "goalNode": "K9 aquatic life and fishing visibility",
-      "reason": "Fishing already has systems, traps, nets, and fish-school rules, but there are no authored fish bodies in the approved pack.",
+      "reason": "Fishing already has systems, traps, nets, and fish-school rules, but there are no authored single fish bodies in the approved pack. Schools/flocks must be runtime instancing, not generated mini-scenes.",
       "requiresBeforeCatalog": [
         "Fish-school visual owner in fishing or native-life renderer",
         "Distance-gated swim animation policy",
@@ -121,8 +121,8 @@
       "runtimeOwner": "Fishing sim + NativeLifeRenderer or dedicated FishSchoolRenderer",
       "manifest": {
         "schemaVersion": "kiln.pack.v1",
-        "name": "Sphere Planet Aquatic Life",
-        "sourceIntent": "A coherent set of silly low-poly aquatic life for a spherical hex survival game. These are visible swimming bodies for existing fishing, trap, net, cave, and storm-run systems, not terrain or collision meshes.",
+        "name": "Sphere Planet Aquatic Single Bodies",
+        "sourceIntent": "A coherent set of silly low-poly single aquatic character bodies for a spherical hex survival game. Generate exactly one creature or fish per item: no schools, no clusters, no foliage, no water base, no rocks, no props, and no mini-scenes. Runtime code will instance, scale, tint, and flock these bodies for fish schools.",
         "paletteId": "sphere-planet",
         "toggles": {
           "moreDetail": true,
@@ -131,8 +131,8 @@
         },
         "items": [
           {
-            "name": "fish-school-shore",
-            "prompt": "A small loose school of three goofy low-poly shore fish: rounded bodies, tiny fins, big simple eyes, one or two color accents, arranged as one readable compact group for shallow water.",
+            "name": "fish-shore-minnow",
+            "prompt": "Exactly one goofy low-poly shore fish character body for instancing: rounded single fish, tiny fins, big simple eyes, one or two color accents, centered at origin, no other fish, no school, no plants, no rocks, no water, no base, no scene.",
             "category": "character",
             "role": "prop",
             "tier": "standard",
@@ -141,8 +141,8 @@
             "count": 1
           },
           {
-            "name": "fish-school-storm-run",
-            "prompt": "A compact school of storm-run fish with angular little bodies, bright fins, and tiny sparkle-like glow accents, readable as fast migrating fish in rough water.",
+            "name": "fish-storm-runner",
+            "prompt": "Exactly one low-poly storm-run fish character body for instancing: angular fast-looking single fish, bright fins, tiny glow accents on the body, centered at origin, no other fish, no school, no water, no weather effects, no base, no scene.",
             "category": "character",
             "role": "prop",
             "tier": "standard",
@@ -151,8 +151,8 @@
             "count": 1
           },
           {
-            "name": "fish-school-cave-shimmer",
-            "prompt": "A compact school of cave shimmer fish: rounded dark bodies, soft glowing bellies, small fins, big curious eyes, arranged as a readable group for dim sea caves.",
+            "name": "fish-cave-shimmer",
+            "prompt": "Exactly one low-poly cave shimmer fish character body for instancing: rounded dark single fish, soft glowing belly, small fins, big curious eyes, centered at origin, no other fish, no school, no cave rocks, no water, no base, no scene.",
             "category": "character",
             "role": "prop",
             "tier": "standard",
@@ -162,7 +162,7 @@
           },
           {
             "name": "creature-driftjelly",
-            "prompt": "A gentle goofy open-ocean driftjelly creature: soft low-poly bell, dangling ribbon tendrils, little face, glowing underside, friendly but strange, sized as a visible swimming neighbor.",
+            "prompt": "Exactly one gentle goofy open-ocean driftjelly creature character body: soft low-poly bell, dangling ribbon tendrils attached to the body, little face, glowing underside, centered at origin, no other creatures, no water, no plants, no base, no scene.",
             "category": "character",
             "role": "prop",
             "tier": "standard",
@@ -171,13 +171,78 @@
             "count": 1
           },
           {
-            "name": "fish-school-reed-fry",
-            "prompt": "A tiny reed-water fish cluster: four small rounded fry around a reed scrap, simple eyes and short fins, compact and readable as bait fish near shore nets.",
+            "name": "fish-reed-fry",
+            "prompt": "Exactly one tiny reed-water fry fish character body for instancing: small rounded single bait fish, simple eyes, short fins, compact readable silhouette, centered at origin, no other fish, no reed scrap, no plants, no water, no base, no scene.",
             "category": "character",
             "role": "prop",
             "tier": "background",
             "includeAnimation": true,
             "animationClips": ["idle", "swim", "turn"],
+            "count": 1
+          }
+        ]
+      }
+    },
+    {
+      "id": "k11-sky-life-singletons",
+      "priority": 3,
+      "goalNode": "K11 sky life and bird boids",
+      "reason": "Birds should be authored as single animated bodies. Runtime code will instance, scale, flock, perch, and distance-gate them instead of baking flocks or scenery into GLBs.",
+      "requiresBeforeCatalog": [
+        "Bird visual owner and boids budget",
+        "Distance-gated flap animation policy",
+        "Per-biome sky-life spawn rules"
+      ],
+      "runtimeOwner": "Future SkyLifeRenderer + KilnRuntimeAssets bird body provider",
+      "manifest": {
+        "schemaVersion": "kiln.pack.v1",
+        "name": "Sphere Planet Sky Life Single Bodies",
+        "sourceIntent": "A coherent set of silly low-poly single bird character bodies for a spherical hex survival game. Generate exactly one bird per item: no flocks, no second bird, no branch, no tree, no nest, no sky background, no clouds, no rocks, no water, no base, and no mini-scenes. Runtime code will instance, scale, tint, perch, and flock these bodies.",
+        "paletteId": "sphere-planet",
+        "toggles": {
+          "moreDetail": true,
+          "optimizedPalette": true,
+          "consolidateMaterials": "force"
+        },
+        "items": [
+          {
+            "name": "bird-sky-kite",
+            "prompt": "Exactly one goofy low-poly sky-kite bird character body for instancing: wide simple wings, small rounded body, tiny tail fan, big simple eyes, centered at origin in a neutral flying pose, no other birds, no flock, no branch, no tree, no sky, no base, no scene.",
+            "category": "character",
+            "role": "prop",
+            "tier": "standard",
+            "includeAnimation": true,
+            "animationClips": ["idle", "flap", "glide", "turn"],
+            "count": 1
+          },
+          {
+            "name": "bird-shore-gull",
+            "prompt": "Exactly one silly low-poly shore gull bird character body for instancing: compact white-grey body, long simple beak, wide wings, tiny feet tucked close, readable single-bird silhouette, centered at origin, no other birds, no flock, no water, no dock, no rocks, no base, no scene.",
+            "category": "character",
+            "role": "prop",
+            "tier": "standard",
+            "includeAnimation": true,
+            "animationClips": ["idle", "flap", "glide", "turn"],
+            "count": 1
+          },
+          {
+            "name": "bird-forest-flutter",
+            "prompt": "Exactly one goofy low-poly forest flutter bird character body for instancing: round colorful body, short wings, small tail feathers, oversized curious eyes, centered at origin in a neutral flying pose, no other birds, no flock, no branch, no leaves, no tree, no base, no scene.",
+            "category": "character",
+            "role": "prop",
+            "tier": "standard",
+            "includeAnimation": true,
+            "animationClips": ["idle", "flap", "glide", "turn"],
+            "count": 1
+          },
+          {
+            "name": "bird-storm-finch",
+            "prompt": "Exactly one low-poly storm finch bird character body for instancing: angular small body, swept wings, tiny crest, bright accent tips, big simple eyes, centered at origin in a neutral flying pose, no lightning effect, no other birds, no flock, no clouds, no weather scene, no base.",
+            "category": "character",
+            "role": "prop",
+            "tier": "standard",
+            "includeAnimation": true,
+            "animationClips": ["idle", "flap", "glide", "turn"],
             "count": 1
           }
         ]

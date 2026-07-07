@@ -51,6 +51,13 @@ const baseFamilySlugs = {
     'creature-storm-burr',
     'creature-tide-lurker',
   ],
+  fish: [
+    'fish-shore-minnow',
+    'fish-storm-runner',
+    'fish-cave-shimmer',
+    'creature-driftjelly',
+    'fish-reed-fry',
+  ],
 };
 
 let familySlugs = { ...baseFamilySlugs };

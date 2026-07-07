@@ -528,14 +528,18 @@ export class NativeLifeRenderer {
       let obj = this.objects.get(site.id);
       if (!obj) {
         obj = makeNativeCreature(site);
-        obj.userData.nativeCreatureId = site.id;
-        obj.userData.tile = site.tile;
-        obj.userData.nativeKind = site.kind;
-        obj.userData.nativeTemperament = site.temperament;
-        obj.userData.nativeSilhouette = silhouettes[site.kind];
         this.objects.set(site.id, obj);
         this.group.add(obj);
       }
+      obj.userData.nativeCreatureId = site.id;
+      obj.userData.tile = site.tile;
+      obj.userData.nativeHomeTile = site.homeTile ?? site.tile;
+      obj.userData.nativeKind = site.kind;
+      obj.userData.nativeTemperament = site.temperament;
+      obj.userData.nativeSilhouette = silhouettes[site.kind];
+      obj.userData.nativeRoamState = site.motion?.state ?? 'static';
+      obj.userData.nativeRoamMoving = site.motion?.moving === true;
+      obj.userData.nativeClipHint = site.motion?.clip ?? 'idle';
       const slug = KILN_CREATURE_SKIN_BY_KIND[site.kind];
       this.ensureSkin(slug);
       const template = this.skinTemplates.get(slug);
@@ -661,7 +665,7 @@ export class NativeLifeRenderer {
       : 'hidden';
     record.band = desiredBand;
     record.root.visible = desiredBand !== 'hidden';
-    const desiredClip = site.temperament === 'harmless' || site.tended || site.warded ? 'idle' : 'walk';
+    const desiredClip = site.motion?.clip ?? (site.temperament === 'harmless' || site.tended || site.warded ? 'idle' : 'walk');
     const clip = record.clips.get(desiredClip) ?? record.clips.get('idle') ?? [...record.clips.values()][0];
     if (!clip) return;
     let action = record.actions.get(clip.name);
@@ -698,29 +702,51 @@ export class NativeLifeRenderer {
     const vX = new THREE.Vector3();
     const vY = new THREE.Vector3();
     const vZ = new THREE.Vector3();
+    const moveDir = new THREE.Vector3();
+    const baseDir = new THREE.Vector3();
     const m = new THREE.Matrix4();
     const c = geo.centers;
     for (const site of sites) {
       const obj = this.objects.get(site.id);
       if (!obj) continue;
-      const frame = geo.frameOf(site.tile);
-      const yaw = site.id * 0.41 + Math.sin(seconds * 0.58 + site.id) * 0.16;
-      const ca = Math.cos(yaw);
-      const sa = Math.sin(yaw);
-      vX.set(
-        frame.east[0] * ca + frame.north[0] * sa,
-        frame.east[1] * ca + frame.north[1] * sa,
-        frame.east[2] * ca + frame.north[2] * sa,
-      );
+      const motion = site.motion;
+      const frameTile = Math.max(0, Math.min(geo.count - 1, Math.trunc(motion?.currentTile ?? site.tile)));
+      const frame = geo.frameOf(frameTile);
       vY.set(...frame.normal);
-      vZ.set(
-        -frame.east[0] * sa + frame.north[0] * ca,
-        -frame.east[1] * sa + frame.north[1] * ca,
-        -frame.east[2] * sa + frame.north[2] * ca,
-      );
+      if (motion?.moving && motion.fromTile !== motion.toTile) {
+        const fromTile = Math.max(0, Math.min(geo.count - 1, Math.trunc(motion.fromTile)));
+        const toTile = Math.max(0, Math.min(geo.count - 1, Math.trunc(motion.toTile)));
+        moveDir.set(
+          c[toTile * 3] - c[fromTile * 3],
+          c[toTile * 3 + 1] - c[fromTile * 3 + 1],
+          c[toTile * 3 + 2] - c[fromTile * 3 + 2],
+        );
+        moveDir.addScaledVector(vY, -moveDir.dot(vY));
+        if (moveDir.lengthSq() > 1e-8) {
+          vZ.copy(moveDir).normalize();
+          vX.crossVectors(vY, vZ).normalize();
+        } else {
+          vX.set(...frame.east);
+          vZ.set(...frame.north);
+        }
+      } else {
+        const yaw = site.id * 0.41 + Math.sin(seconds * 0.58 + site.id) * 0.16;
+        const ca = Math.cos(yaw);
+        const sa = Math.sin(yaw);
+        vX.set(
+          frame.east[0] * ca + frame.north[0] * sa,
+          frame.east[1] * ca + frame.north[1] * sa,
+          frame.east[2] * ca + frame.north[2] * sa,
+        );
+        vZ.set(
+          -frame.east[0] * sa + frame.north[0] * ca,
+          -frame.east[1] * sa + frame.north[1] * ca,
+          -frame.east[2] * sa + frame.north[2] * ca,
+        );
+      }
       m.makeBasis(vX, vY, vZ);
       obj.setRotationFromMatrix(m);
-      const ground = layers.topRadius(columns.groundLayerBelow(site.tile, layers.bounds[0]));
+      const ground = layers.topRadius(columns.groundLayerBelow(frameTile, layers.bounds[0]));
       const hop = site.kind === 'brambleback'
         ? Math.max(0, Math.sin(seconds * 2.05 + site.id * 0.31)) * 0.04
         : site.kind === 'caveBelljaw'
@@ -768,12 +794,32 @@ export class NativeLifeRenderer {
         : site.kind === 'reedbackGrazer'
         ? Math.cos(seconds * 0.56 + site.id * 1.7) * 0.11
         : Math.cos(seconds * 0.37 + site.id * 1.7) * 0.1;
+      const roamScale = motion?.moving ? 0.28 : 1;
       const r = ground + 0.06 + hop;
+      if (motion?.moving && motion.fromTile !== motion.toTile) {
+        const fromTile = Math.max(0, Math.min(geo.count - 1, Math.trunc(motion.fromTile)));
+        const toTile = Math.max(0, Math.min(geo.count - 1, Math.trunc(motion.toTile)));
+        const t = Math.max(0, Math.min(1, motion.progress));
+        baseDir.set(
+          c[fromTile * 3] * (1 - t) + c[toTile * 3] * t,
+          c[fromTile * 3 + 1] * (1 - t) + c[toTile * 3 + 1] * t,
+          c[fromTile * 3 + 2] * (1 - t) + c[toTile * 3 + 2] * t,
+        ).normalize();
+        const fromGround = layers.topRadius(columns.groundLayerBelow(fromTile, layers.bounds[0]));
+        const toGround = layers.topRadius(columns.groundLayerBelow(toTile, layers.bounds[0]));
+        const moveR = fromGround * (1 - t) + toGround * t + 0.06 + hop;
+        obj.position.set(
+          baseDir.x * moveR + vX.x * grazeA * roamScale + vZ.x * grazeB * roamScale - camWorld.x,
+          baseDir.y * moveR + vX.y * grazeA * roamScale + vZ.y * grazeB * roamScale - camWorld.y,
+          baseDir.z * moveR + vX.z * grazeA * roamScale + vZ.z * grazeB * roamScale - camWorld.z,
+        );
+      } else {
       obj.position.set(
-        c[site.tile * 3] * r + vX.x * grazeA + vZ.x * grazeB - camWorld.x,
-        c[site.tile * 3 + 1] * r + vX.y * grazeA + vZ.y * grazeB - camWorld.y,
-        c[site.tile * 3 + 2] * r + vX.z * grazeA + vZ.z * grazeB - camWorld.z,
+        c[frameTile * 3] * r + vX.x * grazeA * roamScale + vZ.x * grazeB * roamScale - camWorld.x,
+        c[frameTile * 3 + 1] * r + vX.y * grazeA * roamScale + vZ.y * grazeB * roamScale - camWorld.y,
+        c[frameTile * 3 + 2] * r + vX.z * grazeA * roamScale + vZ.z * grazeB * roamScale - camWorld.z,
       );
+      }
       const breathe = site.kind === 'brambleback'
         ? (site.warded ? 0.9 : 1 + Math.sin(seconds * 4.8 + site.id) * 0.055)
         : site.kind === 'caveBelljaw'
@@ -918,6 +964,10 @@ export class NativeLifeRenderer {
     activeMixerRadius: number;
     lowRateMixerRadius: number;
     frozenMixerRadius: number;
+    roamingActors: number;
+    movingActors: number;
+    roamingStates: Record<string, number>;
+    clipHints: Record<string, number>;
     kilnCreatureSkinsBySlug: Partial<Record<KilnCreatureSkinSlug, {
       loaded: number;
       pending: number;
@@ -938,11 +988,23 @@ export class NativeLifeRenderer {
     const kinds = new Set<string>();
     const silhouettes = new Set<string>();
     const telegraphRoles = new Set<string>();
+    const roamingStates: Record<string, number> = {};
+    const clipHints: Record<string, number> = {};
+    let roamingActors = 0;
+    let movingActors = 0;
     for (const obj of this.objects.values()) {
       if (obj.visible) active++;
       if (typeof obj.userData.nativeKind === 'string') kinds.add(obj.userData.nativeKind);
       if (typeof obj.userData.nativeSilhouette === 'string') silhouettes.add(obj.userData.nativeSilhouette);
       if (obj.userData.nativeTemperament === 'territorial' || obj.userData.nativeTemperament === 'combative') hazardCount++;
+      if (typeof obj.userData.nativeRoamState === 'string' && obj.userData.nativeRoamState !== 'static') {
+        roamingActors++;
+        roamingStates[obj.userData.nativeRoamState] = (roamingStates[obj.userData.nativeRoamState] ?? 0) + 1;
+      }
+      if (obj.userData.nativeRoamMoving === true) movingActors++;
+      if (typeof obj.userData.nativeClipHint === 'string') {
+        clipHints[obj.userData.nativeClipHint] = (clipHints[obj.userData.nativeClipHint] ?? 0) + 1;
+      }
       obj.traverse((child) => {
         if ((child as THREE.Mesh).isMesh) meshes++;
         if (typeof child.userData.nativeTelegraphRole === 'string') {
@@ -1021,6 +1083,10 @@ export class NativeLifeRenderer {
       activeMixerRadius: CREATURE_ACTIVE_MIXER_RADIUS,
       lowRateMixerRadius: CREATURE_LOW_RATE_MIXER_RADIUS,
       frozenMixerRadius: CREATURE_FROZEN_MIXER_RADIUS,
+      roamingActors,
+      movingActors,
+      roamingStates,
+      clipHints,
       kilnCreatureSkinsBySlug,
       kilnCreatureSkinFits,
     };

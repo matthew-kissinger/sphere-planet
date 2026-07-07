@@ -20,6 +20,13 @@ const SOFT_MAX_TOTAL_BYTES = 16 * MiB;
 const SOFT_MAX_TRIS = 8000;
 const SOFT_MAX_MESHES = 80;
 const REQUIRED_PALETTE_ID = 'sphere-planet';
+const AQUATIC_SINGLETON_SLUGS = new Set([
+  'fish-shore-minnow',
+  'fish-storm-runner',
+  'fish-cave-shimmer',
+  'creature-driftjelly',
+  'fish-reed-fry',
+]);
 const mode = process.env.KILN_ASSET_STAGE || (existsSync(manifestPath) ? 'promoted' : 'generated');
 
 const failures = [];
@@ -248,13 +255,20 @@ function decisionFor(asset, glbSummary) {
   }
   const blockers = [];
   if (asset.modularKit) blockers.push('modular kit proportions must be normalized to the build grid before snapping/assembly');
-  if (asset.category === 'character') blockers.push('node-transform idle/walk clips need AnimationMixer proof in game');
+  if (asset.category === 'character' && !AQUATIC_SINGLETON_SLUGS.has(asset.slug)) blockers.push('node-transform idle/walk clips need AnimationMixer proof in game');
   if (asset.slug?.startsWith('tree-')) blockers.push('trees need an instanced scatter/LOD layer before replacement');
   if (asset.slug?.startsWith('shrine-')) blockers.push('shrine/landmark scale and route readability need blind screenshot proof');
   if (asset.slug?.startsWith('crater-')) blockers.push('crater assets need skyfall placement and collision/scale proof');
   if (glbSummary?.meshCount > SOFT_MAX_MESHES) blockers.push(`mesh count ${glbSummary.meshCount} is above the ${SOFT_MAX_MESHES} soft repetition budget`);
   if (asset.instanceability === 'C') blockers.push('instanceability grade C needs explicit runtime acceptance or regeneration');
   if (blockers.length > 0) return { slug: asset.slug, state: 'deferred', reason: blockers.join('; ') };
+  if (AQUATIC_SINGLETON_SLUGS.has(asset.slug)) {
+    return {
+      slug: asset.slug,
+      state: 'accepted-candidate',
+      reason: 'accepted aquatic singleton; runtime proof owns fish-school selection, forward-axis normalization, point-school rendering, and distance-gated AnimationMixer playback',
+    };
+  }
   return {
     slug: asset.slug,
     state: 'accepted-candidate',
@@ -331,7 +345,13 @@ function validatePromotedAssets() {
         if (geometry.hasSkin) fail(`${asset.slug} has skin data; drop 1 expects node-transform or static assets only`);
         if (asset.category === 'character') {
           const names = new Set(animations.map((clip) => clip.name));
-          if (!names.has('idle') || !names.has('walk')) fail(`${asset.slug} character asset must include idle and walk clips`);
+          if (AQUATIC_SINGLETON_SLUGS.has(asset.slug)) {
+            if (!names.has('idle') || (!names.has('swim') && !names.has('pulse'))) {
+              fail(`${asset.slug} aquatic character asset must include idle plus swim or pulse clips`);
+            }
+          } else if (!names.has('idle') || !names.has('walk')) {
+            fail(`${asset.slug} character asset must include idle and walk clips`);
+          }
           if (!String(asset.animationPlayback ?? '').includes('AnimationMixer')) {
             fail(`${asset.slug} character asset must document AnimationMixer playback`);
           }

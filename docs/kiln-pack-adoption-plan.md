@@ -44,6 +44,11 @@ scene graphs. The default implementation target is:
 - For animated creature GLBs, run `THREE.AnimationMixer` only inside the active animation
   radius. Mid-distance creatures should use cheaper node/pose sampling or low-rate updates;
   far creatures should freeze into a readable idle pose, impostor, or hidden marker.
+- Flocking wildlife such as fish schools and birds must be generated as single bodies, not
+  mini-scenes. Schools/flocks are runtime systems: one or a few instanced bodies with
+  per-instance scale/tint/phase, point or impostor rendering for tiny/far members, and
+  distance-banded boids-style simulation only for near/inspectable groups. Mid/far groups
+  collapse to cheap path-following, impostors, or hidden migration signals.
 - For any animated family, diagnostics must split active, low-rate/frozen, and hidden
   counts by distance band before that family can replace procedural motion.
 - Do not widen asset adoption until proof records draw calls, visible instance counts,
@@ -51,8 +56,8 @@ scene graphs. The default implementation target is:
 
 ## Scope
 
-The current promoted pack contains 61 ready GLBs plus 3 unused cave-mouth records. The
-adoption goal is to use the 61 ready assets broadly across the game and to revisit the
+The current promoted pack contains 66 ready GLBs plus 3 unused cave-mouth records. The
+adoption goal is to use the 66 ready assets broadly across the game and to revisit the
 cave-mouth assets as possible dressing or regeneration references instead of silently
 forgetting them.
 
@@ -64,15 +69,16 @@ forgetting them.
 | K1 pickups and rocks | `drop-wood-logs`, `drop-ore-chunk` | `ResourceDropRenderer` | Passing first slice: `npm run proof:k1-resource-drops` spawns wood/rock drops, loads committed GLBs, proves 5 batched instances on 5 instanced draw calls, collects into inventory, records desktop/phone screenshots, and rejects `generated/` runtime requests |
 | K2 harvest nodes | all 12 `node-*` harvest/resource assets | `DomainResourceRenderer`, domain hooks | Passing first slice: `npm run proof:k2-domain-resources` reveals all 36 domain nodes, loads all 12 committed node GLBs, proves 36 batched instances on 33 instanced draw calls, keeps code-owned harvest glows/base overlays, records desktop/phone screenshots, and rejects `generated/` runtime requests |
 | K3 camp and home props | `campfire`, `bedroll`, `chest`, `crop-plot`, `drying-rack`, `weather-vane`, `workbench` | `StructureRenderer` | Home proof shows placed props use GLB skins while state overlays, storage, fire, warmth, crop, and weather behavior remain readable |
-| K3W wall and house shell contract | Code-authored wall panels, corners, wall-with-window openings, wall-with-door openings, half walls/rails, roof joins, and snap sockets; Kiln skins only after the wall contract exists | `src/sim/structures.ts`, `src/render/structures.ts`, `StructureRenderer` | Proof builds a readable enclosed room from wall sockets, then proves door/window/roof GLBs align as skins or inserts instead of pretending loose panes/frames are walls |
+| K3W wall and house shell contract | Code-authored/procedural wall panels, corners, wall-with-window openings, wall-with-door openings, half walls/rails, roof joins, foundations, and snap sockets; Kiln skins only after the wall contract exists | `src/sim/structures.ts`, `src/render/structures.ts`, `StructureRenderer` | Proof builds a readable enclosed room from procedural wall/socket geometry, then proves door/window/roof GLBs align only as skins or inserts instead of pretending loose panes/frames are walls |
 | K4 waterline and utility props | `rain-cistern`, `fish-trap`, `shore-net`, `lantern-post`, `dock-segment`, `compost-bin`, `root-cellar` | `StructureRenderer` plus waterline/fishing rules | E4/C2 proof shows shore placement, set/check/collect states, and socket/collider ownership survive GLB swaps |
 | K5 trees and shrubs | `tree-pine`, `tree-broadleaf`, `tree-dead-snag`, `tree-shrub` | `Trees`, `Streamer`, `TreeAssetRenderer` | Passing first slice: `npm run proof:k5-trees` loads all four committed tree GLBs, replaces chunk-embedded procedural tree meshes only after all skins are instanced-ready, proves 210 resident trees on 11 instanced draw calls, gates cosmetic sway to near range, fells a tree into ground drops, records desktop/phone screenshots, and rejects `generated/` runtime requests |
 | K6 native creatures | all `creature-*` GLBs | `NativeLifeRenderer` plus native-life/combat sim | Passing first slice: `npm run proof:k6-creatures` loads all nine committed creature GLBs, requires idle/walk clips, distance-gates mixers, proves tend/ward responses, captures desktop/phone screenshots, and rejects `generated/` runtime requests |
 | K6T native targetability | Native creature ray pick, tend/ward routing, HUD feedback, and occupied-tile placement blockers | `src/edit/pick.ts`, `src/main.ts`, native-life sim | Passing first slice: `npm run proof:k7-native-targeting` proves desktop and phone native targeting beats terrain mining, harmless and territorial interactions resolve, drops spawn or collect, and occupied native-life tiles block building |
-| K6R native roaming and ecology state | Harmless grazing/fleeing, territorial patrol/telegraph/recover, shore/cave/fish interactions, pathing across adjacent hexes, and animation state selection | Native-life sim plus `NativeLifeRenderer` | Future proof shows creatures move between valid nearby hexes, avoid water/steep/occupied tiles by species, switch idle/walk/telegraph/flee states, and distance-gate AI/animation cost |
+| K6R native roaming and ecology state | Harmless grazing/fleeing, territorial patrol/telegraph/recover, shore/cave/fish interactions, pathing across adjacent hexes, and animation state selection | Native-life sim plus `NativeLifeRenderer` | Passing first slice: `npm run proof:k6r-roaming` proves visible creatures derive stable roaming motion from deterministic home sites, move between valid nearby hexes, expose walk/idle clip hints, keep current-tile picking, use approved GLB skins, and avoid generated runtime requests |
 | K7 landmarks and wonder | shrines, craters, cave-anchor, cave-mouth dressing/reference | Landmark, skyfall, cave-mouth, and route renderers | Screenshots prove each landmark reads as a place with a verb, not a random ornament |
 | K8 remaining modular kits | door/window/roof already started; expand to any remaining build pieces | `StructureRenderer` and build sockets | Measured fit, socket-local preview, fallback, and room/shelter proof for each modular family |
-| K9 aquatic life and fish visibility | Future Kiln fish schools, cave shimmer fish, storm-run fish, and driftjelly skins over existing fishing systems | Fishing sim, waterline structures, native-life renderer where appropriate | Proof shows fish moving/swimming near shore, docks, traps, sea caves, and storm runs without turning fish-school rules into model collision |
+| K9 aquatic life and fish visibility | Generated Kiln single fish bodies: shore minnow, storm runner, cave shimmer, reed fry, plus a single driftjelly body over existing fishing systems | Fishing sim, waterline structures, `FishSchoolRenderer`, `KilnRuntimeAssets` | Passing first slice: corrected singleton fish are promoted to `models/`, fish-school state selects the matching body, the renderer shows up to two animated GLB anchors plus a point school, mixers are distance-gated, and `npm run proof:k9-fish-visuals` proves the cave-shimmer GLB loads from committed assets with fallback at zero |
+| K11 sky life and biome expansion | Generated Kiln singleton bird bodies and future new-biome tree variants | Future `SkyLifeRenderer`, streamer vegetation, route/weather systems | Four bird bodies now exist in generated quarantine with `idle/flap/glide/turn` clips; next proof must review them in the asset viewer, promote only accepted birds, then keep sky life batched/instanced, distance-gated, and readable as ecological signals rather than decorative draw-call noise |
 | K10 drop and ore expansion | Future pickup/drop skins plus new ore/resource node taxonomy after item design | `ResourceDropRenderer`, `DomainResourceRenderer` | Proof keeps drops/nodes instanced, collectable, and readable while new ores have explicit recipes and route/cave reasons |
 
 ## Definition Of Done
@@ -100,7 +106,7 @@ The asset-pack adoption track is done when:
   direction, local `+Z` as tile-forward tangent, center-XZ/bottom-Y pivots, socket rings,
   bounds, orientation metadata, and review warnings for modular-kit, mesh-count, material,
   triangle, and axis-correction risk.
-- `npm run proof:kiln-asset-viewer` covers 7 overview screenshots plus 61 single-asset
+- `npm run proof:kiln-asset-viewer` covers 8 overview screenshots plus 66 single-asset
   screenshots under `output/playwright/kiln-asset-viewer/assets/`, proves every ready GLB
   is requested from committed `assets/kiln/models/`, rejects `generated/` runtime requests,
   and writes `proof.json` with per-slug fit/socket diagnostics.
@@ -160,6 +166,27 @@ The asset-pack adoption track is done when:
   workbench placement with `native life on snap target: ...`, creature rewards spawn or
   auto-collect as pickups, structures stay unchanged, screenshots pass pixel probing, and
   no page/console errors occur.
+- K9 aquatic life is runtime-wired for `fish-shore-minnow`, `fish-storm-runner`,
+  `fish-cave-shimmer`, `fish-reed-fry`, and `creature-driftjelly` after rejecting the
+  earlier school/cluster generation attempt. `KilnRuntimeAssets` normalizes fish bodies with
+  a longest-axis-forward policy, requires `idle` plus `swim` or `pulse`, and exposes fit,
+  clip, and distance-band diagnostics. `FishSchoolRenderer` keeps the fishing sim
+  authoritative, maps current shore/dock/run/storm/cave schools to accepted singleton
+  bodies, renders up to two animated GLB anchors, and uses point sprites for the remaining
+  school members. `npm run proof:k9-fish-visuals` proves a sea-cave school loads
+  `fish-cave-shimmer` from committed `assets/kiln/models/`, shows 2 visible GLB anchors and
+  32 point sprites, and keeps fallback at zero.
+- K11 bird generation is complete but not promoted. The generated quarantine contains
+  `bird-sky-kite`, `bird-shore-gull`, `bird-forest-flutter`, and `bird-storm-finch`; all
+  report palette `sphere-planet`, category `character`, role `prop`, and
+  `idle/flap/glide/turn` clips. Review them through
+  `/?assetViewer=kiln&family=generated&slugs=bird-sky-kite,bird-shore-gull,bird-forest-flutter,bird-storm-finch`
+  before cataloging or wiring.
+- Hex terrain material variety now stays in the procedural/material lane. `src/render/palette.ts`
+  uses deterministic per-material swatch ramps for grass, dirt, rock, sand, snow, bedrock,
+  built blocks, seabed, and wood while preserving the single shared vertex-color material.
+  This is intentionally not a Kiln task and adds no texture maps, material splits, or draw
+  calls.
 
 ## House Wall And Shell Contract
 
@@ -195,15 +222,19 @@ hazards could look like old procedural plants or ground props, apply stamina/exp
 pressure, and still allow a click or attack to mine the hex underneath. That targeting
 slice now has a proof gate through `npm run proof:k7-native-targeting`.
 
-The second follow-up remains open: native life should eventually move around. Today the sim
-generates native life as tile-anchored sites with renderer-local bob/graze/hop offsets and
-Kiln `idle`/`walk` clips. The GLBs use node-transform clips and `THREE.AnimationMixer`;
-they are animated, but they are not skeleton-driven roaming actors yet.
+The second follow-up now has its first K6R slice: native life still persists as
+deterministic home sites, but nearby visible creatures derive ephemeral roaming motion from
+time, habitat, leash radius, and species rules. Their site ids and save ids remain stable,
+while each visible actor exposes `homeTile`, `currentTile`, `fromTile`, `toTile`,
+`progress`, `state`, and an `idle`/`walk` clip hint. The renderer interpolates approved
+Kiln GLB bodies between neighboring valid hexes and keeps `THREE.AnimationMixer` playback
+distance-gated.
 
-The next creature-depth layer should add a small native-life state machine:
+The next creature-depth layer should build from that first slice into a fuller native-life
+state machine:
 
-- Site spawn remains deterministic and save-light, but active nearby creatures become
-  ephemeral actors with current tile, next tile, phase, mood, cooldowns, and target intent.
+- Site spawn remains deterministic and save-light; active nearby creatures should gain mood,
+  alert source, cooldowns, player intent, and richer temporary actor state only where needed.
 - Harmless states: `idle`, `graze`, `wander`, `curious`, `gift`, `flee`, `return`.
 - Territorial states: `idle`, `patrol`, `warn`, `telegraph`, `lunge`, `recover`, `flee`,
   `warded`.
@@ -234,8 +265,11 @@ Open polish requirements:
 - Name the pressure source in HUD/readback when a hazard drains stamina or raises exposure.
 - Suppress any remaining procedural body fragments that compete with the approved GLB skin,
   while keeping intentional reward/warning overlays.
-- Add K6R roaming/herd proof only after pathing, state ownership, animation LOD, and save
-  reconciliation are designed.
+- Extend K6R beyond sparse deterministic roam into social/herd behavior, flee/return,
+  attack telegraphs, and species-specific tool reactions once those rules are designed.
+- Do not invent fish, extra hazards, or wonder creatures procedurally as final visuals.
+  Missing bodies stay in the Kiln request packs until generated, reviewed, promoted, and
+  proved.
 
 ## Future Kiln Asset Requests
 
@@ -256,8 +290,8 @@ node scripts/capabilities.mjs
 node scripts/validate-request-packs.mjs
 ```
 
-Current validation, 2026-07-07: all 7 request packs are API-valid, 52 candidate GLBs total,
-estimated at 346 cents before spend. The guarded generator refuses to spend unless explicitly
+Current validation, 2026-07-07: all 8 request packs are API-valid, 56 candidate GLBs total,
+estimated at 373 cents before spend. The guarded generator refuses to spend unless explicitly
 confirmed:
 
 ```bash
@@ -272,9 +306,16 @@ After generation, review the quarantined GLBs, add accepted slugs to
 
 Prepared request packs:
 
-- Aquatic life: `fish-school-shore`, `fish-school-storm-run`,
-  `fish-school-cave-shimmer`, and `creature-driftjelly` with idle/swim/turn/dart clips.
-  Existing fish-school rules stay in the fishing sim; GLBs are visual bodies.
+- Aquatic life: the first accepted singleton bodies are promoted and wired:
+  `fish-shore-minnow`, `fish-storm-runner`, `fish-cave-shimmer`, `fish-reed-fry`, and
+  `creature-driftjelly`. Existing fish-school rules stay in the fishing sim; schools are
+  instanced/points/boids runtime behavior, not GLB-authored clusters. The first
+  `fish-school-*` / cluster prompt attempt is rejected as improper prompting and should not
+  be promoted.
+- Sky life: generate singleton bodies only: `bird-sky-kite`, `bird-shore-gull`,
+  `bird-forest-flutter`, and `bird-storm-finch` with idle/flap/glide/turn clips. Flocks are
+  runtime boids, points, impostors, or migration signals, never authored multi-bird GLB
+  scenes.
 - Pickup skins: `drop-dirt-clod`, `drop-sand-pile`, `drop-snow-clump`,
   `drop-glow-crystal`, `drop-raw-fish`, `drop-kelp-reeds`, `drop-compost-pellet`, and
   `drop-cave-mushroom`.
@@ -297,6 +338,7 @@ shader, or instanced runtime systems keyed to the palette.
 
 ## Next Critical Slice
 
-K1, K2, K5, K6, and K6T now prove the repeated static-family, first animated-family, and
-first native targetability paths. Continue with K3W/K3 functional home shells and props,
-then K4 waterline utilities, then K6R roaming creatures and K7 wonders.
+K1, K2, K5, K6, K6T, K6R, and K9 now prove the repeated static-family, first
+animated-family, native targetability, sparse creature-roaming, and aquatic singleton
+paths. Continue with K3W/K3 functional home shells and props, then K4 waterline utilities,
+then K11 sky life, richer G5/K6R creature behavior, and K7 wonders.

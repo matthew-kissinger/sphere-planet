@@ -24,6 +24,7 @@ import { SeasonAfterglowRenderer } from './render/seasonAfterglow';
 import { ResourceDropRenderer } from './render/resourceDrops';
 import { TreeAssetRenderer } from './render/treeAssets';
 import { NativeLifeRenderer } from './render/nativeLife';
+import { FishSchoolRenderer, type FishSchoolVisualSite } from './render/fishSchools';
 import { Player } from './player/player';
 import { Input } from './player/input';
 import { TouchControls } from './player/touch';
@@ -74,6 +75,7 @@ import {
   normalizeNativeCreatureWards,
   tendNativeCreature,
   wardNativeCreature,
+  withNativeCreatureRoaming,
   type NativeCreatureKind,
   type NativeCreatureSite,
 } from './sim/nativeLife';
@@ -592,6 +594,7 @@ async function boot(): Promise<void> {
   const resourceDropRenderer = new ResourceDropRenderer(scene, kilnAssets);
   const treeAssetRenderer = new TreeAssetRenderer(scene, kilnAssets);
   const nativeLifeRenderer = new NativeLifeRenderer(scene, kilnAssets);
+  const fishSchoolRenderer = new FishSchoolRenderer(scene, kilnAssets);
   resourceDropRenderer.setDrops(resourceDrops);
   let treeAssetSyncNeeded = true;
 
@@ -740,6 +743,8 @@ async function boot(): Promise<void> {
   let saveTimer = 0;
   let lastSaveMs = 0;
   let nativeHazardCooldown = 0;
+  let nativeLifeSeconds = 0;
+  let nativeLifeTimeOverride: number | null = null;
 
   const markSaveDirty = (): void => {
     if (saveEnabled) saveDirty = true;
@@ -1231,7 +1236,7 @@ async function boot(): Promise<void> {
     const nativeSites = currentNativeCreatureSites();
     nativePick = pickNativeCreature(geo, layers, columns, nativeSites, camWorld.x, camWorld.y, camWorld.z, dirx, diry, dirz, reach + camDist);
     if (!nativePick && lastPick) {
-      const site = nativeCreatureAt(SEED, geo, columns, terrain, lastPick.hitTile, tendedNativeCreatures, wardedNativeCreatures);
+      const site = nativeCreatureOnTile(lastPick.hitTile);
       if (site) nativePick = { site, tile: site.tile, dist: Math.max(0, lastPick.dist - 0.05) };
     }
   };
@@ -1285,7 +1290,7 @@ async function boot(): Promise<void> {
 
   const tryMine = (): void => {
     nextMineCooldown = 0.17;
-    const nativeTarget = nativePick?.site ?? (lastPick ? nativeCreatureAt(SEED, geo, columns, terrain, lastPick.hitTile, tendedNativeCreatures, wardedNativeCreatures) : null);
+    const nativeTarget = nativePick?.site ?? (lastPick ? nativeCreatureOnTile(lastPick.hitTile) : null);
     if (nativeTarget) {
       tryTargetNativeCreature(nativeTarget);
       nativePick = null;
@@ -1515,12 +1520,17 @@ async function boot(): Promise<void> {
       lastAction: lastMurmurAction,
     };
   };
-  const currentNativeCreatureSites = (): NativeCreatureSite[] =>
-    nativeCreatureSitesAround(SEED, geo, columns, terrain, player.tile, 7, tendedNativeCreatures, wardedNativeCreatures, 7);
+  const nativeCreatureSitesNear = (
+    rings = 7,
+    maxSites = 7,
+    kind: NativeCreatureKind | 'any' = 'any',
+  ): NativeCreatureSite[] =>
+    nativeCreatureSitesAround(SEED, geo, columns, terrain, player.tile, rings, tendedNativeCreatures, wardedNativeCreatures, maxSites, kind, nativeLifeSeconds);
+  const currentNativeCreatureSites = (): NativeCreatureSite[] => nativeCreatureSitesNear(7, 7);
   const nativeCreatureOnTile = (tile: number): NativeCreatureSite | null => {
     if (!Number.isFinite(tile)) return null;
     const target = Math.max(0, Math.min(geo.count - 1, Math.trunc(tile)));
-    return nativeCreatureAt(SEED, geo, columns, terrain, target, tendedNativeCreatures, wardedNativeCreatures);
+    return currentNativeCreatureSites().find((site) => site.tile === target || site.motion?.currentTile === target) ?? null;
   };
   const nativePlacementBlocker = (tile: number): string | null => {
     const site = nativeCreatureOnTile(tile);
@@ -1574,14 +1584,16 @@ async function boot(): Promise<void> {
         };
       });
   const nearbyNativeCreature = (): NativeCreatureSite | null =>
-    nearestNativeCreatureSite(SEED, geo, columns, terrain, player.tile, 1, tendedNativeCreatures, wardedNativeCreatures);
+    currentNativeCreatureSites().find((site) => tileSetAround(player.tile, 1).has(site.tile)) ?? null;
   const nearbyNativeHazard = (): NativeCreatureSite | null =>
-    nativeCreatureSitesAround(SEED, geo, columns, terrain, player.tile, 1, tendedNativeCreatures, wardedNativeCreatures, 16)
+    nativeCreatureSitesNear(1, 16)
       .find((site) => site.temperament !== 'harmless') ?? null;
   const rangedNativeHazard = (): NativeCreatureSite | null => {
     if (itemCount(counts, craftedItems, 'reedBow') <= 0 || itemCount(counts, craftedItems, 'whistlingArrow') <= 0) return null;
-    return nativeCreatureSitesAround(SEED, geo, columns, terrain, player.tile, 5, tendedNativeCreatures, wardedNativeCreatures, 24)
+    const rangedTiles = tileSetAround(player.tile, 5);
+    return nativeCreatureSitesNear(5, 24)
       .filter((site) => site.kind === 'brambleback' || site.kind === 'screeSnapper' || site.kind === 'stormBurr' || site.kind === 'tideLurker')
+      .filter((site) => rangedTiles.has(site.tile))
       .find((site) => !site.warded) ?? null;
   };
   const facePlayerTowardTile = (tile: number): void => {
@@ -1621,18 +1633,19 @@ async function boot(): Promise<void> {
     return { stand, score };
   };
   const spawnAtNativeCreatureSite = (site: NativeCreatureSite): { site: NativeCreatureSite; standTile: number } => {
-    const bestStand = standForNativeCreature(site);
-    const stand = bestStand.stand >= 0 ? bestStand.stand : site.tile;
+    const liveSite = withNativeCreatureRoaming(SEED, geo, columns, terrain, site, nativeLifeSeconds);
+    const bestStand = standForNativeCreature(liveSite);
+    const stand = bestStand.stand >= 0 ? bestStand.stand : liveSite.tile;
     player.spawnAt(stand);
-    facePlayerTowardTile(site.tile);
+    facePlayerTowardTile(liveSite.tile);
     player.mode = 'walk';
     player.vx = 0; player.vy = 0; player.vz = 0;
-    nativeHazardCooldown = site.temperament === 'harmless' ? Math.max(nativeHazardCooldown, 2.5) : 0;
-    lastNativeLifeAction = `debug spawned ${site.label}`;
+    nativeHazardCooldown = liveSite.temperament === 'harmless' ? Math.max(nativeHazardCooldown, 2.5) : 0;
+    lastNativeLifeAction = `debug spawned ${liveSite.label}`;
     streamer.refreshDesired(...player.up(), player.altitudeAGL());
     refreshUseButton();
     nativeLifeRenderer.setSites(currentNativeCreatureSites());
-    return { site, standTile: stand };
+    return { site: liveSite, standTile: stand };
   };
   const findNativeCreatureOfKind = (kind: NativeCreatureKind, startTile = player.tile): NativeCreatureSite | null => {
     const start = Math.max(0, Math.min(geo.count - 1, Math.trunc(Number.isFinite(startTile) ? startTile : player.tile)));
@@ -1676,6 +1689,15 @@ async function boot(): Promise<void> {
       visible: sites.length,
       tended: tendedNativeCreatures.size,
       warded: wardedNativeCreatures.size,
+      roaming: {
+        actors: sites.filter((site) => !!site.motion).length,
+        moving: sites.filter((site) => site.motion?.moving).length,
+        states: sites.reduce<Record<string, number>>((totals, site) => {
+          const state = site.motion?.state ?? 'static';
+          totals[state] = (totals[state] ?? 0) + 1;
+          return totals;
+        }, {}),
+      },
       nearby: nearbyNativeCreature(),
       hazard: hazard && !hazard.warded ? hazard : null,
       rangedHazard,
@@ -2917,6 +2939,23 @@ async function boot(): Promise<void> {
   const waterNearTile = (tile: number, rings = 1): boolean =>
     tilesAroundTile(tile, rings).some((nearby) => columns.heightOf(nearby) <= SEA_LEVEL_HEIGHT + 0.9);
 
+  const nearestFishingWaterTile = (tile: number, rings = 2): number | null => {
+    let best: number | null = null;
+    let bestDot = -Infinity;
+    const origin = tile * 3;
+    for (const nearby of tilesAroundTile(tile, rings)) {
+      if (columns.heightOf(nearby) > SEA_LEVEL_HEIGHT + 0.9) continue;
+      const dot = geo.centers[origin] * geo.centers[nearby * 3]
+        + geo.centers[origin + 1] * geo.centers[nearby * 3 + 1]
+        + geo.centers[origin + 2] * geo.centers[nearby * 3 + 2];
+      if (dot > bestDot) {
+        bestDot = dot;
+        best = nearby;
+      }
+    }
+    return best;
+  };
+
   const dockNearTile = (tile: number, rings = 1): StructureSave | null => {
     const local = new Set(tilesAroundTile(tile, rings));
     return structures.find((s) => s.item === 'dockSegment' && local.has(s.tile)) ?? null;
@@ -3327,6 +3366,21 @@ async function boot(): Promise<void> {
     thresholdFishBoost: currentPentagonSiteThresholdEffect()?.fishBoost,
     thresholdLabel: currentPentagonSiteThresholdEffect()?.label,
   });
+
+  const currentFishVisualSite = (): FishSchoolVisualSite | null => {
+    const school = currentFishSchool();
+    if (school.kind === 'none' || school.catchCount <= 0) return null;
+    const waterTile = nearestFishingWaterTile(player.tile, 2)
+      ?? (school.kind === 'cave' ? player.tile : null)
+      ?? dockNearTile(player.tile, 1)?.tile
+      ?? null;
+    if (waterTile === null) return null;
+    return {
+      id: waterTile * 17 + timeState.day * 131 + Math.trunc(timeState.minute / 30),
+      tile: waterTile,
+      school,
+    };
+  };
 
   const currentForage = () => forageAt({
     tile: player.tile,
@@ -4982,7 +5036,7 @@ async function boot(): Promise<void> {
       craftedItems: { ...craftedItems },
       inventory: packLedger(),
       tools: { ...toolSummary(craftedItems, toolWear), wear: { ...toolWear }, lastAction: lastToolAction, reach: playerReach() },
-      food: { ...foodCounts(), lastAction: lastFoodAction, nearWater: nearFishingWater(), nearDock: nearDock(), school: currentFishSchool(), forage: currentForage(), crops: cropDiagnostics(), fishTraps: fishTrapDiagnostics(), shoreNets: shoreNetDiagnostics() },
+      food: { ...foodCounts(), lastAction: lastFoodAction, nearWater: nearFishingWater(), nearDock: nearDock(), school: currentFishSchool(), fishVisuals: fishSchoolRenderer.stats(), forage: currentForage(), crops: cropDiagnostics(), fishTraps: fishTrapDiagnostics(), shoreNets: shoreNetDiagnostics() },
       audio: audio.state(),
       controls: { ux: uxManager.snapshot(), gamepad: gamepad.snapshot(), touch: touch.enabled, inputActive: input.active(), aimActive: input.active() || gamepad.active(), panels: currentPanelOwnership() },
       relocation: relocationDiagnostics(),
@@ -5162,6 +5216,7 @@ async function boot(): Promise<void> {
     eat: () => tryEatPackedFood(),
     fish: (force = false) => tryFish(force),
     fishSchool: () => currentFishSchool(),
+    fishVisuals: () => ({ site: currentFishVisualSite(), renderer: fishSchoolRenderer.stats() }),
     forage: () => currentForage(),
     gatherForage: () => tryForage(),
     caves: () => ({ current: currentNaturalVoid(), signal: nearbyCaveSignal(), resonance: caveResonanceDiagnostics(), mouths: caveMouthDiagnostics(), pressure: currentCavePressure(), lastAction: lastCaveAction, glowCrystal: itemCount(counts, craftedItems, 'glowCrystal'), lantern: itemCount(counts, craftedItems, 'lantern'), echoLantern: itemCount(counts, craftedItems, 'echoLantern') }),
@@ -5214,6 +5269,23 @@ async function boot(): Promise<void> {
     spawnAtSeasonAfterglow,
     readSeasonAfterglow: () => trySeasonAfterglow(),
     nativeLife: () => nativeLifeDiagnostics(),
+    debugSetNativeLifeTime: (seconds: unknown) => {
+      const value = Math.max(0, Number.isFinite(Number(seconds)) ? Number(seconds) : 0);
+      nativeLifeTimeOverride = value;
+      nativeLifeSeconds = value;
+      const sites = currentNativeCreatureSites();
+      nativeLifeRenderer.setSites(sites);
+      nativeLifeRenderer.update(sites, geo, layers, columns, camWorld, nativeLifeSeconds);
+      return nativeLifeDiagnostics();
+    },
+    debugClearNativeLifeTime: () => {
+      nativeLifeTimeOverride = null;
+      nativeLifeSeconds = performance.now() / 1000;
+      const sites = currentNativeCreatureSites();
+      nativeLifeRenderer.setSites(sites);
+      nativeLifeRenderer.update(sites, geo, layers, columns, camWorld, nativeLifeSeconds);
+      return nativeLifeDiagnostics();
+    },
     tendNativeLife: () => tryNativeCreature(),
     debugSpawnAtNativeLifeKind: (kind: unknown = 'mossPuff', startTile?: number) => {
       const targetKind = normalizeNativeCreatureKind(kind);
@@ -5642,6 +5714,7 @@ async function boot(): Promise<void> {
         characterRenderer: character.stats(),
         mineProgress: mineProgressDiagnostics(),
         treeAssets: treeAssetDiagnostics(),
+        fishVisuals: fishSchoolRenderer.stats(),
         survival: { ...survivalSnapshot(), time: { ...timeState }, pack: packBurden() },
         structures: { relocation: relocationDiagnostics(), snapPreview: currentStructureSnapPreview(), commands: buildCommandDiagnostics() },
       };
@@ -5671,7 +5744,7 @@ async function boot(): Promise<void> {
       crafted: { ...craftedItems },
       ledger: packLedger(),
       tools: { ...toolSummary(craftedItems, toolWear), wear: { ...toolWear }, lastAction: lastToolAction, reach: playerReach() },
-      food: { ...foodCounts(), lastAction: lastFoodAction, nearWater: nearFishingWater(), nearDock: nearDock(), school: currentFishSchool(), forage: currentForage(), crops: cropDiagnostics(), fishTraps: fishTrapDiagnostics(), shoreNets: shoreNetDiagnostics() },
+      food: { ...foodCounts(), lastAction: lastFoodAction, nearWater: nearFishingWater(), nearDock: nearDock(), school: currentFishSchool(), fishVisuals: fishSchoolRenderer.stats(), forage: currentForage(), crops: cropDiagnostics(), fishTraps: fishTrapDiagnostics(), shoreNets: shoreNetDiagnostics() },
       survival: { ...survivalSnapshot(), time: { ...timeState }, pack: packBurden(), lastAction: lastSurvivalAction },
       audio: audio.state(),
       controls: { ux: uxManager.snapshot(), gamepad: gamepad.snapshot(), touch: touch.enabled, panels: currentPanelOwnership() },
@@ -6199,9 +6272,12 @@ async function boot(): Promise<void> {
     const afterglowNow = currentSeasonAfterglow();
     seasonAfterglowRenderer.setAfterglow(afterglowNow);
     seasonAfterglowRenderer.update(afterglowNow, geo, layers, columns, camWorld, now / 1000);
+    nativeLifeSeconds = nativeLifeTimeOverride ?? now / 1000;
     const nativeSitesNow = currentNativeCreatureSites();
     nativeLifeRenderer.setSites(nativeSitesNow);
     nativeLifeRenderer.update(nativeSitesNow, geo, layers, columns, camWorld, now / 1000);
+    const fishVisualSiteNow = currentFishVisualSite();
+    fishSchoolRenderer.update(fishVisualSiteNow, geo, layers, columns, camWorld, now / 1000);
     const caveMouths = currentCaveMouths();
     caveMouthRenderer.setMouths(caveMouths);
     caveMouthRenderer.update(caveMouths, geo, layers, columns, camWorld, now / 1000);
@@ -6331,6 +6407,7 @@ async function boot(): Promise<void> {
         const murmurStats = murmurRenderer.stats();
         const afterglowStats = seasonAfterglowRenderer.stats();
         const nativeStats = nativeLifeRenderer.stats();
+        const fishVisualStats = fishSchoolRenderer.stats();
         const nativeHazard = nearbyNativeHazard();
         const mouthStats = caveMouthRenderer.stats();
         const routeStats = routeRenderer.stats();
@@ -6358,7 +6435,7 @@ async function boot(): Promise<void> {
           `audio ${audioState.muted ? 'muted' : audioState.unlocked ? 'on' : 'locked'} · loaded ${audioState.loaded.length} · music ${audioState.musicStarted ? audioState.musicPlaying ? 'playing' : audioState.musicQueued ? 'waiting' : 'paused' : 'idle'}${audioState.musicTrack ? ` ${audioState.musicTrack}` : ''} · last ${audioState.lastEvent ?? 'none'}${audioState.errors.length ? ` · errors ${audioState.errors.length}` : ''}`,
           `structures ${structures.length} · prop meshes ${propStats.meshes} · route marker roles ${propStats.routeReadabilityRoles}/${propStats.routeSilhouettes} · ${home.label}${cisternWater > 0 ? ` · cistern water ${cisternWater}` : ''}${cellarProvisions > 0 ? ` · cellar provisions ${cellarProvisions}` : ''}`,
           `food bait ${food.bait} · seeds ${food.seeds} · compost ${food.compost} · berries ${food.berries} · mushroom/herb/kelp/reeds ${food.caveMushroom}/${food.snowHerb}/${food.kelp}/${food.reeds} · raw/cooked fish ${food.rawFish}/${food.cookedFish} · traps ${trapReady}/${trapStats.length} ready · nets ${netReady}/${netStats.length} ready · meals/rations/stews ${food.campMeal}/${food.trailRation}/${food.expeditionStew} · cellar ${food.cellarProvisions}`,
-          `fish ${currentFishSchool().label} · strength ${currentFishSchool().strength.toFixed(2)} · catch ${currentFishSchool().catchCount}`,
+          `fish ${currentFishSchool().label} · strength ${currentFishSchool().strength.toFixed(2)} · catch ${currentFishSchool().catchCount} · visual ${fishVisualStats.slug ?? 'none'} anchors ${fishVisualStats.glbAnchorsVisible}/${fishVisualStats.glbAnchors} pts ${fishVisualStats.pointSchoolSprites}`,
           `forage ${currentForage().label} · strength ${currentForage().strength.toFixed(2)}`,
           `cave pressure ${currentCavePressure().label} · light ${currentCavePressure().light} · exposure ${currentCavePressure().exposureRate.toFixed(2)}${currentCavePressure().focus?.active ? ` · focus ${currentCavePressure().focus?.minutes}m` : ''}`,
           caveResonance ? `cave resonance ${caveResonance.label} · ${caveResonance.observed ? 'noted' : `unread · +${caveResonance.reward.count} ${caveResonance.reward.label}`}` : '',

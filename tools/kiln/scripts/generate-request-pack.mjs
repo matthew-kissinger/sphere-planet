@@ -70,6 +70,13 @@ async function generateConfirmedPack(requestPack) {
 
   const completed = await pollPack(packId);
   const items = expandedItems(requestPack.manifest.items);
+  const packDownloads = await kilnJson(`/packs/${encodeURIComponent(packId)}/download-url`, {
+    method: 'POST',
+    body: { includeProvenance: false },
+  });
+  const downloadsByAssetId = new Map((packDownloads.members ?? [])
+    .filter((member) => member.assetId && member.glb)
+    .map((member) => [member.assetId, member]));
   const outputs = [];
 
   for (const [index, member] of completed.members.entries()) {
@@ -79,31 +86,30 @@ async function generateConfirmedPack(requestPack) {
       outputs.push({ slug, status: member.status, error: member.error ?? 'pack member did not succeed' });
       continue;
     }
-    const job = await kilnJson(`/generations/${encodeURIComponent(member.generationId)}`);
-    if (!job.asset?.assetId) {
-      outputs.push({ slug, status: 'failed', generationId: member.generationId, error: 'succeeded member has no asset id' });
+    const assetId = member.assetId ?? member.generationId;
+    const download = downloadsByAssetId.get(assetId);
+    if (!assetId || !download?.glb) {
+      outputs.push({ slug, status: 'failed', generationId: member.generationId, assetId, error: 'succeeded member has no pack download URL' });
       continue;
     }
-    const urls = await kilnJson(`/assets/${encodeURIComponent(job.asset.assetId)}/download-url`, {
-      method: 'POST',
-      body: { includeProvenance: false },
-    });
-    const glb = await downloadBytes(urls.glb);
+    const asset = await kilnJson(`/assets/${encodeURIComponent(assetId)}`);
+    const glb = await downloadBytes(download.glb);
     verifyGlb(glb);
     const modelPath = writeWithin(OUT_ROOT, `${slug}/model.glb`, glb);
     writeWithin(OUT_ROOT, `${slug}/asset.json`, Buffer.from(JSON.stringify({
-      ...job.asset,
+      ...asset,
       requestPacket: 'tools/kiln/requests/hearth-horizon-next-packs.json',
       requestPackId: requestPack.id,
       kilnPackId: packId,
       generationId: member.generationId,
+      assetId,
       requestedItem: item,
     }, null, 2)));
     outputs.push({
       slug,
       status: 'ok',
       generationId: member.generationId,
-      assetId: job.asset.assetId,
+      assetId,
       modelPath,
       bytes: glb.byteLength,
     });

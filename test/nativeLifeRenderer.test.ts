@@ -254,4 +254,48 @@ describe('native life renderer asset readability', () => {
     expect(lowRateStats.activeMixers).toBe(0);
     expect(lowRateStats.lowRateMixers).toBe(1);
   });
+
+  it('reports roaming state and drives walk hints only for moving actors', async () => {
+    const scene = new THREE.Scene();
+    const provider = new FakeCreatureSkins();
+    const renderer = new NativeLifeRenderer(scene, provider);
+    const { geo, layers, columns } = fixtureWorld();
+    const base = site('brambleback', 5, 'territorial');
+    const currentTile = geo.neighbor(base.tile, 0);
+    const moving: NativeCreatureSite = {
+      ...base,
+      tile: currentTile,
+      homeTile: base.tile,
+      motion: {
+        homeTile: base.tile,
+        fromTile: base.tile,
+        toTile: currentTile,
+        currentTile,
+        targetTile: currentTile,
+        progress: 0.7,
+        moving: true,
+        state: 'patrol',
+        clip: 'walk',
+        leashRings: 1,
+      },
+    };
+
+    renderer.setSites([base]);
+    await flushSkinPromises();
+    renderer.setSites([moving]);
+    await flushSkinPromises();
+    renderer.update([moving], geo, layers, columns, cameraAtTile(geo, layers, columns, currentTile), 3.2);
+    const stats = renderer.stats();
+
+    expect(stats.roamingActors).toBe(1);
+    expect(stats.movingActors).toBe(1);
+    expect(stats.roamingStates).toMatchObject({ patrol: 1 });
+    expect(stats.clipHints).toMatchObject({ walk: 1 });
+    expect(stats.kilnCreatureSkinsBySlug['creature-brambleback']).toMatchObject({
+      loaded: 1,
+      activeMixers: 1,
+      glbVisible: 1,
+      clips: ['idle', 'walk'],
+    });
+  });
 });
