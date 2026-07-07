@@ -70,6 +70,8 @@ export interface HearthJournalInput {
     planMissing: readonly string[];
     guideLabel?: string;
     guideDetail?: string;
+    selectedCandidateLabel?: string;
+    selectedCandidateDetail?: string;
     routePlanLabel?: string;
     routePlanDetail?: string;
     hearthBeacon?: string;
@@ -301,6 +303,13 @@ export function buildHearthJournal(input: HearthJournalInput): HearthJournal {
       label: input.route.guideLabel,
       detail: input.route.guideDetail ?? 'route ribbon active',
       tone: 'ready',
+    });
+  }
+  if (input.route.selectedCandidateLabel) {
+    routeEntries.push({
+      label: 'route choice',
+      detail: `${input.route.selectedCandidateLabel}${input.route.selectedCandidateDetail ? ` · ${input.route.selectedCandidateDetail}` : ''}`,
+      tone: 'wonder',
     });
   }
 

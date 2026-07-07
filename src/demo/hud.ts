@@ -58,7 +58,7 @@ export interface CraftingRecipeView {
 export interface RouteSlateView {
   title: string;
   summary: string;
-  pins: { id: string; label: string; detail: string; ready: boolean }[];
+  pins: { id: string; label: string; detail: string; ready: boolean; selected?: boolean; selectable?: boolean }[];
 }
 
 export interface HearthJournalView {
@@ -106,6 +106,7 @@ export class Hud {
   onPlaceSelect: ((id: string) => void) | null = null;
   onRoutePin: (() => void) | null = null;
   onRouteClear: (() => void) | null = null;
+  onRouteSelect: ((index: number) => void) | null = null;
   onJournalToggle: (() => void) | null = null;
   onJournalClose: (() => void) | null = null;
   onStorageTransfer: ((chestId: number, item: string, action: ChestStorageAction) => void) | null = null;
@@ -169,6 +170,12 @@ export class Hud {
     });
     this.route.addEventListener('pointerdown', (e) => {
       e.stopPropagation();
+      const pin = (e.target as HTMLElement).closest('[data-route-index]') as HTMLElement | null;
+      if (pin?.dataset.routeIndex !== undefined) {
+        e.preventDefault();
+        this.onRouteSelect?.(Number(pin.dataset.routeIndex));
+        return;
+      }
       const action = (e.target as HTMLElement).closest('button[data-route-action]') as HTMLButtonElement | null;
       if (!action || action.disabled) return;
       e.preventDefault();
@@ -297,8 +304,8 @@ export class Hud {
       this.routeTimer = 0;
       return;
     }
-    const rows = slate.pins.slice(0, 5).map((pin) =>
-      `<div class="route-pin${pin.ready ? ' ready' : ''}">` +
+    const rows = slate.pins.slice(0, 5).map((pin, index) =>
+      `<div class="route-pin${pin.ready ? ' ready' : ''}${pin.selected ? ' selected' : ''}${pin.selectable ? ' selectable' : ''}" data-route-index="${index}">` +
       `<span class="route-dot"></span><div><strong>${pin.label}</strong><p>${pin.detail}</p></div></div>`,
     ).join('');
     const html = `<div class="route-head"><span>${slate.title}</span><span>${escapeHtml(this.controls.route)}</span></div>` +
@@ -311,6 +318,10 @@ export class Hud {
     }
     this.route.classList.remove('hide');
     this.routeTimer = seconds;
+  }
+
+  routeVisible(): boolean {
+    return !this.route.classList.contains('hide');
   }
 
   setJournal(journal: HearthJournalView | null, open: boolean): void {

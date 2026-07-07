@@ -1,5 +1,32 @@
 Original prompt: complete courier frontier plan
 
+## 2026-07-07
+
+- Current frontier snapshot: goal outcome is measurable Hearth and Horizon progress under
+  the DAG operating model; active critical-path node is F1 Route Slate candidate choice
+  with I2 cross-device parity and J1 browser proof; subagent lanes accepted the docs
+  correction and ranked Route Slate selection over asset or music churn; current reviewer
+  gates are R0, R2, R3, and R5; no human-owned decision is blocking this slice.
+- Corrected the Hearth and Horizon orchestration process after the user called out that
+  subagents and directed acyclic graphs were no longer visibly driving progress. The cycle
+  docs now promote the static DAG into an active run ledger with node owners, statuses,
+  dependencies, proof gates, and a progress-accounting rule: if no DAG node moves to
+  complete/blocked/deferred with evidence, the slice did not advance the goal.
+- Opened the current critical-path run as A2 living DAG, A3 subagent briefs, F1
+  route/itinerary polish, I2 touch/gamepad parity, and J1 browser proof. The immediate
+  target is selectable Route Slate candidates so route planning becomes an intentional
+  player choice across input devices instead of always pinning the top-ranked candidate.
+- Closed the selectable Route Slate candidate slice for F1/I2/J1: Route Slate rows now
+  select the actual `RouteGuide` candidate that will be pinned, the pin command preserves
+  prior top-ranked behavior unless a row is explicitly selected, keyboard Arrow/Enter/Escape
+  and gamepad D-pad/A/B/Back own route focus while the panel is open, touch row selection
+  works with the route pin button, and route clicks no longer leak into mouse-look.
+- Verified the slice with `npm test -- navigation`, `npm test -- gamepad`,
+  `npm test -- journal`, `npm run typecheck`, browser proof at
+  `output/playwright/route-selection/proof.json` covering desktop pointer, injected
+  gamepad, and phone touch non-primary route selection, the full 248-test suite,
+  `npm run build`, and `git diff --check` with only known LF-to-CRLF checkout warnings.
+
 ## 2026-07-06
 
 - Closed the first Cross-Device UX P0 input-accessibility slice under the Hearth and Horizon

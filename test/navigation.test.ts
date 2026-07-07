@@ -646,6 +646,42 @@ describe('Hearth and Horizon horizon chart navigation', () => {
     expect(routeGuide({ chart: null, beacon: null, routePlan: arrived })).toBeNull();
   });
 
+  it('can save a deliberately selected non-primary route candidate', () => {
+    const signal = nextHorizonChartSignal(landmarks, new Set([1]), centers, frame, 0, [1, 0, 0], 100)!;
+    const beacon = hearthBeaconSignal([
+      { id: 1, item: 'bedroll', tile: 2, layer: 4, yaw: 0, state: { home: true } },
+      { id: 2, item: 'campfire', tile: 2, layer: 4, yaw: 0, state: { lit: true } },
+    ], homeTopology, centers, frame, 0, [1, 0, 0], 100)!;
+    const candidates = routeGuideCandidates({
+      chart: signal,
+      beacon,
+      skyfall: {
+        tile: 3,
+        kind: 'emberFall',
+        label: 'emberfall crater',
+        detail: 'fresh star-slag still ticking with orange heat',
+        rewardLabel: 'glow crystal',
+        rewardCount: 1,
+        distanceM: 96,
+        distanceLabel: '96 m',
+        turn: 'right',
+        minutesRemaining: 88,
+        active: true,
+        harvested: false,
+      },
+    });
+
+    expect(candidates[0].kind).toBe('target');
+    const selected = candidates.find((candidate) => candidate.kind === 'home')!;
+    const saved = createRoutePlanFromGuides([selected], 0, 4, 360)!;
+
+    expect(saved).toMatchObject({
+      sourceKind: 'home',
+      targetTile: beacon.homeTile,
+      label: 'Hearth Beacon',
+    });
+  });
+
   it('builds, extends, advances, and completes saved multi-leg route itineraries', () => {
     const signal = nextHorizonChartSignal(landmarks, new Set([1]), centers, frame, 0, [1, 0, 0], 100)!;
     const candidates = routeGuideCandidates({

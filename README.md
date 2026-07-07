@@ -376,7 +376,8 @@ for turning this sandbox into a full crafting survival game with functional home
 fishing, natural arches, caves, planetary travel, and the twelve pentagon landmarks.
 
 See [docs/hearth-and-horizon-cycle.md](docs/hearth-and-horizon-cycle.md) for the development
-cycle and scope.
+cycle, scope, active DAG board, subagent ledger, and proof gates. The latest current-frontier
+snapshot lives at the top of [progress.md](progress.md).
 
 ## The plane
 

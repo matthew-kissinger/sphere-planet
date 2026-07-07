@@ -30,7 +30,7 @@ import { UxManager, type UxInputMode, type UxProfile } from './player/ux';
 import { pick, pickTree, type PickResult, type TreePick } from './edit/pick';
 import { Metrics } from './demo/metrics';
 import { Autopilot, OrbitDemo } from './demo/autopilot';
-import { Hud, splash, hideSplash, type ChestStoragePanelView, type CraftingRecipeView } from './demo/hud';
+import { Hud, splash, hideSplash, type ChestStoragePanelView, type CraftingRecipeView, type RouteSlateView } from './demo/hud';
 import { GameAudio } from './audio/gameAudio';
 import {
   audioEventForCraft,
@@ -634,6 +634,9 @@ async function boot(): Promise<void> {
   let openChestId: number | null = null;
   let storageFocusIndex = 0;
   let storageFocusAction: ChestTransferAction = 'depositOne';
+  let routeFocusIndex = 0;
+  let routeFocusDirty = false;
+  let routeFocusActive = false;
   let selectedStructureItem: PlaceableItemId | null = null;
   let lastStructureAction = '';
   let lastFoodAction = '';
@@ -1911,6 +1914,55 @@ async function boot(): Promise<void> {
     return true;
   };
 
+  const routeSlateOpen = (): boolean => routeFocusActive && hud.routeVisible();
+
+  const closeRouteSlate = (): void => {
+    routeFocusActive = false;
+    routeFocusDirty = false;
+    hud.setRouteSlate(null);
+  };
+
+  const clampRouteFocus = (guides: readonly RouteGuide[] = currentSelectableRouteGuides()): RouteGuide[] => {
+    const list = guides.slice();
+    routeFocusIndex = Math.max(0, Math.min(Math.max(0, list.length - 1), routeFocusIndex));
+    return list;
+  };
+
+  const routeSelectionState = () => {
+    const candidates = clampRouteFocus();
+    return {
+      open: routeSlateOpen(),
+      index: routeFocusIndex,
+      touched: routeFocusDirty,
+      selected: candidates[routeFocusIndex] ?? null,
+      candidates,
+    };
+  };
+
+  const refreshRouteSlate = (seconds = 10): void => {
+    if (!routeFocusActive) routeFocusActive = true;
+    clampRouteFocus();
+    hud.setRouteSlate(currentRouteSlate(), seconds);
+  };
+
+  const selectRouteCandidate = (index: number, touched = true): boolean => {
+    const candidates = clampRouteFocus();
+    if (candidates.length === 0) return false;
+    routeFocusIndex = Math.max(0, Math.min(candidates.length - 1, Math.trunc(Number.isFinite(index) ? index : 0)));
+    routeFocusActive = true;
+    routeFocusDirty = touched || routeFocusDirty;
+    hud.setRouteSlate(currentRouteSlate(), 12);
+    playAudio('uiConfirm');
+    return true;
+  };
+
+  const selectedRouteGuideForPin = (forceSelected = false): RouteGuide | null => {
+    if (!routeSlateOpen() || (!forceSelected && !routeFocusDirty)) return null;
+    const candidates = clampRouteFocus();
+    const guide = candidates[routeFocusIndex] ?? null;
+    return guide && guide.kind !== 'planned' ? guide : null;
+  };
+
   const useHorizonChart = (): boolean => {
     if (craftingOpen) {
       craftingOpen = false;
@@ -1919,6 +1971,9 @@ async function boot(): Promise<void> {
     const chartAvailable = horizonChartCount() > 0;
     const signal = chartAvailable ? horizonChartSignal() : null;
     const beacon = visibleHearthBeaconSignal();
+    routeFocusActive = true;
+    routeFocusDirty = false;
+    clampRouteFocus(currentSelectableRouteGuides(signal));
     const slate = currentRouteSlate(signal);
     const planned = currentRoutePlanSignal();
     const hasLocalPins = slate.pins.some((pin) => pin.id !== 'prep');
@@ -1935,6 +1990,7 @@ async function boot(): Promise<void> {
           : `${slate.summary} · awaken a pentagon for the chart`, 4);
         return true;
       }
+      routeFocusActive = false;
       playAudio('uiDeny');
       hud.flash('awaken a pentagon to unlock the horizon chart', 2.5);
       lastNavigationAction = 'horizon chart locked';
@@ -1956,7 +2012,7 @@ async function boot(): Promise<void> {
     return true;
   };
 
-  const pinCurrentRoute = (): boolean => {
+  const pinCurrentRoute = (selectedGuide: RouteGuide | null = null): boolean => {
     if (craftingOpen) {
       craftingOpen = false;
       refreshCraftingHud();
@@ -1964,7 +2020,9 @@ async function boot(): Promise<void> {
     const seasonalGuides = currentSeasonRouteGuides();
     const unplannedGuides = currentUnplannedRouteGuides();
     const localNativeLead = unplannedGuides[0]?.kind === 'nativeHazard' || unplannedGuides[0]?.kind === 'nativeLife';
-    const guides = !activeRoutePlan && localNativeLead
+    const guides = selectedGuide && selectedGuide.kind !== 'planned'
+      ? [selectedGuide]
+      : !activeRoutePlan && localNativeLead
       ? [unplannedGuides[0]]
       : !activeRoutePlan && seasonalGuides.length > 0
       ? seasonalGuides
@@ -2003,8 +2061,9 @@ async function boot(): Promise<void> {
     triggerCharacterAction('discover', 'horizonChart', 0.72);
     playAudio('routeSlate');
     markSaveDirty();
-    hud.setRouteSlate(currentRouteSlate(), 8);
-    const seasonRoute = seasonalGuides.length > 0 && activeRoutePlan.legs?.some((leg) => leg.label.startsWith('Season '));
+    routeFocusDirty = false;
+    refreshRouteSlate(9);
+    const seasonRoute = !selectedGuide && seasonalGuides.length > 0 && activeRoutePlan.legs?.some((leg) => leg.label.startsWith('Season '));
     lastNavigationAction = seasonRoute
       ? `season itinerary pinned: ${legCount} stops · ${activeRoutePlan.label} · ${signal?.distanceLabel ?? guide.detail}`
       : legCount > 1
@@ -2027,10 +2086,11 @@ async function boot(): Promise<void> {
     }
     const label = activeRoutePlan.label;
     activeRoutePlan = null;
+    routeFocusDirty = false;
     triggerCharacterAction('discover', 'map', 0.52);
     playAudio('uiConfirm');
     markSaveDirty();
-    hud.setRouteSlate(currentRouteSlate(), 6);
+    refreshRouteSlate(6);
     lastNavigationAction = `route plan cleared: ${label}`;
     hud.flash(`cleared planned path: ${label}`, 2.8);
     return true;
@@ -2042,10 +2102,10 @@ async function boot(): Promise<void> {
     return useHorizonChart();
   };
 
-  const pinRouteCommand = (): boolean => {
+  const pinRouteCommand = (forceSelected = false): boolean => {
     if (journalOpen) closeJournal();
     if (openChestId !== null) closeStorage();
-    return pinCurrentRoute();
+    return pinCurrentRoute(selectedRouteGuideForPin(forceSelected));
   };
 
   const clearRouteCommand = (): boolean => {
@@ -2060,6 +2120,7 @@ async function boot(): Promise<void> {
 
   hud.onRoutePin = pinRouteCommand;
   hud.onRouteClear = clearRouteCommand;
+  hud.onRouteSelect = (index) => { selectRouteCandidate(index, true); };
 
   const useLandmark = (tile?: number): boolean => {
     const target = tile !== undefined ? Math.trunc(tile) : nearbyLandmarkTile();
@@ -3134,6 +3195,29 @@ async function boot(): Promise<void> {
     nativeLife: currentRouteNativeLifeSignals(),
   });
 
+  const currentSelectableRouteGuides = (signal: ReturnType<typeof horizonChartSignal> = visibleHorizonChartSignal()): RouteGuide[] => {
+    const guides: RouteGuide[] = [];
+    const seen = new Set<string>();
+    const pushGuide = (guide: RouteGuide | null | undefined) => {
+      if (!guide || guide.kind === 'planned') return;
+      const targetTile = Number.isFinite(guide.targetTile) ? Math.trunc(guide.targetTile) : -1;
+      if (targetTile < 0) return;
+      const key = `${guide.kind}:${targetTile}:${guide.label}`;
+      if (seen.has(key)) return;
+      seen.add(key);
+      guides.push({ ...guide, targetTile });
+    };
+    const seasonalGuides = currentSeasonRouteGuides();
+    const unplannedGuides = currentUnplannedRouteGuides(signal);
+    if (!activeRoutePlan && seasonalGuides.length > 0) {
+      seasonalGuides.forEach(pushGuide);
+      unplannedGuides.forEach(pushGuide);
+    } else {
+      unplannedGuides.forEach(pushGuide);
+    }
+    return guides.sort((a, b) => b.priority - a.priority || a.label.localeCompare(b.label));
+  };
+
   const currentRouteGuide = (signal: ReturnType<typeof horizonChartSignal> = visibleHorizonChartSignal()) => routeGuide({
     chart: signal,
     beacon: visibleHearthBeaconSignal(),
@@ -3195,7 +3279,7 @@ async function boot(): Promise<void> {
   const currentRouteSlate = (signal: ReturnType<typeof horizonChartSignal> = visibleHorizonChartSignal()) => {
     const fishTraps = fishTrapDiagnostics();
     const shoreNets = shoreNetDiagnostics();
-    return routeSlate({
+    const slate = routeSlate({
       chart: signal,
       beacon: visibleHearthBeaconSignal(),
       routePlan: currentRoutePlanSignal(),
@@ -3224,6 +3308,18 @@ async function boot(): Promise<void> {
       seasonAfterglow: currentRouteSeasonAfterglowSignal(),
       nativeLife: currentRouteNativeLifeSignals(),
     });
+    const candidates = clampRouteFocus(currentSelectableRouteGuides(signal));
+    if (!routeFocusActive || candidates.length === 0) return slate;
+    const readyById = new Map(slate.pins.map((pin) => [pin.id, pin.ready]));
+    const pins: RouteSlateView['pins'] = candidates.slice(0, 5).map((guide, index) => ({
+      id: guide.kind,
+      label: guide.label,
+      detail: guide.detail,
+      ready: readyById.get(guide.kind) ?? true,
+      selected: routeFocusActive && index === routeFocusIndex,
+      selectable: true,
+    }));
+    return { ...slate, pins };
   };
 
   const currentHearthJournal = () => {
@@ -3285,6 +3381,7 @@ async function boot(): Promise<void> {
     const weatherNote = lastSurvivalAction.startsWith('weather watch:')
       ? lastSurvivalAction.replace('weather watch:', '').split(' · ').slice(0, 2).join(' · ')
       : undefined;
+    const routeSelection = routeSelectionState();
     return buildHearthJournal({
       home: {
         label: home.label,
@@ -3324,6 +3421,8 @@ async function boot(): Promise<void> {
         planMissing: plan.missing,
         guideLabel: guide?.label,
         guideDetail: guide?.detail,
+        selectedCandidateLabel: routeSelection.selected?.label,
+        selectedCandidateDetail: routeSelection.selected?.detail,
         routePlanLabel: routePlan
           ? routePlan.legCount > 1
             ? routePlan.complete ? 'itinerary complete' : `itinerary stop ${routePlan.legIndex + 1}/${routePlan.legCount}: ${routePlan.label}`
@@ -3419,7 +3518,7 @@ async function boot(): Promise<void> {
       closeStorage();
       craftingOpen = false;
       refreshCraftingHud();
-      hud.setRouteSlate(null);
+      closeRouteSlate();
       hud.setJournal(currentHearthJournal(), true);
       playAudio('uiOpen');
       return;
@@ -3478,7 +3577,7 @@ async function boot(): Promise<void> {
       craftingFocusAction = 'craft';
     }
     refreshCraftingHud();
-    if (craftingOpen) hud.setRouteSlate(null);
+    if (craftingOpen) closeRouteSlate();
     playAudio(craftingOpen ? 'uiOpen' : 'uiConfirm');
     if (craftingOpen) hud.flash('crafting opened', 1.4);
   };
@@ -3503,7 +3602,7 @@ async function boot(): Promise<void> {
     if (journalOpen) closeJournal();
     craftingOpen = false;
     refreshCraftingHud();
-    hud.setRouteSlate(null);
+    closeRouteSlate();
     refreshStorage();
     const view = currentChestStorage();
     lastStructureAction = `chest:open:${view?.summary ?? 'storage open'}`;
@@ -3555,7 +3654,8 @@ async function boot(): Promise<void> {
     action === 'depositOne' || action === 'depositAll' ? row.canDeposit : row.canWithdraw;
 
   const handleGamepadPanelInput = (gp: GamepadFrame): boolean => {
-    const hasPanelInput = gp.menuUp || gp.menuDown || gp.menuLeft || gp.menuRight || gp.confirm || gp.cancel;
+    const routeInput = routeSlateOpen() && (gp.menuUp || gp.menuDown || gp.confirm || gp.cancel || gp.chart || gp.pin || gp.clearPin);
+    const hasPanelInput = gp.menuUp || gp.menuDown || gp.menuLeft || gp.menuRight || gp.confirm || gp.cancel || routeInput;
     if (!hasPanelInput) return false;
 
     if (openChestId !== null) {
@@ -3623,7 +3723,66 @@ async function boot(): Promise<void> {
       return true;
     }
 
+    if (routeSlateOpen()) {
+      const candidates = clampRouteFocus();
+      if (gp.cancel || gp.chart) {
+        closeRouteSlate();
+        playAudio('uiConfirm');
+        return true;
+      }
+      if (gp.clearPin) {
+        clearRouteCommand();
+        return true;
+      }
+      if (gp.menuUp || gp.menuDown) {
+        if (candidates.length === 0) {
+          playAudio('uiDeny');
+          hud.flash('no route candidates to choose', 1.6);
+          return true;
+        }
+        const delta = gp.menuDown ? 1 : -1;
+        routeFocusIndex = (routeFocusIndex + delta + candidates.length) % candidates.length;
+        routeFocusDirty = true;
+        refreshRouteSlate(12);
+        playAudio('uiConfirm');
+        return true;
+      }
+      if (gp.confirm || gp.pin) {
+        pinRouteCommand(true);
+        return true;
+      }
+      return true;
+    }
+
     return false;
+  };
+
+  const handleRouteKeyboardInput = (up: boolean, down: boolean, confirm: boolean, cancel: boolean): boolean => {
+    if (!routeSlateOpen() || (!up && !down && !confirm && !cancel)) return false;
+    const candidates = clampRouteFocus();
+    if (cancel) {
+      closeRouteSlate();
+      playAudio('uiConfirm');
+      return true;
+    }
+    if (up || down) {
+      if (candidates.length === 0) {
+        playAudio('uiDeny');
+        hud.flash('no route candidates to choose', 1.6);
+        return true;
+      }
+      const delta = down ? 1 : -1;
+      routeFocusIndex = (routeFocusIndex + delta + candidates.length) % candidates.length;
+      routeFocusDirty = true;
+      refreshRouteSlate(12);
+      playAudio('uiConfirm');
+      return true;
+    }
+    if (confirm) {
+      pinRouteCommand(true);
+      return true;
+    }
+    return true;
   };
 
   const homeBedrollStructure = (): StructureSave | null =>
@@ -3657,7 +3816,7 @@ async function boot(): Promise<void> {
     if (journalOpen) closeJournal();
     craftingOpen = false;
     refreshCraftingHud();
-    hud.setRouteSlate(null);
+    closeRouteSlate();
     lastSurvivalAction = `${reason}:${result.message}`;
     triggerCharacterAction('sleep', bedroll ? 'bedroll' : 'hands', 1.05);
     playAudio(bedroll ? 'hearthRest' : 'uiDeny');
@@ -4215,9 +4374,10 @@ async function boot(): Promise<void> {
     caveMouths: () => caveMouthDiagnostics(),
     echoLantern: () => useEchoLantern(),
     horizonChart: () => useHorizonChart(),
-    navigation: () => ({ horizonChart: horizonChartCount(), signal: visibleHorizonChartSignal(), hearthBeacon: visibleHearthBeaconSignal(), routePlan: currentRoutePlanSignal(), savedRoutePlan: activeRoutePlan, waystones: waystoneRouteSignals(), caveAnchors: caveAnchorRouteSignals(), weatherVane: weatherVaneForecast(), domain: currentPentagonDomain(), site: currentRouteSiteSignal(), thresholdChamber: currentRouteThresholdChamberSignal(), resource: currentRouteResourceSignal(), skyfall: currentRouteSkyfallSignal(), murmur: currentRouteMurmurSignal(), season: currentRouteSeasonSignal(), seasonAfterglow: currentRouteSeasonAfterglowSignal(), seasonRoute: currentSeasonRouteGuides(), strangerSeasons: strangerSeasonDiagnostics(), guide: currentRouteGuide(), routeRenderer: routeRenderer.stats(), plan: horizonExpeditionPlan(), slate: currentRouteSlate(), lastAction: lastNavigationAction }),
+    navigation: () => ({ horizonChart: horizonChartCount(), signal: visibleHorizonChartSignal(), hearthBeacon: visibleHearthBeaconSignal(), routePlan: currentRoutePlanSignal(), savedRoutePlan: activeRoutePlan, waystones: waystoneRouteSignals(), caveAnchors: caveAnchorRouteSignals(), weatherVane: weatherVaneForecast(), domain: currentPentagonDomain(), site: currentRouteSiteSignal(), thresholdChamber: currentRouteThresholdChamberSignal(), resource: currentRouteResourceSignal(), skyfall: currentRouteSkyfallSignal(), murmur: currentRouteMurmurSignal(), season: currentRouteSeasonSignal(), seasonAfterglow: currentRouteSeasonAfterglowSignal(), seasonRoute: currentSeasonRouteGuides(), strangerSeasons: strangerSeasonDiagnostics(), guide: currentRouteGuide(), routeSelection: routeSelectionState(), routeRenderer: routeRenderer.stats(), plan: horizonExpeditionPlan(), slate: currentRouteSlate(), lastAction: lastNavigationAction }),
     routePlan: () => ({ saved: activeRoutePlan, signal: currentRoutePlanSignal() }),
-    pinRoute: () => pinCurrentRoute(),
+    selectRouteCandidate: (index = 0) => { selectRouteCandidate(index, true); return routeSelectionState(); },
+    pinRoute: (selected = false) => pinRouteCommand(selected),
     clearRoutePlan: () => clearRoutePlan(),
     journal: () => ({ open: journalOpen, state: currentHearthJournal() }),
     toggleJournal: () => { toggleJournal(); return { open: journalOpen, state: currentHearthJournal() }; },
@@ -4773,7 +4933,7 @@ async function boot(): Promise<void> {
     const tf = touch.frame();
     const gp = gamepad.frame(dt);
     const gpPanelConsumed = handleGamepadPanelInput(gp);
-    const gpWorldBlocked = gpPanelConsumed || craftingOpen || openChestId !== null || journalOpen;
+    const gpWorldBlocked = gpPanelConsumed || routeSlateOpen() || craftingOpen || openChestId !== null || journalOpen;
     const gamepadAimActive = gp.active || gamepad.active();
     drained.dx += gp.lookX;
     drained.dy += gp.lookY;
@@ -4806,6 +4966,12 @@ async function boot(): Promise<void> {
     const escPressed = input.pressed('Escape') || (escDown && !escWas);
     const f3Pressed = input.pressed('F3') || (f3Down && !f3Was);
     const hPressed = input.pressed('KeyH') || (hDown && !hWas);
+    const routeKeyboardConsumed = handleRouteKeyboardInput(
+      input.pressed('ArrowUp'),
+      input.pressed('ArrowDown'),
+      input.pressed('Enter'),
+      escPressed,
+    );
     if (fPressed && !autopilot.active) {
       player.toggleFly();
       if (creativeActive) hud.flash(player.mode === 'fly' ? 'creative free-flight' : 'walk mode', 2);
@@ -4821,13 +4987,13 @@ async function boot(): Promise<void> {
       }
     }
     let gamepadUseConsumed = false;
-    if (escPressed && openChestId !== null) {
+    if (!routeKeyboardConsumed && escPressed && openChestId !== null) {
       closeStorage();
       playAudio('uiConfirm');
-    } else if (escPressed && journalOpen) {
+    } else if (!routeKeyboardConsumed && escPressed && journalOpen) {
       closeJournal();
       playAudio('uiConfirm');
-    } else if (escPressed && craftingOpen) {
+    } else if (!routeKeyboardConsumed && escPressed && craftingOpen) {
       craftingOpen = false;
       refreshCraftingHud();
       playAudio('uiConfirm');
@@ -5176,6 +5342,10 @@ async function boot(): Promise<void> {
     // --- hud + metrics ---
     metrics.frame(dtMs);
     hud.tick(dt);
+    if (routeFocusActive && !hud.routeVisible()) {
+      routeFocusActive = false;
+      routeFocusDirty = false;
+    }
     hudTimer -= dt;
     if (hudTimer <= 0) {
       hudTimer = 0.25;
@@ -5207,6 +5377,7 @@ async function boot(): Promise<void> {
       const hearthBeacon = visibleHearthBeaconSignal();
       const guide = currentRouteGuide(chartSignal);
       const slate = currentRouteSlate(chartSignal);
+      const routeSelection = routeSelectionState();
       const vaneForecast = weatherVaneForecast();
       const cisternWater = rainCisternDiagnostics().reduce((sum, cistern) => sum + Math.max(0, Math.trunc(cistern.state?.water ?? 0)), 0);
       const cellarProvisions = rootCellarProvisionCount(structures, geo);
@@ -5281,6 +5452,7 @@ async function boot(): Promise<void> {
           vaneForecast.ready ? `weather vane ${vaneForecast.label || 'read'} · reads ${vaneForecast.reads}` : '',
           guide ? `route ribbon ${guide.label} · ${guide.detail} · dashes ${routeStats.active}/${routeStats.meshes} · atlas ${routeStats.atlasActive}/${routeStats.atlasMeshes}` : '',
           slate.primary ? `route slate ${slate.summary}` : '',
+          routeSelection.open && routeSelection.selected ? `route choice ${routeSelection.index + 1}/${routeSelection.candidates.length} · ${routeSelection.selected.label}` : '',
           natural ? `natural void ${natural.kind} · depth ${natural.depth.toFixed(1)} m` : '',
           caveSignal && !natural ? `cave signal ${caveSignal.label ?? caveKindLabel(caveSignal.kind)} · ${caveSignal.distance} ring${caveSignal.distance === 1 ? '' : 's'} · depth ${caveSignal.depth.toFixed(1)} m${caveSignal.clearance !== undefined ? ` · clearance ${caveSignal.clearance}` : ''}` : '',
           lastFoodAction ? `last food ${lastFoodAction}` : '',

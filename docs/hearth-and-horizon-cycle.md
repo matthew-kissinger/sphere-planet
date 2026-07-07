@@ -202,18 +202,67 @@ Current Hearth and Horizon DAG board:
 Critical path:
 `A0 -> A2 -> A4 -> B0 -> B1 -> B2 -> B3 -> H0 -> C0 -> C1 -> C2 -> C4 -> C5 -> D2 -> E4 -> F1 -> G3 -> I2 -> J1 -> J4`.
 
-| Lane | Atomic Tasks | Depends On |
-| --- | --- | --- |
-| A Orchestration/docs | A0 repo-state decision; A1 docs truth; A2 living DAG; A3 subagent briefs; A4 reviewer gates | none |
-| B Sim/save architecture | B0 main responsibility map; B1 extract interaction services; B2 save compatibility; B3 progression contracts; B4 economy/anti-exploit balance | A2 |
-| C Building/houses | C0 build-mode UX contract; C1 placement/rotation/dismantle polish; C2 shelter/room validation; C3 readable house-kit assets; C4 utility integrations; C5 functional-home playtest | B1, H0 |
-| D Terrain/caves/water | D0 cave/water spec; D1 entrance readability; D2 larger arches/rooms; D3 cave resources/hazards; D4 spring/cave-lake rules | B2 |
-| E Food/farming/fishing | E0 crop/fish tuning; E1 crop variety; E2 traps/nets loop; E3 cooking/preservation effects; E4 ecology-to-route balance | B2, C4, D4 |
-| F Travel/wonder | F0 settle afterglow local work; F1 route/itinerary polish; F2 visible event consequences; F3 boat/glider/cave-shortcut logistics | B3, D2, E4 |
-| G Native life/combat | G0 behavior state machine; G1 harmless depth; G2 hazard variety; G3 ward/stun/flee tool rules; G4 rewards/anti-farming | B3, D3, E4 |
-| H Avatar/art/assets | H0 authored Soft-Facet model brief; H1 prop/socket catalog; H2 animation coverage; H3 asset readability pass; H4 external asset ledger/probes | A4 |
-| I UX/input | I0 device control matrix; I1 HUD/panel hierarchy; I2 touch/gamepad parity for all verbs; I3 settings/pause/help/accessibility | C0, B3 |
-| J QA/release | J0 unit suites; J1 browser proof scripts; J2 screenshot/readability matrix; J3 perf/audio/bundle gates; J4 deploy/live/docs truth | all feature lanes |
+| Lane | Atomic Tasks | Depends On | Current State |
+| --- | --- | --- | --- |
+| A Orchestration/docs | A0 repo-state decision; A1 docs truth; A2 living DAG; A3 subagent briefs; A4 reviewer gates | none | A0-A4 active; must be refreshed at the start of each substantial continuation |
+| B Sim/save architecture | B0 main responsibility map; B1 extract interaction services; B2 save compatibility; B3 progression contracts; B4 economy/anti-exploit balance | A2 | Partially proven by sim/save modules and tests; B1/B3 remain critical-path debt before larger systems widen |
+| C Building/houses | C0 build-mode UX contract; C1 placement/rotation/dismantle polish; C2 shelter/room validation; C3 readable house-kit assets; C4 utility integrations; C5 functional-home playtest | B1, H0 | Functional props exist; utility/home playtest needs stronger proof |
+| D Terrain/caves/water | D0 cave/water spec; D1 entrance readability; D2 larger arches/rooms; D3 cave resources/hazards; D4 spring/cave-lake rules | B2 | Cave mouths and cave pressure exist; larger arch/room traversal remains unclosed |
+| E Food/farming/fishing | E0 crop/fish tuning; E1 crop variety; E2 traps/nets loop; E3 cooking/preservation effects; E4 ecology-to-route balance | B2, C4, D4 | Farming/fishing loops exist; route-pressure balance remains the next dependency for travel depth |
+| F Travel/wonder | F0 settle afterglow local work; F1 route/itinerary polish; F2 visible event consequences; F3 boat/glider/cave-shortcut logistics | B3, D2, E4 | F0 shipped; F1 is the current critical-path player-facing node |
+| G Native life/combat | G0 behavior state machine; G1 harmless depth; G2 hazard variety; G3 ward/stun/flee tool rules; G4 rewards/anti-farming | B3, D3, E4 | Several native families and ward loops exist; combat stays constrained until route/building loops carry it |
+| H Avatar/art/assets | H0 authored Soft-Facet model brief; H1 prop/socket catalog; H2 animation coverage; H3 asset readability pass; H4 external asset ledger/probes | A4 | First authored direction exists; readability review remains active debt for unclear assets and avatar polish |
+| I UX/input | I0 device control matrix; I1 HUD/panel hierarchy; I2 touch/gamepad parity for all verbs; I3 settings/pause/help/accessibility | C0, B3 | Touch/gamepad route and panel controls started; all-verbs parity remains open |
+| J QA/release | J0 unit suites; J1 browser proof scripts; J2 screenshot/readability matrix; J3 perf/audio/bundle gates; J4 deploy/live/docs truth | all feature lanes | Unit/build proof is strong; browser proof must track every player-facing node |
+
+Active run ledger, 2026-07-07:
+
+| DAG Node | Owner | Status | Proof Gate |
+| --- | --- | --- | --- |
+| A2 living DAG | Main orchestrator | Done for this slice | Docs show node status, owner, dependencies, proof gate, and next critical path before code edits widen |
+| A3 subagent briefs | Main orchestrator plus explorer lanes | Done for this slice | Two independent lanes audited graph/progress and next-node risk before the commit |
+| F1 route/itinerary polish | Main implementation lane | Done for selected-candidate slice | Player can choose a Route Slate candidate instead of pinning only the top-ranked stop |
+| I2 touch/gamepad parity | Main implementation lane with reviewer audit | Done for route choice | Same route-candidate choice works by mouse/touch, keyboard, and gamepad without leaking panel input |
+| J1 browser proof scripts | QA/release lane | Done for route choice | `output/playwright/route-selection/proof.json` captures desktop pointer, gamepad, and phone touch proof |
+
+Progress accounting rule: after each substantial slice, move exactly one current node to
+`complete`, `blocked`, or `deferred` with the proof artifact that justifies the state. If
+no DAG node moved, the slice did not advance Hearth and Horizon and should be treated as
+process drift, even if code changed.
+
+Living node ledger:
+
+| Node | Outcome | State | Owner/Lane | Depends On | Exit Gate | Evidence | Next Action |
+| --- | --- | --- | --- | --- | --- | --- | --- |
+| A2 | Make the DAG board measurable | Done | Main orchestrator | A0 | R0 | Active run ledger, living node ledger, subagent ledger, and gate evidence ledger in this doc | Keep updated at the start and end of the next substantial continuation |
+| A3 | Use subagents as parallel reviewer lanes | Done | Explorer lanes | A2 | R0 | Graph/progress audit accepted; next-node route audit accepted | Use worker lanes only for disjoint future code ownership |
+| F1 | Route planning becomes an intentional player choice | Done for selectable candidates | Main implementation | B3, D2, E4 | R2, R3 | Route Slate rows select actual `RouteGuide` candidates; non-primary route candidate can be pinned | Broaden itinerary polish later to reorder/remove saved legs |
+| I2 | Cross-device parity covers the affected verb | Done for route choice | UX/input lane | C0, B3, F1 | R3 | Desktop pointer, injected gamepad, keyboard, and phone touch route choice paths are wired | Continue all-verbs parity for future building/combat verbs |
+| J1 | Browser proof tracks the actual player path | Done for route choice | QA/release lane | F1, I2 | R5 | `output/playwright/route-selection/proof.json` plus three screenshots | Extend reusable proof harness for the full device matrix |
+
+Subagent decision ledger:
+
+| Lane | DAG Nodes | Brief | Decision | Merge Status | Reviewer Result |
+| --- | --- | --- | --- | --- | --- |
+| Graph/progress audit | A2, A3, J1 | Inspect whether the DAG is acting as a living board | Accepted | Merged into docs | Static lane table needed node states, evidence links, and start/end update rules |
+| Next-node route audit | F1, I2, J1 | Rank Route Slate selection, asset readability, and music optimization | Accepted | Driving current implementation | Selectable Route Slate candidates are the right critical-path node; music is already optimized |
+| Asset readability lane | H3, R4 | Continue reviewing unclear props, route markers, native-life hazards, and avatar readability | Deferred | Not in this code slice | Remains open after F1/I2 proof because unclear assets are still a known cycle debt |
+| Music/audio lane | J3 | Re-check soundtrack only if a regression appears | Deferred | No current edits | Prior music integration already streams and enforces a size budget |
+
+Gate evidence ledger:
+
+| Gate | Required Proof | Latest Evidence | Status | Remaining Gap |
+| --- | --- | --- | --- | --- |
+| R0 DAG intake | Current node, owner, dependency, reviewer lane, and proof target named before broad edits | Active run ledger, living node ledger, and subagent decisions above | Passing for this slice | Keep future slices from starting without a node ledger update |
+| R2 Playability gate | Real player loop changes state without debug-only shortcuts | Route Slate row selection pins a non-primary route target into the saved route plan | Passing for this slice | Later itinerary editing still needs reorder/remove polish |
+| R3 Cross-device gate | PC/laptop, touch, and gamepad evidence for affected verbs | `output/playwright/route-selection/proof.json` covers desktop pointer, injected gamepad, and phone touch | Passing for this slice | Broader tablet/laptop matrix still belongs to the reusable harness task |
+| R4 Asset readability gate | Reviewer can name the gameplay noun and likely verb from screenshots | Domain-resource, threshold, and native-life readability passes; remaining risks documented | Open | Avatar polish, route markers, cave anchors, and unclear assets still need reviewer lanes |
+| R5 Performance/release gate | Typecheck, unit suite, build, browser screenshots, console check, canvas proof | `npm test`, `npm run build`, `git diff --check`, and route-selection browser proof passed | Passing for this slice | Build still reports the existing large chunk warning |
+
+Board update rule: update the node ledger at the start and end of each substantial
+continuation. No node moves to `Done` without an evidence link. Every subagent output must
+be recorded as `accepted`, `rejected`, or `deferred`, including the reason when it does not
+become code.
 
 Reviewer gates:
 

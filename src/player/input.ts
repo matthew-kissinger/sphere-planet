@@ -36,7 +36,7 @@ export class Input {
       if (e.code === 'Tab' || e.code === 'F5') return;
       if (!this.keys.has(e.code)) this.keyEdges.add(e.code);
       this.keys.add(e.code);
-      if (['Space', 'ControlLeft', 'KeyW', 'KeyA', 'KeyS', 'KeyD', 'F3'].includes(e.code)) e.preventDefault();
+      if (['Space', 'ControlLeft', 'KeyW', 'KeyA', 'KeyS', 'KeyD', 'F3', 'ArrowUp', 'ArrowDown', 'Enter', 'Escape'].includes(e.code)) e.preventDefault();
     });
     window.addEventListener('keyup', (e) => this.keys.delete(e.code));
     window.addEventListener('blur', () => {
@@ -56,7 +56,7 @@ export class Input {
     window.addEventListener('mousedown', (e) => {
       if (this.touchMode) return;
       // UI elements handle their own pointers
-      if (e.target instanceof HTMLElement && e.target.closest('#hotbar, #crafting, #storage, #journal, .tbtn')) return;
+      if (e.target instanceof HTMLElement && e.target.closest('#hotbar, #crafting, #route, #storage, #journal, .tbtn')) return;
       el.focus();
       if (!this.locked && !this.lockUnavailable) {
         // attempt pointer lock; a denial (embedded preview) flips us to drag-look
