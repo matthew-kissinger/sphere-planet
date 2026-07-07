@@ -239,10 +239,13 @@ First wired pilot:
   opening truth, discovery state, and fallback remain code-owned. Baked GLB water/glow
   nodes that would imply the wrong live state are hidden by exact node name. Surface placement
   now uses the shared right-handed local frame contract: local `+Y` maps to the hex/planet
-  normal, local `+Z` keeps the family yaw/facing direction, and local `+X` is derived from
-  that pair so GLBs do not inherit reflected or tilted matrices. `npm run proof:k7-wonders`
+  normal and local `+Z` faces the approach side of the pentagon instead of arbitrary
+  per-index yaw. The shrine GLBs are authored with their facade/entry side on local `+X`,
+  so `KilnRuntimeAssets` applies the `preserve-y-up-x-front-to-z` correction before
+  fitting them to the socket; the alignment viewer uses the same policy. `npm run proof:k7-wonders`
   proves all 12 committed shrine GLBs plus the three crater GLBs with zero fallback, zero
-  generated-path requests, and shrine surface-basis determinant/up-dot assertions.
+  generated-path requests, shrine surface-basis determinant/up/forward-dot assertions, and
+  mounted-skin world up/forward-dot assertions.
 
 Runtime pilot candidates from the proof:
 

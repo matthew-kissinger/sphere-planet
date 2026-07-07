@@ -212,6 +212,7 @@ function familyForSlug(slug: string): KilnViewerFamily {
 function orientationPolicyFor(slug: string, asset?: KilnManifestAsset): KilnInstancedOrientationPolicy {
   if (slug === 'tree-pine' || slug === 'tree-broadleaf' || slug === 'tree-dead-snag') return 'longest-axis-to-y';
   if (slug === 'lantern-post' || slug === 'weather-vane') return 'longest-axis-to-y';
+  if (slug.startsWith('shrine-')) return 'preserve-y-up-x-front-to-z';
   void asset;
   return 'preserve-y-up';
 }

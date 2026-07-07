@@ -220,12 +220,14 @@ export interface KilnInstancedAssetPart {
   material: THREE.Material | THREE.Material[];
 }
 
-export type KilnInstancedOrientationPolicy = 'preserve-y-up' | 'longest-axis-to-y' | 'longest-axis-to-z';
+export type KilnInstancedOrientationPolicy = 'preserve-y-up' | 'preserve-y-up-x-front-to-z' | 'longest-axis-to-y' | 'longest-axis-to-z';
 export type KilnSourceUpAxis = 'x' | 'y' | 'z';
+export type KilnSourceForwardAxis = '+x' | '+z';
 
 export interface KilnInstancedOrientationSnapshot {
   policy: KilnInstancedOrientationPolicy;
   sourceUpAxis: KilnSourceUpAxis;
+  sourceForwardAxis?: KilnSourceForwardAxis;
   axisCorrection: readonly [number, number, number];
 }
 
@@ -470,6 +472,7 @@ export interface KilnLandmarkSkinFitSnapshot {
   socketRole: 'pentagon-landmark-shell';
   sourceBboxSize: readonly number[];
   runtimeSourceBboxSize: readonly number[];
+  orientedSourceBboxSize: readonly number[];
   normalizedBboxSize: readonly number[];
   normalizePolicy: 'center-xz-bottom-y-fit-footprint-height';
   orientation: KilnInstancedOrientationSnapshot;
@@ -1340,6 +1343,22 @@ function axisCorrectionFor(sourceUpAxis: KilnSourceUpAxis): { matrix: THREE.Matr
   };
 }
 
+function orientationCorrectionFor(
+  sourceUpAxis: KilnSourceUpAxis,
+  policy: KilnInstancedOrientationPolicy,
+): { matrix: THREE.Matrix4; euler: [number, number, number]; sourceForwardAxis?: KilnSourceForwardAxis } {
+  const up = axisCorrectionFor(sourceUpAxis);
+  if (policy === 'preserve-y-up-x-front-to-z') {
+    const forward = new THREE.Matrix4().makeRotationY(-Math.PI / 2);
+    return {
+      matrix: forward.multiply(up.matrix),
+      euler: [0, Number((-Math.PI / 2).toFixed(6)), 0],
+      sourceForwardAxis: '+x',
+    };
+  }
+  return up;
+}
+
 function axisCorrectionToForward(sourceAxis: KilnSourceUpAxis): { euler: [number, number, number] } {
   if (sourceAxis === 'x') return { euler: [0, Number((-Math.PI / 2).toFixed(6)), 0] };
   if (sourceAxis === 'y') return { euler: [Number((Math.PI / 2).toFixed(6)), 0, 0] };
@@ -1385,7 +1404,7 @@ export function makeInstancedAssetParts(
   const sourceSize = new THREE.Vector3();
   sourceBox.getSize(sourceSize);
   const sourceUpAxis = dominantAxis(sourceSize, orientationPolicy);
-  const correction = axisCorrectionFor(sourceUpAxis);
+  const correction = orientationCorrectionFor(sourceUpAxis, orientationPolicy);
   const orientedSourceBox = new THREE.Box3();
   const byMaterial = new Map<THREE.Material, { geometries: THREE.BufferGeometry[]; sourceMeshNames: string[] }>();
   const looseParts: KilnInstancedAssetPart[] = [];
@@ -1488,6 +1507,7 @@ export function makeInstancedAssetParts(
     orientation: {
       policy: orientationPolicy,
       sourceUpAxis,
+      sourceForwardAxis: correction.sourceForwardAxis,
       axisCorrection: correction.euler,
     },
   };
@@ -1706,6 +1726,7 @@ function normalizeSkyfallTemplate(source: THREE.Object3D, slug: string, targetFo
 function normalizeLandmarkTemplate(source: THREE.Object3D, slug: string, targetFootprint: number, targetHeight: number, hideGlbNames: readonly string[]): {
   template: THREE.Object3D;
   runtimeSourceBboxSize: number[];
+  orientedSourceBboxSize: number[];
   normalizedBboxSize: number[];
   sourceMeshCount: number;
   orientation: KilnInstancedOrientationSnapshot;
@@ -1713,22 +1734,18 @@ function normalizeLandmarkTemplate(source: THREE.Object3D, slug: string, targetF
   source.updateMatrixWorld(true);
   const sourceBox = new THREE.Box3().setFromObject(source);
   const runtimeSourceBboxSize = bboxSizeOfBox(sourceBox);
-  const size = new THREE.Vector3();
-  sourceBox.getSize(size);
-  const center = new THREE.Vector3();
-  sourceBox.getCenter(center);
-  const footprint = Math.max(size.x, size.z);
-  const footprintScale = footprint > 0 ? targetFootprint / footprint : 1;
-  const heightScale = size.y > 0 ? targetHeight / size.y : 1;
-  const scale = Math.max(0.01, Math.min(footprintScale, heightScale));
+  const correction = orientationCorrectionFor('y', 'preserve-y-up-x-front-to-z');
   const root = new THREE.Group();
   root.name = `kiln-landmark-template-${slug}`;
   const scaled = new THREE.Group();
   scaled.name = `kiln-landmark-scale-${slug}`;
-  scaled.scale.setScalar(scale);
+  const offset = new THREE.Group();
+  offset.name = `kiln-landmark-center-${slug}`;
+  const oriented = new THREE.Group();
+  oriented.name = `kiln-landmark-front-${slug}`;
+  oriented.rotation.set(...correction.euler);
   const body = source.clone(true);
   body.name = `kiln-landmark-body-${slug}`;
-  body.position.set(-center.x, -sourceBox.min.y, -center.z);
   const hiddenGlbNames = new Set(hideGlbNames);
   let sourceMeshCount = 0;
   body.traverse((child) => {
@@ -1742,19 +1759,35 @@ function normalizeLandmarkTemplate(source: THREE.Object3D, slug: string, targetF
       mesh.frustumCulled = false;
     }
   });
-  scaled.add(body);
+  oriented.add(body);
+  oriented.updateMatrixWorld(true);
+  const orientedBox = new THREE.Box3().setFromObject(oriented);
+  const orientedSize = new THREE.Vector3();
+  const orientedCenter = new THREE.Vector3();
+  orientedBox.getSize(orientedSize);
+  orientedBox.getCenter(orientedCenter);
+  const footprint = Math.max(orientedSize.x, orientedSize.z);
+  const footprintScale = footprint > 0 ? targetFootprint / footprint : 1;
+  const heightScale = orientedSize.y > 0 ? targetHeight / orientedSize.y : 1;
+  const scale = Math.max(0.01, Math.min(footprintScale, heightScale));
+  offset.position.set(-orientedCenter.x, -orientedBox.min.y, -orientedCenter.z);
+  scaled.scale.setScalar(scale);
+  offset.add(oriented);
+  scaled.add(offset);
   root.add(scaled);
   root.updateMatrixWorld(true);
   const normalizedBboxSize = fittedSize(root);
   return {
     template: root,
     runtimeSourceBboxSize,
+    orientedSourceBboxSize: bboxSizeOfBox(orientedBox),
     normalizedBboxSize,
     sourceMeshCount,
     orientation: {
-      policy: 'preserve-y-up',
+      policy: 'preserve-y-up-x-front-to-z',
       sourceUpAxis: 'y',
-      axisCorrection: [0, 0, 0],
+      sourceForwardAxis: correction.sourceForwardAxis,
+      axisCorrection: correction.euler,
     },
   };
 }
@@ -2497,7 +2530,7 @@ export class KilnRuntimeAssets implements StructureSkinProvider, ResourceDropSki
         this.modelRequests.push(sourceUrl);
         const gltf = await this.loader.loadAsync(sourceUrl);
         const shrine = RUNTIME_LANDMARK_SKINS[slug];
-        const { template, runtimeSourceBboxSize, normalizedBboxSize, sourceMeshCount, orientation } =
+        const { template, runtimeSourceBboxSize, orientedSourceBboxSize, normalizedBboxSize, sourceMeshCount, orientation } =
           normalizeLandmarkTemplate(gltf.scene as unknown as THREE.Object3D, slug, shrine.targetFootprint, shrine.targetHeight, shrine.hideGlbNames);
         this.loadedLandmarkSkins.add(slug);
         const fit: KilnLandmarkSkinFitSnapshot = {
@@ -2506,6 +2539,7 @@ export class KilnRuntimeAssets implements StructureSkinProvider, ResourceDropSki
           socketRole: 'pentagon-landmark-shell',
           sourceBboxSize: sourceBboxSize(asset),
           runtimeSourceBboxSize,
+          orientedSourceBboxSize,
           normalizedBboxSize,
           normalizePolicy: 'center-xz-bottom-y-fit-footprint-height',
           orientation,

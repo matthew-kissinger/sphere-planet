@@ -269,11 +269,12 @@ async function seedLandmarkProgression(page) {
 
 async function waitForLandmarkSkin(page, slug, index) {
   await page.evaluate((targetIndex) => {
-    window.__world.spawnAtPentagon(targetIndex, 8.5);
+    window.__world.spawnAtPentagon(targetIndex, 5.2);
   }, index);
   await page.waitForFunction((targetSlug) => {
     const renderer = window.__world?.landmarks?.().renderer;
     const row = renderer?.kilnLandmarkSkinsBySlug?.[targetSlug];
+    const fit = renderer?.kilnLandmarkSkinFits?.[targetSlug];
     return (row?.loaded ?? 0) === 1
       && (row?.fallback ?? 0) === 0
       && (renderer?.kilnLandmarkSkinFallbacks ?? 0) === 0
@@ -282,7 +283,12 @@ async function waitForLandmarkSkin(page, slug, index) {
       && (renderer?.proceduralLandmarkOverlaysVisible ?? 0) >= 24
       && (renderer?.proceduralThresholdPartsVisible ?? 0) > 40
       && (renderer?.surfaceBasisDeterminantMin ?? 0) > 0.995
-      && (renderer?.surfaceUpDotMin ?? 0) > 0.995;
+      && (renderer?.surfaceUpDotMin ?? 0) > 0.995
+      && (renderer?.surfaceForwardDotMin ?? 0) > 0.995
+      && (renderer?.kilnLandmarkSkinWorldUpDotMin ?? 0) > 0.995
+      && (renderer?.kilnLandmarkSkinWorldForwardDotMin ?? 0) > 0.995
+      && fit?.orientation?.policy === 'preserve-y-up-x-front-to-z'
+      && fit?.orientation?.sourceForwardAxis === '+x';
   }, slug, { timeout: 90000 });
   return page.evaluate((targetSlug) => ({
     landmarks: window.__world.landmarks(),

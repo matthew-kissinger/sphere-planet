@@ -221,11 +221,13 @@ The asset-pack adoption track is done when:
   core glow, sparks, harvest state, and reward timing remain code-owned.
   `LandmarkRenderer` now takes the shared provider, maps the 12 pentagon indices to
   per-shrine fitted landmark shells, hides duplicated procedural ring/pillar/body parts
-  only after GLB success, and keeps the landscape apron, domain halo, quiet/awake glows,
-  signal beam, and every threshold part code-owned. `npm run
+  only after GLB success, corrects authored shrine `+X` facades into socket `+Z` forward,
+  faces each socket toward the pentagon approach side, and keeps the landscape apron,
+  domain halo, quiet/awake glows, signal beam, and every threshold part code-owned. `npm run
   proof:route-markers` now proves five waystones plus three cave anchors on committed
   model paths, and `npm run proof:k7-wonders` proves all three crater GLBs plus all 12
-  shrine GLBs with zero fallback and zero `generated/` runtime requests.
+  shrine GLBs with zero fallback, zero `generated/` runtime requests, and surface/skin
+  up-plus-forward alignment gates.
 - Hex terrain material variety now stays in the procedural/material lane. `src/render/palette.ts`
   uses deterministic per-material swatch ramps for grass, dirt, rock, sand, snow, bedrock,
   built blocks, seabed, and wood while preserving the single shared vertex-color material.

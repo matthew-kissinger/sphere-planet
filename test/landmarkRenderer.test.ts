@@ -70,6 +70,7 @@ function fakeTemplate(slug: KilnLandmarkSkinSlug): KilnLandmarkSkinTemplate {
       socketRole: 'pentagon-landmark-shell',
       sourceBboxSize: [2, 2, 2],
       runtimeSourceBboxSize: [2, 2, 2],
+      orientedSourceBboxSize: [2, 2, 2],
       normalizedBboxSize: [2, 2, 2],
       normalizePolicy: 'center-xz-bottom-y-fit-footprint-height',
       orientation: { policy: 'preserve-y-up', sourceUpAxis: 'y', axisCorrection: [0, 0, 0] },

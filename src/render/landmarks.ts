@@ -16,7 +16,7 @@ import type {
   KilnLandmarkSkinSlug,
   LandmarkSkinProvider,
 } from './kilnAssets';
-import { makeSurfaceBasisFromYaw } from './surfaceFrame';
+import { makeSurfaceBasisFromForward } from './surfaceFrame';
 
 function mat(color: number, roughness = 0.8, metalness = 0.02, emissive = 0x000000, intensity = 0.6): THREE.MeshStandardMaterial {
   return new THREE.MeshStandardMaterial({ color, roughness, metalness, emissive, emissiveIntensity: emissive === 0 ? 0 : intensity });
@@ -344,16 +344,21 @@ export class LandmarkRenderer {
     const vY = new THREE.Vector3();
     const vZ = new THREE.Vector3();
     const m = new THREE.Matrix4();
+    const q = new THREE.Quaternion();
+    const skinUp = new THREE.Vector3();
+    const skinForward = new THREE.Vector3();
     const c = geo.centers;
     for (let i = 0; i < pentagonTiles.length; i++) {
       const tile = pentagonTiles[i];
       const obj = this.objects.get(tile);
       if (!obj) continue;
       const frame = geo.frameOf(tile);
-      const yaw = i * 0.31;
-      makeSurfaceBasisFromYaw(frame, yaw, m, vX, vY, vZ);
+      vY.set(frame.normal[0], frame.normal[1], frame.normal[2]);
+      vZ.set(frame.east[0], frame.east[1], frame.east[2]);
+      makeSurfaceBasisFromForward(vY, vZ, m, vX, vY, vZ);
       obj.userData.surfaceBasisDeterminant = basisDeterminant(vX, vY, vZ);
       obj.userData.surfaceUpDot = vY.x * frame.normal[0] + vY.y * frame.normal[1] + vY.z * frame.normal[2];
+      obj.userData.surfaceForwardDot = vZ.x * frame.east[0] + vZ.y * frame.east[1] + vZ.z * frame.east[2];
       obj.setRotationFromMatrix(m);
       const ground = layers.topRadius(columns.groundLayerBelow(tile, layers.bounds[0]));
       const r = Math.max(ground + 0.05, WATER_SURFACE + 0.18);
@@ -362,6 +367,15 @@ export class LandmarkRenderer {
         c[tile * 3 + 1] * r - camWorld.y,
         c[tile * 3 + 2] * r - camWorld.z,
       );
+      obj.updateMatrixWorld(true);
+      obj.traverse((child) => {
+        if (!child.userData.kilnLandmarkSkin) return;
+        child.getWorldQuaternion(q);
+        skinUp.set(0, 1, 0).applyQuaternion(q).normalize();
+        skinForward.set(0, 0, 1).applyQuaternion(q).normalize();
+        child.userData.kilnSkinWorldUpDot = skinUp.x * frame.normal[0] + skinUp.y * frame.normal[1] + skinUp.z * frame.normal[2];
+        child.userData.kilnSkinWorldForwardDot = skinForward.x * frame.east[0] + skinForward.y * frame.east[1] + skinForward.z * frame.east[2];
+      });
       const known = discovered.has(tile);
       const completed = completedSites.has(tile);
       const pulse = known ? 1 + Math.sin(seconds * 2.2 + i) * 0.12 : 1;
@@ -481,6 +495,9 @@ export class LandmarkRenderer {
     kilnLandmarkGlbMeshesVisible: number;
     surfaceBasisDeterminantMin: number;
     surfaceUpDotMin: number;
+    surfaceForwardDotMin: number;
+    kilnLandmarkSkinWorldUpDotMin: number;
+    kilnLandmarkSkinWorldForwardDotMin: number;
     kilnLandmarkSkinsBySlug: Partial<Record<KilnLandmarkSkinSlug, { loaded: number; pending: number; fallback: number }>>;
     kilnLandmarkSkinFits: Partial<Record<KilnLandmarkSkinSlug, KilnLandmarkSkinFitSnapshot>>;
     kilnAssets?: KilnAssetSnapshot;
@@ -497,6 +514,9 @@ export class LandmarkRenderer {
     let kilnLandmarkGlbMeshesVisible = 0;
     let surfaceBasisDeterminantMin = Infinity;
     let surfaceUpDotMin = Infinity;
+    let surfaceForwardDotMin = Infinity;
+    let kilnLandmarkSkinWorldUpDotMin = Infinity;
+    let kilnLandmarkSkinWorldForwardDotMin = Infinity;
     const kilnLandmarkSkinsBySlug: Partial<Record<KilnLandmarkSkinSlug, { loaded: number; pending: number; fallback: number }>> = {};
     const kilnLandmarkSkinFits: Partial<Record<KilnLandmarkSkinSlug, KilnLandmarkSkinFitSnapshot>> = {};
     const profiles = new Set<string>();
@@ -524,7 +544,16 @@ export class LandmarkRenderer {
       if (typeof obj.userData.surfaceUpDot === 'number') {
         surfaceUpDotMin = Math.min(surfaceUpDotMin, obj.userData.surfaceUpDot);
       }
+      if (typeof obj.userData.surfaceForwardDot === 'number') {
+        surfaceForwardDotMin = Math.min(surfaceForwardDotMin, obj.userData.surfaceForwardDot);
+      }
       obj.traverse((child) => {
+        if (typeof child.userData.kilnSkinWorldUpDot === 'number') {
+          kilnLandmarkSkinWorldUpDotMin = Math.min(kilnLandmarkSkinWorldUpDotMin, child.userData.kilnSkinWorldUpDot);
+        }
+        if (typeof child.userData.kilnSkinWorldForwardDot === 'number') {
+          kilnLandmarkSkinWorldForwardDotMin = Math.min(kilnLandmarkSkinWorldForwardDotMin, child.userData.kilnSkinWorldForwardDot);
+        }
         if ((child as THREE.Mesh).isMesh) {
           meshes++;
           if (child.name.startsWith('landscape')) landscapeMeshes++;
@@ -560,6 +589,9 @@ export class LandmarkRenderer {
       kilnLandmarkGlbMeshesVisible,
       surfaceBasisDeterminantMin: Number.isFinite(surfaceBasisDeterminantMin) ? surfaceBasisDeterminantMin : 0,
       surfaceUpDotMin: Number.isFinite(surfaceUpDotMin) ? surfaceUpDotMin : 0,
+      surfaceForwardDotMin: Number.isFinite(surfaceForwardDotMin) ? surfaceForwardDotMin : 0,
+      kilnLandmarkSkinWorldUpDotMin: Number.isFinite(kilnLandmarkSkinWorldUpDotMin) ? kilnLandmarkSkinWorldUpDotMin : 0,
+      kilnLandmarkSkinWorldForwardDotMin: Number.isFinite(kilnLandmarkSkinWorldForwardDotMin) ? kilnLandmarkSkinWorldForwardDotMin : 0,
       kilnLandmarkSkinsBySlug,
       kilnLandmarkSkinFits,
       kilnAssets: this.kilnAssets?.snapshot?.(),
