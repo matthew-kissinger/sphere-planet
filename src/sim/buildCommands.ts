@@ -282,6 +282,7 @@ export function placeStructureCommand(input: StructurePlaceCommandInput): Struct
       message: input.blocker,
       action: `${item}:place:blocked:${input.blocker}`,
       selected: item,
+      blockers: [input.blocker],
     };
   }
   const placed = addStructure(structures, { item, tile, layer, yaw });

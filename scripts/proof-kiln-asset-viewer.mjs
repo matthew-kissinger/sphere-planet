@@ -22,7 +22,7 @@ const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const outDir = path.join(root, 'output', 'playwright', 'kiln-asset-viewer');
 const requestedPort = Number(process.env.PROOF_PORT || 0);
 
-const familySlugs = {
+const baseFamilySlugs = {
   structures: ['waystone', 'door-kit', 'window-frame', 'roof-bundle'],
   drops: ['drop-wood-logs', 'drop-ore-chunk'],
   nodes: [
@@ -52,6 +52,8 @@ const familySlugs = {
     'creature-tide-lurker',
   ],
 };
+
+let familySlugs = { ...baseFamilySlugs };
 
 async function getFreePort() {
   if (requestedPort > 0) return requestedPort;
@@ -87,11 +89,12 @@ async function waitForServer(targetUrl, timeoutMs = 45000) {
   throw new Error(`Timed out waiting for ${targetUrl}`);
 }
 
-function proofUrl(port, family) {
+function proofUrl(port, family, slug = null) {
   const base = process.env.PROOF_URL || `http://127.0.0.1:${port}/`;
   const url = new URL(base);
   url.searchParams.set('assetViewer', 'kiln');
-  url.searchParams.set('family', family);
+  if (family) url.searchParams.set('family', family);
+  if (slug) url.searchParams.set('slug', slug);
   url.searchParams.set('gpu', 'gl');
   return url.toString();
 }
@@ -196,34 +199,40 @@ function pngPixelProbe(buffer) {
   return { ok: colors.size >= 12 && samples > 40, samples, unique: colors.size, width, height };
 }
 
-function assertViewerState(family, state) {
-  if (!state?.ready) throw new Error(`${family}: viewer did not report ready state`);
-  const expected = familySlugs[family];
+function assertViewerState(label, state, expected) {
+  if (!state?.ready) throw new Error(`${label}: viewer did not report ready state`);
   const records = state.records ?? [];
-  if (records.length !== expected.length) throw new Error(`${family}: expected ${expected.length} records, got ${records.length}`);
+  if (records.length !== expected.length) throw new Error(`${label}: expected ${expected.length} records, got ${records.length}`);
+  if (state.coordinateSystem?.hexFlatToFlatWorldUnits !== 5.6) throw new Error(`${label}: missing 5.6wu hex alignment frame`);
   for (const slug of expected) {
     const record = records.find((entry) => entry.slug === slug);
-    if (!record) throw new Error(`${family}: missing ${slug} in viewer state`);
-    if (record.status !== 'loaded') throw new Error(`${family}: ${slug} failed to load ${JSON.stringify(record)}`);
+    if (!record) throw new Error(`${label}: missing ${slug} in viewer state`);
+    if (record.status !== 'loaded') throw new Error(`${label}: ${slug} failed to load ${JSON.stringify(record)}`);
     if (!String(record.sourceUrl ?? '').includes(`/assets/kiln/models/${slug}.glb`)) {
-      throw new Error(`${family}: ${slug} is not using committed model URL ${JSON.stringify(record)}`);
+      throw new Error(`${label}: ${slug} is not using committed model URL ${JSON.stringify(record)}`);
     }
-    if ((record.socketScale ?? 0) <= 0 || (record.meshCount ?? 0) <= 0) throw new Error(`${family}: ${slug} has invalid fit metrics ${JSON.stringify(record)}`);
+    if ((record.socketScale ?? 0) <= 0 || (record.meshCount ?? 0) <= 0) throw new Error(`${label}: ${slug} has invalid fit metrics ${JSON.stringify(record)}`);
+    if (record.hexFlatToFlatWorldUnits !== 5.6 || !record.socketRole || !record.socketGrid) {
+      throw new Error(`${label}: ${slug} missing socket diagnostics ${JSON.stringify(record)}`);
+    }
+    if (record.placementFrame?.up !== '+Y local planet normal' || record.placementFrame?.pivot !== 'center-xz-bottom-y') {
+      throw new Error(`${label}: ${slug} missing placement-frame contract ${JSON.stringify(record)}`);
+    }
     if (!record.orientation?.policy || !record.orientation?.sourceUpAxis || !Array.isArray(record.orientation?.axisCorrection)) {
-      throw new Error(`${family}: ${slug} missing orientation diagnostics ${JSON.stringify(record)}`);
+      throw new Error(`${label}: ${slug} missing orientation diagnostics ${JSON.stringify(record)}`);
     }
     if (slug.startsWith('tree-') && slug !== 'tree-shrub') {
-      if (record.orientation.policy !== 'longest-axis-to-y') throw new Error(`${family}: ${slug} missing tree upright policy ${JSON.stringify(record)}`);
+      if (record.orientation.policy !== 'longest-axis-to-y') throw new Error(`${label}: ${slug} missing tree upright policy ${JSON.stringify(record)}`);
       const oriented = record.orientedSourceBboxSize ?? [];
       if ((oriented[1] ?? 0) < Math.max(oriented[0] ?? 0, oriented[2] ?? 0) * 0.8) {
-        throw new Error(`${family}: ${slug} still appears side-loaded after normalization ${JSON.stringify(record)}`);
+        throw new Error(`${label}: ${slug} still appears side-loaded after normalization ${JSON.stringify(record)}`);
       }
     }
   }
 }
 
 async function runFamily(browser, port, family) {
-  const page = await browser.newPage({ viewport: { width: family === 'nodes' || family === 'creatures' ? 1600 : 1440, height: 980 } });
+  const page = await browser.newPage({ viewport: { width: family === 'ready' ? 1920 : family === 'nodes' || family === 'creatures' ? 1600 : 1440, height: family === 'ready' ? 1400 : 980 } });
   const consoleErrors = [];
   const pageErrors = [];
   const kilnAssetRequests = [];
@@ -245,7 +254,8 @@ async function runFamily(browser, port, family) {
   await page.waitForFunction(() => window.__assetViewer?.ready === true, null, { timeout: 90000 });
   await page.waitForTimeout(700);
   const state = await page.evaluate(() => window.__assetViewer);
-  assertViewerState(family, state);
+  const expected = familySlugs[family];
+  assertViewerState(family, state, expected);
   const screenshot = path.join(outDir, `${family}-alignment.png`);
   const screenshotBuffer = await page.screenshot({ path: screenshot, fullPage: true });
   const screenshotProbe = pngPixelProbe(screenshotBuffer);
@@ -254,7 +264,7 @@ async function runFamily(browser, port, family) {
   const responsesOk = (suffix) => kilnAssetResponses.some((asset) => asset.url.includes(suffix) && asset.status >= 200 && asset.status < 300);
   const generatedRequests = kilnAssetRequests.filter((url) => url.includes('/assets/kiln/generated/'));
   if (!responsesOk('/assets/kiln/ASSET_MANIFEST.json')) throw new Error(`${family}: missing successful manifest response`);
-  for (const slug of familySlugs[family]) {
+  for (const slug of expected) {
     if (!responsesOk(`/assets/kiln/models/${slug}.glb`)) throw new Error(`${family}: missing successful ${slug}.glb response`);
   }
   if (generatedRequests.length > 0) throw new Error(`${family}: runtime requested raw generated assets ${JSON.stringify(generatedRequests)}`);
@@ -272,7 +282,66 @@ async function runFamily(browser, port, family) {
   };
 }
 
-await fs.mkdir(outDir, { recursive: true });
+async function runSlug(browser, port, slug) {
+  const page = await browser.newPage({ viewport: { width: 900, height: 760 } });
+  const consoleErrors = [];
+  const pageErrors = [];
+  const kilnAssetRequests = [];
+  const kilnAssetResponses = [];
+  page.on('console', (msg) => {
+    if (msg.type() === 'error') consoleErrors.push(msg.text());
+  });
+  page.on('pageerror', (err) => pageErrors.push(err.message));
+  page.on('request', (request) => {
+    const url = request.url();
+    if (url.includes('/assets/kiln/')) kilnAssetRequests.push(url);
+  });
+  page.on('response', (response) => {
+    const url = response.url();
+    if (url.includes('/assets/kiln/')) kilnAssetResponses.push({ url, status: response.status() });
+  });
+
+  await page.goto(proofUrl(port, null, slug), { waitUntil: 'domcontentloaded' });
+  await page.waitForFunction(() => window.__assetViewer?.ready === true, null, { timeout: 90000 });
+  await page.waitForTimeout(550);
+  const state = await page.evaluate(() => window.__assetViewer);
+  assertViewerState(`asset ${slug}`, state, [slug]);
+  const screenshot = path.join(outDir, 'assets', `${slug}.png`);
+  const screenshotBuffer = await page.screenshot({ path: screenshot, fullPage: true });
+  const screenshotProbe = pngPixelProbe(screenshotBuffer);
+  await page.close();
+
+  const responsesOk = (suffix) => kilnAssetResponses.some((asset) => asset.url.includes(suffix) && asset.status >= 200 && asset.status < 300);
+  const generatedRequests = kilnAssetRequests.filter((url) => url.includes('/assets/kiln/generated/'));
+  if (!responsesOk('/assets/kiln/ASSET_MANIFEST.json')) throw new Error(`${slug}: missing successful manifest response`);
+  if (!responsesOk(`/assets/kiln/models/${slug}.glb`)) throw new Error(`${slug}: missing successful ${slug}.glb response`);
+  if (generatedRequests.length > 0) throw new Error(`${slug}: runtime requested raw generated assets ${JSON.stringify(generatedRequests)}`);
+  if (!screenshotProbe.ok || screenshotBuffer.length < 1024) throw new Error(`${slug}: screenshot pixel proof failed ${JSON.stringify(screenshotProbe)}`);
+  if (consoleErrors.length || pageErrors.length) throw new Error(`${slug}: browser errors ${JSON.stringify({ consoleErrors, pageErrors })}`);
+
+  return {
+    slug,
+    screenshot,
+    state,
+    screenshotProbe,
+    kilnAssets: { requests: kilnAssetRequests, responses: kilnAssetResponses, generatedRequests },
+    consoleErrors,
+    pageErrors,
+  };
+}
+
+const manifest = JSON.parse(await fs.readFile(path.join(root, 'public', 'assets', 'kiln', 'ASSET_MANIFEST.json'), 'utf8'));
+const readySlugs = (manifest.assets ?? [])
+  .filter((asset) => asset.status === 'ready' && asset.file)
+  .map((asset) => asset.slug);
+const adoptedSlugs = [...new Set(Object.values(baseFamilySlugs).flat())];
+familySlugs = {
+  ...baseFamilySlugs,
+  adopted: adoptedSlugs,
+  ready: readySlugs,
+};
+
+await fs.mkdir(path.join(outDir, 'assets'), { recursive: true });
 const { chromium } = loadPlaywright();
 const port = await getFreePort();
 const server = startServer(port);
@@ -280,8 +349,10 @@ try {
   await waitForServer(proofUrl(port, 'trees'));
   const browser = await chromium.launch({ headless: process.env.HEADED !== '1' });
   const results = [];
+  const assetResults = [];
   try {
     for (const family of Object.keys(familySlugs)) results.push(await runFamily(browser, port, family));
+    for (const slug of readySlugs) assetResults.push(await runSlug(browser, port, slug));
   } finally {
     await browser.close();
   }
@@ -289,14 +360,17 @@ try {
     ok: true,
     generatedAt: new Date().toISOString(),
     families: Object.keys(familySlugs),
-    viewerUrl: '/?assetViewer=kiln&family=trees',
+    readyAssetCount: readySlugs.length,
+    viewerUrl: '/?assetViewer=kiln&family=ready',
     slugUrl: '/?assetViewer=kiln&slug=tree-pine',
     results,
+    assetResults,
   };
   await fs.writeFile(path.join(outDir, 'proof.json'), JSON.stringify(proof, null, 2));
   console.log(JSON.stringify({
     ok: proof.ok,
     generatedAt: proof.generatedAt,
+    readyAssetCount: proof.readyAssetCount,
     results: results.map((result) => ({
       family: result.family,
       screenshot: result.screenshot,
@@ -304,6 +378,12 @@ try {
       generatedRequests: result.kilnAssets.generatedRequests.length,
       consoleErrors: result.consoleErrors.length,
       pageErrors: result.pageErrors.length,
+      screenshotProbe: result.screenshotProbe,
+    })),
+    assetScreenshots: assetResults.map((result) => ({
+      slug: result.slug,
+      screenshot: result.screenshot,
+      warnings: result.state.records[0]?.warnings ?? [],
       screenshotProbe: result.screenshotProbe,
     })),
   }, null, 2));

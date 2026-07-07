@@ -30,7 +30,7 @@ import { TouchControls } from './player/touch';
 import { GamepadControls, type GamepadFrame } from './player/gamepad';
 import { UxManager, type UxInputMode, type UxProfile } from './player/ux';
 import { panelOwnershipSnapshot, type PanelOwnershipSnapshot } from './player/panelOwnership';
-import { pick, pickTree, type PickResult, type TreePick } from './edit/pick';
+import { pick, pickNativeCreature, pickTree, type NativeCreaturePick, type PickResult, type TreePick } from './edit/pick';
 import { Metrics } from './demo/metrics';
 import { Autopilot, OrbitDemo } from './demo/autopilot';
 import { Hud, splash, hideSplash, type ChestStoragePanelView, type CraftingRecipeView, type RouteSlateView } from './demo/hud';
@@ -729,6 +729,7 @@ async function boot(): Promise<void> {
   };
   let lastPick: PickResult | null = null;
   let treePick: TreePick | null = null;
+  let nativePick: NativeCreaturePick | null = null;
   let debugPickHoldUntil = 0;
   let mineTimer = 0;
   let nextMineCooldown = 0.17;
@@ -1227,6 +1228,12 @@ async function boot(): Promise<void> {
       lastPick = null;
     }
     treePick = pickTree(geo, layers, columns, trees, camWorld.x, camWorld.y, camWorld.z, dirx, diry, dirz, reach + camDist);
+    const nativeSites = currentNativeCreatureSites();
+    nativePick = pickNativeCreature(geo, layers, columns, nativeSites, camWorld.x, camWorld.y, camWorld.z, dirx, diry, dirz, reach + camDist);
+    if (!nativePick && lastPick) {
+      const site = nativeCreatureAt(SEED, geo, columns, terrain, lastPick.hitTile, tendedNativeCreatures, wardedNativeCreatures);
+      if (site) nativePick = { site, tile: site.tile, dist: Math.max(0, lastPick.dist - 0.05) };
+    }
   };
 
   const strikeMineCell = (tile: number, layer: number) => {
@@ -1278,6 +1285,12 @@ async function boot(): Promise<void> {
 
   const tryMine = (): void => {
     nextMineCooldown = 0.17;
+    const nativeTarget = nativePick?.site ?? (lastPick ? nativeCreatureAt(SEED, geo, columns, terrain, lastPick.hitTile, tendedNativeCreatures, wardedNativeCreatures) : null);
+    if (nativeTarget) {
+      tryTargetNativeCreature(nativeTarget);
+      nativePick = null;
+      return;
+    }
     // a tree in front of the terrain hit gets chopped instead
     if (treePick && (!lastPick || treePick.dist < lastPick.dist)) {
       strikeTreeTile(treePick.tile);
@@ -1296,6 +1309,13 @@ async function boot(): Promise<void> {
       const feetK = layers.layerOfRadius(player.radius() + 0.05);
       const headK = Math.max(0, layers.layerOfRadius(player.radius() + 1.75));
       if (lastPick.prevLayer >= headK && lastPick.prevLayer <= feetK) return;
+    }
+    const nativeBlocker = nativePlacementBlocker(lastPick.prevTile);
+    if (nativeBlocker) {
+      lastNativeLifeAction = `placement blocked: ${nativeBlocker}`;
+      playAudio('uiDeny');
+      hud.flash(nativeBlocker, 2.4);
+      return;
     }
     if (counts[hotbarSel] <= 0) {
       playAudio('uiDeny');
@@ -1497,6 +1517,15 @@ async function boot(): Promise<void> {
   };
   const currentNativeCreatureSites = (): NativeCreatureSite[] =>
     nativeCreatureSitesAround(SEED, geo, columns, terrain, player.tile, 7, tendedNativeCreatures, wardedNativeCreatures, 7);
+  const nativeCreatureOnTile = (tile: number): NativeCreatureSite | null => {
+    if (!Number.isFinite(tile)) return null;
+    const target = Math.max(0, Math.min(geo.count - 1, Math.trunc(tile)));
+    return nativeCreatureAt(SEED, geo, columns, terrain, target, tendedNativeCreatures, wardedNativeCreatures);
+  };
+  const nativePlacementBlocker = (tile: number): string | null => {
+    const site = nativeCreatureOnTile(tile);
+    return site ? `native life on snap target: ${site.label}` : null;
+  };
   const nativeCreatureKinds = new Set<NativeCreatureKind>([
     'mossPuff',
     'shellSkitter',
@@ -1577,7 +1606,7 @@ async function boot(): Promise<void> {
   const standForNativeCreature = (candidate: NativeCreatureSite): { stand: number; score: number } => {
     const siteHeight = columns.heightOf(candidate.tile);
     let stand = candidate.tile;
-    let score = trees.hasTree(candidate.tile) ? 9999 : 0;
+    let score = 9999;
     const deg = geo.degreeOf(candidate.tile);
     for (let k = 0; k < deg; k++) {
       const nb = geo.neighbor(candidate.tile, k);
@@ -1650,6 +1679,8 @@ async function boot(): Promise<void> {
       nearby: nearbyNativeCreature(),
       hazard: hazard && !hazard.warded ? hazard : null,
       rangedHazard,
+      pick: nativePick ? { tile: nativePick.tile, dist: Number(nativePick.dist.toFixed(2)), site: nativePick.site } : null,
+      placementBlocker: lastPick?.prevTile !== undefined && lastPick.prevTile >= 0 ? nativePlacementBlocker(lastPick.prevTile) : null,
       lastAction: lastNativeLifeAction,
       renderer: nativeLifeRenderer.stats(),
       sites: sites.slice(0, 8),
@@ -1927,8 +1958,8 @@ async function boot(): Promise<void> {
 
   const structureSnapTarget = (item: PlaceableItemId, tile: number, layer?: number): { layer: number; blocker: string | null } => {
     let k = layer ?? columns.groundLayerBelow(tile, layers.bounds[0]);
-    let blocker: string | null = null;
-    if (item === 'dockSegment') {
+    let blocker: string | null = nativePlacementBlocker(tile);
+    if (!blocker && item === 'dockSegment') {
       if (!waterNearTile(tile, 1)) {
         blocker = 'dock needs a shore or water edge';
       } else {
@@ -1937,7 +1968,7 @@ async function boot(): Promise<void> {
         const waterK = layers.layerOfRadius(WATER_SURFACE);
         k = groundTop < WATER_SURFACE + 0.2 ? waterK : groundK;
       }
-    } else if (!columns.solidAt(tile, k)) {
+    } else if (!blocker && !columns.solidAt(tile, k)) {
       blocker = 'needs solid ground';
     }
     return { layer: k, blocker };
@@ -2087,6 +2118,7 @@ async function boot(): Promise<void> {
     });
     recordBuildCommand(source, 'place', 'placement', result, result.placed, inventoryBefore, itemCount(counts, craftedItems, item));
     if (!result.ok || !result.placed) {
+      if (snap.blocker?.startsWith('native life on snap target')) lastNativeLifeAction = `placement blocked: ${snap.blocker}`;
       playAudio(audioEventForPlacement(false));
       hud.flash(result.message, 2.5);
       return false;
@@ -3159,8 +3191,7 @@ async function boot(): Promise<void> {
     return true;
   };
 
-  const tryNativeCreature = (): boolean => {
-    const site = nearbyNativeCreature();
+  const tryNativeCreature = (site: NativeCreatureSite | null = nearbyNativeCreature()): boolean => {
     if (!site) return false;
     if (player.mode === 'plane') {
       lastNativeLifeAction = 'native life:in plane';
@@ -3203,6 +3234,11 @@ async function boot(): Promise<void> {
     refreshUseButton();
     if (journalOpen) hud.setJournal(currentHearthJournal(), true);
     return true;
+  };
+
+  const tryTargetNativeCreature = (site: NativeCreatureSite | null = nativePick?.site ?? nearbyNativeCreature()): boolean => {
+    if (!site) return false;
+    return site.temperament === 'harmless' ? tryNativeCreature(site) : tryWardNativeHazard(site);
   };
 
   const tickNativeHazards = (dt: number): void => {
@@ -4983,6 +5019,12 @@ async function boot(): Promise<void> {
     characterRenderer: () => character.stats(),
     audio: () => audio.state(),
     controls: () => ({ ux: uxManager.snapshot(), gamepad: gamepad.snapshot(), touch: touch.enabled, inputActive: input.active(), aimActive: input.active() || gamepad.active(), panels: currentPanelOwnership() }),
+    debugForcePointerFallback: () => {
+      input.cancelWorldInput();
+      input.lockUnavailable = true;
+      input.locked = false;
+      return { controls: (window as any).__world.controls(), lockUnavailable: input.lockUnavailable };
+    },
     injectGamepad: (frame: Partial<GamepadFrame>, frames = 2) => {
       gamepad.inject(frame, frames);
       return gamepad.snapshot();
@@ -5373,7 +5415,7 @@ async function boot(): Promise<void> {
         markSaveDirty();
       },
     },
-    debugPick: () => ({ lastPick, treePick }),
+    debugPick: () => ({ lastPick, treePick, nativePick }),
     debugAimAtTile: (tile: number, layer?: number) => {
       const target = Math.max(0, Math.min(geo.count - 1, Math.trunc(Number.isFinite(tile) ? tile : player.tile)));
       const targetLayer = Math.max(0, Math.min(layers.L - 1, Math.trunc(Number.isFinite(layer) ? layer! : columns.groundLayerBelow(target, layers.bounds[0]))));
@@ -5393,7 +5435,7 @@ async function boot(): Promise<void> {
         treePick = null;
       }
       debugPickHoldUntil = performance.now() + 1400;
-      return { targetTile: target, targetLayer, pick: lastPick, relocation: relocationDiagnostics() };
+      return { targetTile: target, targetLayer, pick: lastPick, treePick, nativePick, relocation: relocationDiagnostics() };
     },
     screenPointForTile: (tile: number, layer?: number) => {
       const target = Math.max(0, Math.min(geo.count - 1, Math.trunc(Number.isFinite(tile) ? tile : player.tile)));
@@ -6172,7 +6214,7 @@ async function boot(): Promise<void> {
       const dl = Math.hypot(dirx, diry, dirz) || 1;
       updatePicks(dirx / dl, diry / dl, dirz / dl);
     }
-    if (!debugPickHeld && (!aimActive || camDist >= 120)) { lastPick = null; treePick = null; }
+    if (!debugPickHeld && (!aimActive || camDist >= 120)) { lastPick = null; treePick = null; nativePick = null; }
     // touch: a tap mines at the tapped ray, a long-press builds there
     if (!worldBlocked() && touch.enabled && camDist < 120 && (tf.mines.length > 0 || tf.places.length > 0)) {
       for (const m of tf.mines) {
@@ -6190,15 +6232,17 @@ async function boot(): Promise<void> {
       if (performance.now() >= debugPickHoldUntil) {
         lastPick = null;
         treePick = null;
+        nativePick = null;
       }
     }
 
-    const hlTree = treePick && (!lastPick || treePick.dist < lastPick.dist);
-    const hlTile = hlTree ? treePick!.tile : lastPick ? lastPick.hitTile : -1;
+    const hlNative = nativePick && (!lastPick || nativePick.dist <= lastPick.dist + 0.2);
+    const hlTree = !hlNative && treePick && (!lastPick || treePick.dist < lastPick.dist);
+    const hlTile = hlNative ? nativePick!.tile : hlTree ? treePick!.tile : lastPick ? lastPick.hitTile : -1;
     if (hlTile >= 0) {
       highlight.visible = true;
       const deg = geo.degreeOf(hlTile);
-      const r = (hlTree ? layers.topRadius(columns.topLayerOf(hlTile)) : layers.topRadius(lastPick!.hitLayer)) + 0.03;
+      const r = (hlNative || hlTree ? layers.topRadius(columns.topLayerOf(hlTile)) : layers.topRadius(lastPick!.hitLayer)) + 0.03;
       const corner = new Float64Array(3);
       for (let k = 0; k < deg; k++) {
         geo.cornerUnit(hlTile, k, corner);
@@ -6216,7 +6260,7 @@ async function boot(): Promise<void> {
     }
 
     mineTimer -= dt; placeTimer -= dt;
-    if (!worldBlocked() && (drained.mine || gp.minePressed || ((input.mineHeld || gp.mine) && mineTimer <= 0)) && (lastPick || treePick)) { tryMine(); mineTimer = nextMineCooldown; }
+    if (!worldBlocked() && (drained.mine || gp.minePressed || ((input.mineHeld || gp.mine) && mineTimer <= 0)) && (lastPick || treePick || nativePick)) { tryMine(); mineTimer = nextMineCooldown; }
     if (!worldBlocked() && (drained.place || gp.placePressed || ((input.placeHeld || gp.place) && placeTimer <= 0)) && lastPick) {
       tryPlace((gp.placePressed || gp.place) ? 'gamepad' : touch.enabled ? 'touch' : 'pointer');
       placeTimer = 0.17;

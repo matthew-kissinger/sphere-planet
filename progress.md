@@ -3,6 +3,37 @@ Current operating goal: Hearth and Horizon full crafting-survival cycle under th
 
 ## 2026-07-07
 
+- Closed the K6T native-life targetability slice. `pickNativeCreature` now ray-tests visible
+  native-life capsules before terrain mining; harmless targets route to tend behavior,
+  territorial targets route to ward behavior, and structure placement reports a native-life
+  blocker on occupied snap tiles. `npm run proof:k7-native-targeting` passes on desktop and
+  phone, proving moss-puff tending, brambleback warding, shell-skitter placement blocking,
+  creature reward drops or immediate pickup, no terrain-mine progress, no structure count
+  change, screenshot pixels, and zero page/console errors.
+- Promoted the next house-building gap to C6 wall/shell sockets. Door/window/roof GLBs are
+  inserts or decorative skins over code-owned sockets; they do not define a complete wall
+  system. The next building slice must define full wall panels, wall-with-window openings,
+  wall-with-door openings, corners, half walls/rails, roof joins, and optional foundations
+  before more craftable house-shell GLBs are requested or wired.
+- Promoted the next native-life depth gap to G5/K6R roaming actors. The current GLBs have
+  distance-gated `idle`/`walk` animation and local renderer motion, but the sim remains
+  site-based. Future work should add sparse `NativeCreatureActor` state over deterministic
+  sites for harmless graze/curious/flee loops and territorial warn/pressure/ward/flee loops.
+- Added the next Kiln request backlog: aquatic fish-school/driftjelly bodies, more pickup
+  skins, future ore/resource nodes after item taxonomy, a shared-scale house-shell pack, and
+  wonder/cave dressing. Hex tile textures, terrain blocks, mining cracks, water, sky, route
+  ribbons, telegraphs, dynamic glows, and particles stay procedural/material/shader systems.
+- Added the Kiln alignment viewer as the approved-pack placement review bench. The viewer
+  opens at `/?assetViewer=kiln&family=ready` or `/?assetViewer=kiln&slug=<slug>`, renders
+  GLBs against a 5.6 world-unit hex socket with local `+Y` as planet-normal sky, local `+Z`
+  as tile-forward tangent, center-XZ/bottom-Y pivoting, socket rings, bounds, OrbitControls,
+  orientation metadata, and wiring warnings for modular-kit, mesh, material, triangle, and
+  axis risks.
+- Expanded `npm run proof:kiln-asset-viewer` into the repeatable reviewer packet: it loads
+  all 61 ready GLBs from committed `assets/kiln/models/`, captures 7 overview screenshots
+  plus 61 single-asset screenshots under `output/playwright/kiln-asset-viewer/assets/`,
+  writes per-slug socket/fit diagnostics to `proof.json`, rejects `generated/` runtime
+  requests, and passed with zero page/console errors and nonblank PNG pixel probes.
 - Promoted full approved Kiln pack adoption to a goal-level Hearth and Horizon track. H4
   remains the intake/proof gate, while new H5 treats the 61 ready GLBs as the target visual
   backlog for replacing janky procedural world art across pickups, rocks/resource nodes,
@@ -58,12 +89,14 @@ Current operating goal: Hearth and Horizon full crafting-survival cycle under th
   creature GLBs, zero `generated/` runtime requests, zero fallback, required clip metadata,
   active/low-rate/hidden distance-band behavior, capped active mixers, screenshot pixels,
   no browser errors, and tend/ward gameplay responses.
-- Logged the current K6 native-life UX gap from user playtesting. Native life is still
+- Logged the original K6 native-life UX gap from user playtesting. Native life was still
   tile-anchored rather than roaming AI; hazards can apply stamina/exposure pressure through
   the native-life system, but click/attack routing still targets terrain/trees because
   there is no native-life ray-pick target. Next K6 UX slice should add native pick priority,
   inspect/tend/ward/scare feedback, placement blockers on occupied native tiles, named HUD
   pressure messages, and proof that creature targeting wins over mining the underlying hex.
+  K6T now closes the targeting and occupied-tile blocker parts; roaming and richer pressure
+  presentation remain separate follow-ups.
 - Closed the C2/C3 socket-specific snap-preview readability node under the DAG/subagent
   workflow. Door kits, window frames, and roof bundles now add code-authored preview guide
   silhouettes on top of the generic footprint ghost: door jamb/lintel/threshold, window

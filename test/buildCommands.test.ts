@@ -166,6 +166,24 @@ describe('Hearth and Horizon build commands', () => {
       action: 'doorKit:relocate:blocked:needs solid ground',
       blockers: ['needs solid ground'],
     });
+    expect(placeStructureCommand({
+      structures,
+      item: 'doorKit',
+      tile: 11,
+      layer: 2,
+      yaw: 0,
+      placementTurn: 0,
+      materialCounts: materials,
+      craftedItems: crafted,
+      creative: false,
+      playerTile: 4,
+      blocker: 'native life on snap target: brambleback',
+    })).toMatchObject({
+      ok: false,
+      command: 'place',
+      action: 'doorKit:place:blocked:native life on snap target: brambleback',
+      blockers: ['native life on snap target: brambleback'],
+    });
     expect(relocateStructureCommand({
       structures,
       target: placed.placed!,

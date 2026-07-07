@@ -250,8 +250,8 @@ that single creature stop as a saved native route plan. The Reed Bow and
 whistling arrows add the first ranged version of that same idea: scare a visible brambleback
 off before it crowds the player, spend ammo, and keep rewards grounded in the world. The
 approved Kiln native-creature GLBs are now wired as distance-gated idle/walk skins for these
-tile-anchored encounters, but full roaming AI and creature-first click/placement targeting
-remain the next UX slice. Dormant reeds, shells, pods, crystals, blooms,
+tile-anchored encounters. Creature-first click targeting and occupied-tile placement
+blockers are now wired; full roaming AI remains the next creature-depth slice. Dormant reeds, shells, pods, crystals, blooms,
 amber, and horizon shards become harvestable after the matching shrine awakens, grant
 practical survival/building items once, save with the world, and appear as Route Slate
 resource pins when nearby. Skyfall events now give the

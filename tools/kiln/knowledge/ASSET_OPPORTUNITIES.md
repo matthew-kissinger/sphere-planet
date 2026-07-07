@@ -30,7 +30,7 @@ what to ADD. Everything here is a Kiln GLB candidate; use `paletteId: sphere-pla
 |---|---|---|---|
 | **Authored player model** (Soft-Facet Wayfarer) | character | character/prop | The protagonist; everything renders around a placeholder. Rig integration = existing runtime work. |
 | **Avatar equipable prop set** (pack frame, storm cloak, echo tools, repair roll, folded chart) | prop | prop/prop | Co-required with the player model; drives loop readability. |
-| **House-kit** (door ✓, window ✓, roof ✓, + hatch, fence) | architecture | architecture/building | Gameplay-load-bearing for the functional-home check. Door/window/roof already generated. |
+| **House-kit** (door ✓, window ✓, roof ✓, + wall shell, hatch, fence) | architecture | architecture/building | Gameplay-load-bearing for the functional-home check. Door/window/roof already generated, but they are inserts/skins, not a wall system. Next pack needs shared-scale wall panels, wall openings, corners, rails, roof joins, and foundations tied to the code-owned hex socket contract. |
 | **Boat / raft** | vehicle | vehicle/vehicle | Water-traversal peer to the plane in a swimmable ocean world (roadmap node F3). Needs a system. |
 | **Glider** | vehicle | vehicle/vehicle | Early-game descent tool, distinct from the crafted plane (F3). Needs a system. |
 | **Storm moths, thorn herd, migrating horizon beast** | creature | character/prop | Named-but-unbuilt creatures in the bible. |
@@ -77,3 +77,9 @@ wreck (underwater discoverable), domain-tinted scatter rings (per-pentagon appro
 - **Wave 3 — Enrichment fill:** Track B top 10 (flowers, grass, boulders, coral, logs/stumps, bushes, dripstone, driftwood/shells, snow boulders, ferns). Pairs with building the instanced scatter layer.
 - **Wave 4 — Life:** companion Pocket-Puff + Frostpuff + Skylift + Driftjelly + Glowmoth; then the 3 core NPCs (Wayfarer, Hermit, Aviator).
 - **Wave 5 — Hero authored:** player model + equipable prop set + boat/glider.
+- **Wave 6 — Aquatic life and functional gaps:** fish-school-shore, fish-school-storm-run,
+  fish-school-cave-shimmer, driftjelly, generic pickup skins for dirt/sand/snow/glow crystal/
+  raw fish/kelp/reeds/compost/cave mushrooms, future ore/resource nodes after item taxonomy,
+  and one shared-scale house-shell pack. GLBs are visual bodies or skins; fish-school rules,
+  wall sockets, terrain materials, mining cracks, water, sky, route ribbons, telegraphs,
+  glows, and particles stay procedural/material systems.

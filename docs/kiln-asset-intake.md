@@ -49,6 +49,47 @@ Current proof result, 2026-07-07:
 - The proof also checks GLB headers/lengths, manifest/file parity, palette ids, animation
   metadata, secret/presigned URL leakage, and tracked raw-drop hygiene.
 
+## Alignment Viewer
+
+The custom placement viewer is the visual alignment bench for every ready GLB before it is
+wired into gameplay or accepted as socket dressing.
+
+Open:
+
+```text
+/?assetViewer=kiln&family=ready
+/?assetViewer=kiln&slug=tree-pine
+/?assetViewer=kiln&slug=tree-pine&neighbors=1
+```
+
+Run:
+
+```bash
+npm run proof:kiln-asset-viewer
+```
+
+Current proof result, 2026-07-07:
+
+- Loads all 61 ready GLBs from committed `assets/kiln/models/` paths.
+- Captures overview screenshots for `structures`, `drops`, `nodes`, `trees`, `creatures`,
+  `adopted`, and the full `ready` pack.
+- Captures one single-asset alignment screenshot for every ready slug under
+  `output/playwright/kiln-asset-viewer/assets/<slug>.png`.
+- Emits `output/playwright/kiln-asset-viewer/proof.json` with socket role, socket grid,
+  source bounds, oriented bounds, normalized bounds, scale, material/triangle warnings,
+  orientation policy, and placement-frame metadata for each asset.
+- Proves the viewer's placement frame: local `+Y` is the planet-normal sky direction,
+  local `+Z` is tile-forward tangent, local `+X` is tile-right tangent, the pivot is
+  center-XZ/bottom-Y, and the reference hex is 5.6 world units flat-to-flat.
+- Rejects runtime requests to `assets/kiln/generated/` and fails on page/console errors or
+  blank screenshot pixels.
+
+Use the viewer before every GLB placement decision. The screenshot should answer whether
+the object sits on the hex, points into the planet-normal direction, fits the intended
+socket ring, and needs an explicit orientation policy instead of silent runtime guesswork.
+The viewer is allowed to label and draw bounds because it is a review tool; gameplay proofs
+still need label-free, normal-distance screenshots.
+
 ## Source Of Truth
 
 `scripts/proof-kiln-asset-pack.mjs` is the authoritative gate. It validates the promoted
@@ -68,10 +109,12 @@ Promotion order:
 2. Prove the quarantine source material.
 3. Build the manifest and promote reviewed assets into `models/`.
 4. Run `npm run proof:kiln-assets` against the promoted pack.
-5. Wire one runtime family through a manifest-driven loader or family-specific batcher.
-6. For repeated families, prove palette/material reuse, instancing or batching, draw-call
+5. Run `npm run proof:kiln-asset-viewer` and inspect the per-asset alignment screenshot for
+   any slug being wired or reviewed.
+6. Wire one runtime family through a manifest-driven loader or family-specific batcher.
+7. For repeated families, prove palette/material reuse, instancing or batching, draw-call
    budget, and distance-gated animation if the asset has clips.
-7. Prove desktop and phone screenshots, fallback behavior, and that no runtime requests hit
+8. Prove desktop and phone screenshots, fallback behavior, and that no runtime requests hit
    `public/assets/kiln/generated/`.
 
 ## DAG Node
@@ -108,6 +151,8 @@ No GLB becomes shipped gameplay art until it has:
   HTTP URL, or presigned URL marker.
 - A runtime asset entry declaring scale, pivot, orientation, socket/collider ownership,
   interaction overlays, repetition policy, and procedural fallback.
+- A matching alignment-viewer record and screenshot on a 5.6 world-unit hex socket when
+  the asset's scale, pivot, axis, socket, or snap behavior affects gameplay placement.
 - An orientation normalization record for any upright or axis-sensitive asset family. The
   runtime must decide whether to preserve authored Y-up or rotate a detected source axis to
   local Y before computing pivots, fitted bounds, and instanced geometry.
@@ -166,8 +211,8 @@ First wired pilot:
   fit metadata, clip metadata, and active/low-rate/frozen/hidden mixer bands by slug.
   `npm run proof:k6-creatures` proves all nine committed model requests, zero generated
   requests, zero fallback, distance-gated animation, desktop/phone screenshots, and
-  harmless/hazard gameplay responses. K6 is not player-ready until the native-life
-  targetability/placement UX gap is closed.
+  harmless/hazard gameplay responses. The follow-on K6T proof now closes creature-first
+  targetability and occupied-tile placement blockers; full roaming remains future K6R work.
 
 Runtime pilot candidates from the proof:
 
@@ -187,7 +232,9 @@ Runtime pilot candidates from the proof:
   `creature-reedback-grazer`, `creature-cave-blinker`, `creature-brambleback`,
   `creature-cave-belljaw`, `creature-scree-snapper`, `creature-storm-burr`, and
   `creature-tide-lurker` are H5/K6 runtime-wired through `NativeLifeRenderer` with
-  distance-gated `AnimationMixer` playback.
+  distance-gated `AnimationMixer` playback. The first K6T targeting slice also gives
+  visible creatures pick priority over terrain mining and blocks structure placement on
+  occupied native-life tiles.
 
 Deferred until scale, snap, budget, readability, or animation proof exists:
 
@@ -199,16 +246,53 @@ Deferred until scale, snap, budget, readability, or animation proof exists:
   normalize it to the socket, and hide duplicated procedural body parts only after GLB
   success. Future pieces need the same fitted-bbox diagnostics, fallback proof, and
   screenshot proof before shipping as craftable art.
+- House walls are not solved by the current pack. A `window-frame` is an insert, not a
+  wall; a `door-kit` is an opening/threshold, not a full enclosure; a `roof-bundle` needs
+  supports and joins. Before more craftable house pieces ship, add a code-owned wall and
+  shell contract for full wall panels, wall-with-window openings, wall-with-door openings,
+  corners, half walls/rails, roof joins, and optional foundations. New Kiln wall pieces
+  should be generated as one shared-scale house-shell pack and then treated as decorative
+  skins over measured sockets.
 - Functional props with warnings or watery placement needs: `workbench`, `rain-cistern`,
   `fish-trap`, `shore-net`, `lantern-post`.
 - Shrines and craters: defer for blind screenshot readability, world-placement scale,
   repetition/LOD policy, and collision proof. Trees are no longer deferred for the first
   vegetation slice; broader forest art direction can still revise placement, density, and
   regeneration prompts after K5 proof.
-- Native-life UX: creature GLB skinning is wired, but playtest feedback found that visible
-  native hazards can still be treated as ordinary terrain by click/attack and placement
-  routing. Add native-life pick priority, HUD pressure source feedback, and occupied-tile
-  placement blockers before calling K6 player-ready.
+- Native-life roaming: creature GLB skinning and first targeting ownership are wired, but
+  the sim is still site-based. Future K6R work should add sparse `NativeCreatureActor`
+  state over deterministic native sites so harmless creatures graze/wander/flee and
+  territorial creatures warn/pressure/recover/retreat across valid neighbor hexes.
+- Native-life polish still needs named HUD pressure-source feedback and suppression of any
+  remaining procedural body fragments that compete with the approved GLB skins.
+
+## Next Kiln Request Backlog
+
+Current guidance: use the approved pack first. Request more Kiln assets only when the
+runtime owner and socket/behavior contract are known. Keep Kiln tokens in gitignored local
+env or an authenticated AWS/Kiln session, and promote only after `proof:kiln-assets` and
+`proof:kiln-asset-viewer`.
+
+- Aquatic life: `fish-school-shore`, `fish-school-storm-run`,
+  `fish-school-cave-shimmer`, and `creature-driftjelly` with idle/swim/turn/dart clips.
+  These visualize existing fishing and waterline rules; fish-school logic stays in sim.
+- Pickup/drop skins: `drop-dirt-clod`, `drop-sand-pile`, `drop-snow-clump`,
+  `drop-glow-crystal`, `drop-raw-fish`, `drop-kelp-reeds`, `drop-compost-pellet`, and
+  `drop-cave-mushroom`.
+- Ore/resource nodes after item taxonomy: `node-iron-vein`, `node-copper-patina`,
+  `node-coal-seam`, `node-glow-crystal-vein`, `node-clay-bank`, and
+  `node-geode-pocket`.
+- Shared-scale house shell: wall panel, wall-window opening, wall-door opening, wall
+  corner, half rail, roof edge, roof corner, and floor/foundation pieces authored to the
+  code-owned hex socket dimensions.
+- Wonder and cave dressing: threshold arches, tide underpass ribs, lantern skylight rings,
+  root vault room pieces, horizon gate dressing, dripstone clusters, glow-crystal veins,
+  cave mushroom clumps, spring seep stones, and sea-cave tide-pool stones.
+
+Do not request GLBs for hex tile textures, terrain chunks, block materials, mining cracks,
+water, sky, route ribbons, telegraph rings, dynamic glows, skyfall beams, or particle/signal
+behavior unless a specific placeable prop is being authored. Those should remain
+procedural/material/shader systems keyed to the palette.
 
 Rejected for runtime:
 

@@ -22,6 +22,7 @@
     "proof:k2-domain-resources": "node scripts/proof-k2-domain-resource-skins.mjs",
     "proof:k5-trees": "node scripts/proof-k5-tree-skins.mjs",
     "proof:k6-creatures": "node scripts/proof-k6-creature-skins.mjs",
+    "proof:k7-native-targeting": "node scripts/proof-k7-native-creature-targeting.mjs",
     "proof:d2-caves": "node scripts/proof-d2-threshold-spaces.mjs",
     "proof:e4-ecology-route": "node scripts/proof-e4-ecology-route.mjs",
     "proof:f1-itinerary": "node scripts/proof-f1-itinerary-controls.mjs",

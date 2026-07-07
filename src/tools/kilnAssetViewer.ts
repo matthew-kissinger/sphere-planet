@@ -1,4 +1,5 @@
 import * as THREE from 'three/webgpu';
+import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
 import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';
 import {
   makeInstancedAssetParts,
@@ -6,20 +7,29 @@ import {
   type KilnInstancedOrientationSnapshot,
 } from '../render/kilnAssets';
 
-type KilnViewerFamily = 'structures' | 'drops' | 'nodes' | 'trees' | 'creatures' | 'adopted';
+type KilnViewerFamily = 'structures' | 'drops' | 'nodes' | 'trees' | 'creatures' | 'adopted' | 'ready';
 
 interface KilnManifestAsset {
   slug: string;
   title?: string;
   category?: string;
+  role?: string;
+  footprint?: string;
   status: 'ready' | 'unused' | 'missing';
   file: string | null;
+  modularKit?: boolean;
+  wiringRisk?: string;
   geometry?: {
     bboxLocal?: { size?: number[] };
     triangles?: number;
     meshCount?: number;
     materialCount?: number;
   };
+  animations?: {
+    name?: string;
+    channels?: number;
+    durationSec?: number;
+  }[];
 }
 
 interface KilnManifest {
@@ -30,6 +40,8 @@ interface ViewerAssetRecord {
   slug: string;
   family: KilnViewerFamily;
   title: string;
+  category?: string;
+  role?: string;
   status: 'loaded' | 'failed';
   sourceUrl: string;
   orientation: KilnInstancedOrientationSnapshot;
@@ -39,9 +51,33 @@ interface ViewerAssetRecord {
   socketScale: number;
   socketFootprint: number;
   socketTargetHeight: number;
+  socketRole: string;
+  socketGrid: string;
+  hexFlatToFlatWorldUnits: number;
+  placementFrame: {
+    up: '+Y local planet normal';
+    forward: '+Z local tangent';
+    right: '+X local tangent';
+    pivot: 'center-xz-bottom-y';
+  };
   meshCount: number;
+  materialCount?: number;
+  triangleCount?: number;
+  animationClips?: readonly string[];
+  warnings: string[];
   error?: string;
 }
+
+interface KilnSocketProfile {
+  role: string;
+  grid: string;
+  footprint: number;
+  height: number;
+  ringColor: number;
+}
+
+const HEX_FLAT_TO_FLAT_WORLD_UNITS = 5.6;
+const HEX_RADIUS_WORLD_UNITS = HEX_FLAT_TO_FLAT_WORLD_UNITS / Math.sqrt(3);
 
 const FAMILY_SLUGS: Record<KilnViewerFamily, readonly string[]> = {
   structures: ['waystone', 'door-kit', 'window-frame', 'roof-bundle'],
@@ -73,6 +109,7 @@ const FAMILY_SLUGS: Record<KilnViewerFamily, readonly string[]> = {
     'creature-tide-lurker',
   ],
   adopted: [],
+  ready: [],
 };
 
 FAMILY_SLUGS.adopted = [
@@ -90,30 +127,70 @@ function publicAssetUrl(relativePath: string): string {
 }
 
 function selectedFamily(params: URLSearchParams): KilnViewerFamily {
-  const raw = params.get('family') ?? 'trees';
-  return raw === 'structures' || raw === 'drops' || raw === 'nodes' || raw === 'trees' || raw === 'creatures' || raw === 'adopted'
+  const raw = params.get('family') ?? 'ready';
+  return raw === 'structures' || raw === 'drops' || raw === 'nodes' || raw === 'trees' || raw === 'creatures' || raw === 'adopted' || raw === 'ready'
     ? raw
-    : 'trees';
+    : 'ready';
 }
 
 function familyForSlug(slug: string): KilnViewerFamily {
   for (const family of ['structures', 'drops', 'nodes', 'trees', 'creatures'] as KilnViewerFamily[]) {
     if (FAMILY_SLUGS[family].includes(slug)) return family;
   }
-  return 'adopted';
+  return 'ready';
 }
 
-function orientationPolicyFor(slug: string): KilnInstancedOrientationPolicy {
+function orientationPolicyFor(slug: string, asset?: KilnManifestAsset): KilnInstancedOrientationPolicy {
   if (slug === 'tree-pine' || slug === 'tree-broadleaf' || slug === 'tree-dead-snag') return 'longest-axis-to-y';
+  if (slug === 'lantern-post' || slug === 'weather-vane') return 'longest-axis-to-y';
+  void asset;
   return 'preserve-y-up';
 }
 
-function socketTargetFor(family: KilnViewerFamily, slug: string): { footprint: number; height: number } {
-  if (family === 'trees') return slug === 'tree-shrub' ? { footprint: 1.2, height: 0.9 } : { footprint: 1.55, height: 2.7 };
-  if (family === 'creatures') return { footprint: 1.15, height: 0.95 };
-  if (family === 'drops') return { footprint: 0.85, height: 0.38 };
-  if (family === 'nodes') return { footprint: 1.05, height: 0.95 };
-  return { footprint: 1.5, height: 1.25 };
+function socketProfileFor(slug: string, family: KilnViewerFamily, asset?: KilnManifestAsset): KilnSocketProfile {
+  if (slug.startsWith('tree-')) {
+    return slug === 'tree-shrub'
+      ? { role: 'low vegetation on one hex', grid: 'single-hex scatter', footprint: 1.55, height: 1.05, ringColor: 0x7ccf7a }
+      : { role: 'upright tree on one hex', grid: 'single-hex scatter', footprint: 3.1, height: 4.4, ringColor: 0x7ccf7a };
+  }
+  if (slug.startsWith('creature-') || family === 'creatures') {
+    return { role: 'tile-anchored native creature', grid: 'single-hex occupied tile', footprint: 1.75, height: 1.25, ringColor: 0xe4a85c };
+  }
+  if (slug.startsWith('drop-') || family === 'drops') {
+    return { role: 'ground pickup', grid: 'single-hex loose item', footprint: 1.05, height: 0.55, ringColor: 0xf1d27a };
+  }
+  if (slug.startsWith('node-') || family === 'nodes') {
+    return { role: 'harvest/resource node', grid: 'single-hex interactable node', footprint: 1.5, height: 1.35, ringColor: 0x94d6ff };
+  }
+  if (slug.startsWith('shrine-')) {
+    return { role: 'wonder landmark', grid: 'single-hex landmark socket', footprint: 4.6, height: 4.2, ringColor: 0xd7c3ff };
+  }
+  if (slug.startsWith('crater-')) {
+    return { role: 'skyfall crater shell', grid: 'single-hex terrain dressing', footprint: 5.25, height: 1.15, ringColor: 0xffbd75 };
+  }
+  if (slug === 'shore-net') return { role: 'shoreline utility', grid: 'edge-aligned shore socket', footprint: 3.6, height: 2.4, ringColor: 0x87d9e8 };
+  if (slug === 'dock-segment') return { role: 'waterline build socket', grid: 'edge-aligned shore socket', footprint: 4.7, height: 1.8, ringColor: 0x87d9e8 };
+  if (slug === 'fish-trap') return { role: 'waterline trap', grid: 'edge-aligned shore socket', footprint: 2.2, height: 1.4, ringColor: 0x87d9e8 };
+  if (slug === 'door-kit') return { role: 'wall opening decorative skin', grid: 'code-authored wall socket', footprint: 2.25, height: 3.25, ringColor: 0xf2c27b };
+  if (slug === 'window-frame') return { role: 'wall light decorative skin', grid: 'code-authored wall socket', footprint: 2.1, height: 2.45, ringColor: 0xf2c27b };
+  if (slug === 'roof-bundle') return { role: 'roof cap decorative skin', grid: 'code-authored roof socket', footprint: 4.6, height: 1.85, ringColor: 0xf2c27b };
+  if (slug === 'waystone' || slug === 'cave-anchor') return { role: 'route marker', grid: 'single-hex landmark socket', footprint: 2.0, height: 2.4, ringColor: 0xaad7ff };
+  if (asset?.modularKit) return { role: asset.role ?? 'modular kit decoration', grid: 'code-authored snap socket', footprint: 4.2, height: 2.5, ringColor: 0xf2c27b };
+  if (asset?.footprint === 'small') return { role: asset.role ?? 'small prop', grid: 'single-hex prop socket', footprint: 1.75, height: 1.1, ringColor: 0xc9d7a1 };
+  if (asset?.footprint === 'landmark') return { role: asset.role ?? 'landmark', grid: 'single-hex landmark socket', footprint: 4.7, height: 3.4, ringColor: 0xd7c3ff };
+  return { role: asset?.role ?? 'single-hex prop', grid: 'single-hex prop socket', footprint: 3.15, height: 2.1, ringColor: 0xc9d7a1 };
+}
+
+function readyManifestSlugs(manifest: KilnManifest): string[] {
+  return (manifest.assets ?? [])
+    .filter((asset) => asset.status === 'ready' && !!asset.file)
+    .map((asset) => asset.slug);
+}
+
+function slugsForSelection(family: KilnViewerFamily, manifest: KilnManifest, requestedSlug: string | null): string[] {
+  if (requestedSlug) return [requestedSlug];
+  if (family === 'ready') return readyManifestSlugs(manifest);
+  return [...FAMILY_SLUGS[family]];
 }
 
 function bboxSizeOfObject(object: THREE.Object3D): number[] {
@@ -149,39 +226,99 @@ function makeLabel(text: string, width = 512): THREE.Sprite {
   const texture = new THREE.CanvasTexture(canvas);
   texture.colorSpace = THREE.SRGBColorSpace;
   const sprite = new THREE.Sprite(new THREE.SpriteMaterial({ map: texture, transparent: true, depthWrite: false }));
-  sprite.scale.set(1.6, 0.3, 1);
+  sprite.scale.set(3.2, 0.6, 1);
   return sprite;
 }
 
-function makeHexSocket(): THREE.Group {
-  const group = new THREE.Group();
-  const base = new THREE.Mesh(
-    new THREE.CylinderGeometry(1, 1, 0.045, 6, 1),
-    new THREE.MeshStandardMaterial({ color: 0x425946, roughness: 0.82, metalness: 0 }),
+function makeFlatHexMesh(radius: number, color: number, opacity: number): THREE.Mesh {
+  const mesh = new THREE.Mesh(
+    new THREE.CylinderGeometry(radius, radius, 0.045, 6, 1),
+    new THREE.MeshStandardMaterial({ color, roughness: 0.82, metalness: 0, transparent: opacity < 1, opacity }),
   );
-  base.rotation.y = Math.PI / 6;
-  base.position.y = -0.025;
-  group.add(base);
+  mesh.rotation.y = Math.PI / 6;
+  mesh.position.y = -0.025;
+  return mesh;
+}
 
-  const ring = new THREE.LineSegments(
-    new THREE.EdgesGeometry(base.geometry),
-    new THREE.LineBasicMaterial({ color: 0xa9c6b3, transparent: true, opacity: 0.55 }),
+function addHexEdges(group: THREE.Group, mesh: THREE.Mesh, color: number, opacity: number): void {
+  const edges = new THREE.LineSegments(
+    new THREE.EdgesGeometry(mesh.geometry),
+    new THREE.LineBasicMaterial({ color, transparent: opacity < 1, opacity }),
   );
-  ring.rotation.copy(base.rotation);
-  ring.position.copy(base.position);
+  edges.rotation.copy(mesh.rotation);
+  edges.position.copy(mesh.position);
+  group.add(edges);
+}
+
+function makeSocketFootprintRing(profile: KilnSocketProfile): THREE.Group {
+  const group = new THREE.Group();
+  const radius = Math.max(0.08, profile.footprint * 0.5);
+  const ring = new THREE.Mesh(
+    new THREE.RingGeometry(radius * 0.94, radius, 72),
+    new THREE.MeshBasicMaterial({ color: profile.ringColor, transparent: true, opacity: 0.78, side: THREE.DoubleSide }),
+  );
+  ring.rotation.x = -Math.PI / 2;
+  ring.position.y = 0.015;
   group.add(ring);
 
-  const up = new THREE.ArrowHelper(new THREE.Vector3(0, 1, 0), new THREE.Vector3(0.86, 0.03, -0.76), 0.82, 0x79d28c, 0.12, 0.07);
+  const targetHeight = new THREE.ArrowHelper(
+    new THREE.Vector3(0, 1, 0),
+    new THREE.Vector3(-radius, 0.03, radius),
+    Math.max(0.2, profile.height),
+    profile.ringColor,
+    0.16,
+    0.08,
+  );
+  targetHeight.name = 'socket-target-height';
+  group.add(targetHeight);
+  return group;
+}
+
+function makeHexSocket(profile: KilnSocketProfile, showNeighbors = true): THREE.Group {
+  const group = new THREE.Group();
+  const base = makeFlatHexMesh(HEX_RADIUS_WORLD_UNITS, 0x425946, 0.42);
+  group.add(base);
+  addHexEdges(group, base, 0xa9c6b3, 0.7);
+
+  const neighborOffsets = [
+    [HEX_RADIUS_WORLD_UNITS * 1.5, HEX_FLAT_TO_FLAT_WORLD_UNITS * 0.5],
+    [0, HEX_FLAT_TO_FLAT_WORLD_UNITS],
+    [-HEX_RADIUS_WORLD_UNITS * 1.5, HEX_FLAT_TO_FLAT_WORLD_UNITS * 0.5],
+    [-HEX_RADIUS_WORLD_UNITS * 1.5, -HEX_FLAT_TO_FLAT_WORLD_UNITS * 0.5],
+    [0, -HEX_FLAT_TO_FLAT_WORLD_UNITS],
+    [HEX_RADIUS_WORLD_UNITS * 1.5, -HEX_FLAT_TO_FLAT_WORLD_UNITS * 0.5],
+  ];
+  if (showNeighbors) {
+    for (const [x, z] of neighborOffsets) {
+      const neighbor = makeFlatHexMesh(HEX_RADIUS_WORLD_UNITS, 0x26323c, 0.14);
+      neighbor.position.x = x;
+      neighbor.position.z = z;
+      group.add(neighbor);
+      addHexEdges(group, neighbor, 0x6d8290, 0.32);
+    }
+  }
+
+  group.add(makeSocketFootprintRing(profile));
+
+  const up = new THREE.ArrowHelper(new THREE.Vector3(0, 1, 0), new THREE.Vector3(HEX_RADIUS_WORLD_UNITS * 0.78, 0.03, -HEX_RADIUS_WORLD_UNITS * 0.7), 1.15, 0x79d28c, 0.16, 0.08);
+  up.name = 'planet-normal-plus-y';
   group.add(up);
+  const forward = new THREE.ArrowHelper(new THREE.Vector3(0, 0, 1), new THREE.Vector3(0, 0.04, 0), HEX_RADIUS_WORLD_UNITS * 0.68, 0x7fb8ff, 0.14, 0.07);
+  forward.name = 'tile-forward-plus-z';
+  group.add(forward);
+  const right = new THREE.ArrowHelper(new THREE.Vector3(1, 0, 0), new THREE.Vector3(0, 0.05, 0), HEX_RADIUS_WORLD_UNITS * 0.68, 0xffc979, 0.14, 0.07);
+  right.name = 'tile-right-plus-x';
+  group.add(right);
   return group;
 }
 
 function makeNormalizedStaticObject(
   source: THREE.Object3D,
   slug: string,
-  family: KilnViewerFamily,
+  profile: KilnSocketProfile,
+  asset?: KilnManifestAsset,
 ): { object: THREE.Object3D; record: Pick<ViewerAssetRecord, 'orientation' | 'runtimeSourceBboxSize' | 'orientedSourceBboxSize' | 'normalizedBboxSize' | 'socketScale' | 'socketFootprint' | 'socketTargetHeight' | 'meshCount'> } {
-  const normalized = makeInstancedAssetParts(source, slug, orientationPolicyFor(slug));
+  const normalized = makeInstancedAssetParts(source, slug, orientationPolicyFor(slug, asset));
   const root = new THREE.Group();
   root.name = `viewer-normalized-${slug}`;
   for (const part of normalized.parts) {
@@ -191,8 +328,7 @@ function makeNormalizedStaticObject(
     mesh.receiveShadow = true;
     root.add(mesh);
   }
-  const target = socketTargetFor(family, slug);
-  const scale = scaleForSocket(normalized.normalizedBboxSize, target);
+  const scale = scaleForSocket(normalized.normalizedBboxSize, profile);
   root.scale.setScalar(scale);
   return {
     object: root,
@@ -202,8 +338,8 @@ function makeNormalizedStaticObject(
       orientedSourceBboxSize: normalized.orientedSourceBboxSize,
       normalizedBboxSize: normalized.normalizedBboxSize,
       socketScale: scale,
-      socketFootprint: target.footprint,
-      socketTargetHeight: target.height,
+      socketFootprint: profile.footprint,
+      socketTargetHeight: profile.height,
       meshCount: normalized.sourceMeshCount,
     },
   };
@@ -212,7 +348,7 @@ function makeNormalizedStaticObject(
 function makeNormalizedAnimatedObject(
   source: THREE.Object3D,
   slug: string,
-  family: KilnViewerFamily,
+  profile: KilnSocketProfile,
 ): { object: THREE.Object3D; record: Pick<ViewerAssetRecord, 'orientation' | 'runtimeSourceBboxSize' | 'orientedSourceBboxSize' | 'normalizedBboxSize' | 'socketScale' | 'socketFootprint' | 'socketTargetHeight' | 'meshCount'> } {
   source.updateMatrixWorld(true);
   const sourceBox = new THREE.Box3().setFromObject(source);
@@ -235,8 +371,7 @@ function makeNormalizedAnimatedObject(
   root.add(body);
   root.updateMatrixWorld(true);
   const normalizedSize = bboxSizeOfObject(root);
-  const target = socketTargetFor(family, slug);
-  const scale = scaleForSocket(normalizedSize, target);
+  const scale = scaleForSocket(normalizedSize, profile);
   root.scale.setScalar(scale);
   let meshCount = 0;
   source.traverse((child) => {
@@ -251,8 +386,8 @@ function makeNormalizedAnimatedObject(
       orientedSourceBboxSize: size,
       normalizedBboxSize: normalizedSize,
       socketScale: scale,
-      socketFootprint: target.footprint,
-      socketTargetHeight: target.height,
+      socketFootprint: profile.footprint,
+      socketTargetHeight: profile.height,
       meshCount,
     },
   };
@@ -261,6 +396,7 @@ function makeNormalizedAnimatedObject(
 function defaultColumnsFor(family: KilnViewerFamily, count: number): number {
   if (count <= 2) return count;
   if (family === 'structures' || family === 'trees') return count;
+  if (family === 'ready') return Math.min(8, count);
   if (family === 'adopted') return Math.min(6, count);
   return Math.min(4, count);
 }
@@ -273,7 +409,7 @@ function selectedColumns(params: URLSearchParams, family: KilnViewerFamily, coun
 
 function selectedSpacing(params: URLSearchParams): number {
   const requested = Number(params.get('spacing'));
-  return Number.isFinite(requested) && requested >= 2 ? Math.min(8, requested) : 3.45;
+  return Number.isFinite(requested) && requested >= 2 ? Math.min(12, requested) : 7.2;
 }
 
 function gridPosition(index: number, columns: number, spacing: number): THREE.Vector3 {
@@ -282,6 +418,23 @@ function gridPosition(index: number, columns: number, spacing: number): THREE.Ve
   const x = (col - (columns - 1) / 2) * spacing + (row % 2) * spacing * 0.5;
   const z = row * spacing * 0.86;
   return new THREE.Vector3(x, 0, z);
+}
+
+function placementWarnings(asset: KilnManifestAsset | undefined, record: Pick<ViewerAssetRecord, 'orientation' | 'normalizedBboxSize' | 'socketScale' | 'meshCount'>, profile: KilnSocketProfile): string[] {
+  const warnings: string[] = [];
+  if (!asset) warnings.push('manifest record missing');
+  if (asset?.modularKit) warnings.push('modular kit: use code-authored socket/collider as the dimensional contract');
+  if (asset?.wiringRisk) warnings.push(asset.wiringRisk);
+  if ((asset?.geometry?.meshCount ?? 0) >= 80) warnings.push('high mesh count: prefer merged or instanced runtime path');
+  if ((asset?.geometry?.materialCount ?? 0) >= 4) warnings.push('material count needs palette/material consolidation review');
+  if ((asset?.geometry?.triangles ?? 0) >= 6000) warnings.push('triangle budget needs LOD or simplification review');
+  if (record.orientation.sourceUpAxis !== 'y') warnings.push(`axis corrected from local ${record.orientation.sourceUpAxis.toUpperCase()} into +Y planet normal`);
+  const xz = Math.max(record.normalizedBboxSize[0] ?? 0, record.normalizedBboxSize[2] ?? 0);
+  const y = record.normalizedBboxSize[1] ?? 0;
+  if (profile.role.includes('upright') && y < xz * 0.8) warnings.push('upright socket still reads squat after normalization');
+  if (profile.role.includes('crater') && y > xz * 0.45) warnings.push('crater shell reads tall; verify it sits as terrain dressing');
+  if (record.socketScale <= 0) warnings.push('invalid socket scale');
+  return warnings;
 }
 
 function installViewerStyle(): void {
@@ -321,7 +474,6 @@ export async function bootKilnAssetViewer(): Promise<void> {
   const params = new URLSearchParams(window.location.search);
   const family = selectedFamily(params);
   const requestedSlug = params.get('slug');
-  const slugs = requestedSlug ? [requestedSlug] : [...FAMILY_SLUGS[family]];
   const app = document.getElementById('app') ?? document.body;
   app.innerHTML = '';
 
@@ -344,11 +496,13 @@ export async function bootKilnAssetViewer(): Promise<void> {
 
   const panel = document.createElement('div');
   panel.id = 'asset-viewer-panel';
-  panel.textContent = `Kiln alignment viewer\nfamily ${family}\nloading ${slugs.length} asset${slugs.length === 1 ? '' : 's'}`;
+  panel.textContent = `Kiln alignment viewer\nfamily ${family}\nloading manifest`;
   document.body.appendChild(panel);
 
   const manifest = await fetch(publicAssetUrl('assets/kiln/ASSET_MANIFEST.json')).then((res) => res.json() as Promise<KilnManifest>);
   const bySlug = new Map((manifest.assets ?? []).map((asset) => [asset.slug, asset]));
+  const slugs = slugsForSelection(family, manifest, requestedSlug);
+  panel.textContent = `Kiln alignment viewer\nfamily ${family}\nloading ${slugs.length} asset${slugs.length === 1 ? '' : 's'}`;
   const loader = new GLTFLoader();
   const content = new THREE.Group();
   content.name = `kiln-asset-viewer-${family}`;
@@ -361,20 +515,24 @@ export async function bootKilnAssetViewer(): Promise<void> {
   for (let i = 0; i < slugs.length; i += 1) {
     const slug = slugs[i];
     const asset = bySlug.get(slug);
+    const assetFamily = familyForSlug(slug);
+    const profile = socketProfileFor(slug, assetFamily, asset);
     const cell = new THREE.Group();
     cell.name = `viewer-cell-${slug}`;
     cell.position.copy(gridPosition(i, columns, spacing));
-    cell.add(makeHexSocket());
+    cell.add(makeHexSocket(profile, !requestedSlug || params.get('neighbors') === '1'));
     const label = makeLabel(slug);
-    label.position.set(0, 0.05, 1.28);
+    label.position.set(0, 0.08, HEX_RADIUS_WORLD_UNITS + 0.82);
     cell.add(label);
     content.add(cell);
 
     if (!asset || asset.status !== 'ready' || !asset.file) {
       records.push({
         slug,
-        family: requestedSlug ? familyForSlug(slug) : family,
+        family: requestedSlug ? assetFamily : family,
         title: asset?.title ?? slug,
+        category: asset?.category,
+        role: asset?.role,
         status: 'failed',
         sourceUrl: '',
         orientation: { policy: 'preserve-y-up', sourceUpAxis: 'y', axisCorrection: [0, 0, 0] },
@@ -382,9 +540,27 @@ export async function bootKilnAssetViewer(): Promise<void> {
         orientedSourceBboxSize: [],
         normalizedBboxSize: [],
         socketScale: 0,
-        socketFootprint: 0,
-        socketTargetHeight: 0,
+        socketFootprint: profile.footprint,
+        socketTargetHeight: profile.height,
+        socketRole: profile.role,
+        socketGrid: profile.grid,
+        hexFlatToFlatWorldUnits: HEX_FLAT_TO_FLAT_WORLD_UNITS,
+        placementFrame: {
+          up: '+Y local planet normal',
+          forward: '+Z local tangent',
+          right: '+X local tangent',
+          pivot: 'center-xz-bottom-y',
+        },
         meshCount: 0,
+        materialCount: asset?.geometry?.materialCount,
+        triangleCount: asset?.geometry?.triangles,
+        animationClips: asset?.animations?.map((clip) => clip.name ?? '').filter(Boolean),
+        warnings: placementWarnings(asset, {
+          orientation: { policy: 'preserve-y-up', sourceUpAxis: 'y', axisCorrection: [0, 0, 0] },
+          normalizedBboxSize: [],
+          socketScale: 0,
+          meshCount: 0,
+        }, profile),
         error: 'missing ready manifest asset',
       });
       continue;
@@ -393,10 +569,9 @@ export async function bootKilnAssetViewer(): Promise<void> {
     const sourceUrl = publicAssetUrl(`assets/kiln/${asset.file}`);
     try {
       const gltf = await loader.loadAsync(sourceUrl);
-      const assetFamily = familyForSlug(slug);
       const built = assetFamily === 'creatures'
-        ? makeNormalizedAnimatedObject(gltf.scene as unknown as THREE.Object3D, slug, assetFamily)
-        : makeNormalizedStaticObject(gltf.scene as unknown as THREE.Object3D, slug, assetFamily);
+        ? makeNormalizedAnimatedObject(gltf.scene as unknown as THREE.Object3D, slug, profile)
+        : makeNormalizedStaticObject(gltf.scene as unknown as THREE.Object3D, slug, profile, asset);
       built.object.position.y = 0;
       cell.add(built.object);
       content.updateMatrixWorld(true);
@@ -414,15 +589,32 @@ export async function bootKilnAssetViewer(): Promise<void> {
         slug,
         family: assetFamily,
         title: asset.title ?? slug,
+        category: asset.category,
+        role: asset.role,
         status: 'loaded',
         sourceUrl,
         ...built.record,
+        socketRole: profile.role,
+        socketGrid: profile.grid,
+        hexFlatToFlatWorldUnits: HEX_FLAT_TO_FLAT_WORLD_UNITS,
+        placementFrame: {
+          up: '+Y local planet normal',
+          forward: '+Z local tangent',
+          right: '+X local tangent',
+          pivot: 'center-xz-bottom-y',
+        },
+        materialCount: asset.geometry?.materialCount,
+        triangleCount: asset.geometry?.triangles,
+        animationClips: gltf.animations.map((clip) => clip.name),
+        warnings: placementWarnings(asset, built.record, profile),
       });
     } catch (err) {
       records.push({
         slug,
-        family: requestedSlug ? familyForSlug(slug) : family,
+        family: requestedSlug ? assetFamily : family,
         title: asset.title ?? slug,
+        category: asset.category,
+        role: asset.role,
         status: 'failed',
         sourceUrl,
         orientation: { policy: 'preserve-y-up', sourceUpAxis: 'y', axisCorrection: [0, 0, 0] },
@@ -430,27 +622,69 @@ export async function bootKilnAssetViewer(): Promise<void> {
         orientedSourceBboxSize: [],
         normalizedBboxSize: [],
         socketScale: 0,
-        socketFootprint: 0,
-        socketTargetHeight: 0,
+        socketFootprint: profile.footprint,
+        socketTargetHeight: profile.height,
+        socketRole: profile.role,
+        socketGrid: profile.grid,
+        hexFlatToFlatWorldUnits: HEX_FLAT_TO_FLAT_WORLD_UNITS,
+        placementFrame: {
+          up: '+Y local planet normal',
+          forward: '+Z local tangent',
+          right: '+X local tangent',
+          pivot: 'center-xz-bottom-y',
+        },
         meshCount: 0,
+        materialCount: asset.geometry?.materialCount,
+        triangleCount: asset.geometry?.triangles,
+        animationClips: asset.animations?.map((clip) => clip.name ?? '').filter(Boolean),
+        warnings: placementWarnings(asset, {
+          orientation: { policy: 'preserve-y-up', sourceUpAxis: 'y', axisCorrection: [0, 0, 0] },
+          normalizedBboxSize: [],
+          socketScale: 0,
+          meshCount: 0,
+        }, profile),
         error: err instanceof Error ? err.message : String(err),
       });
     }
   }
 
   frameCamera(camera, content);
+  const controls = new OrbitControls(camera, renderer.domElement);
+  const contentBox = new THREE.Box3().setFromObject(content);
+  const target = new THREE.Vector3();
+  contentBox.getCenter(target);
+  controls.target.copy(target);
+  controls.enableDamping = true;
+  controls.dampingFactor = 0.08;
+  controls.update();
   const state = {
     ready: true,
     family,
+    requestedSlug,
     slugs,
     columns,
     spacing,
+    manifestReadyCount: readyManifestSlugs(manifest).length,
     records,
-    coordinateSystem: 'viewer local Y is world/planet surface normal; each asset sits on a flat hex socket at y=0',
+    coordinateSystem: {
+      up: '+Y local planet normal',
+      forward: '+Z local tangent',
+      right: '+X local tangent',
+      pivot: 'center-xz-bottom-y',
+      hexFlatToFlatWorldUnits: HEX_FLAT_TO_FLAT_WORLD_UNITS,
+      note: 'Raw GLB units are normalized into a code-authored socket; the socket, not the GLB, owns placement scale.',
+    },
+    screenshotPlan: records.map((record) => ({
+      slug: record.slug,
+      url: `/?assetViewer=kiln&slug=${encodeURIComponent(record.slug)}&gpu=gl`,
+      file: `output/playwright/kiln-asset-viewer/assets/${record.slug}.png`,
+      status: record.status,
+      warnings: record.warnings,
+    })),
   };
   (window as any).__assetViewer = state;
   (window as any).render_game_to_text = () => JSON.stringify(state);
-  panel.textContent = `Kiln alignment viewer\nfamily ${family}\nloaded ${records.filter((record) => record.status === 'loaded').length}/${records.length}\ncolumns ${columns} spacing ${spacing.toFixed(2)}\nY axis is the socket sky/up direction`;
+  panel.textContent = `Kiln alignment viewer\nfamily ${family}${requestedSlug ? ` · ${requestedSlug}` : ''}\nloaded ${records.filter((record) => record.status === 'loaded').length}/${records.length}\ncolumns ${columns} spacing ${spacing.toFixed(2)}\nhex flat-to-flat ${HEX_FLAT_TO_FLAT_WORLD_UNITS.toFixed(1)}wu\n+Y is planet-normal sky; +Z is tile-forward tangent`;
 
   window.addEventListener('resize', () => {
     renderer.setSize(window.innerWidth, window.innerHeight);
@@ -462,6 +696,7 @@ export async function bootKilnAssetViewer(): Promise<void> {
   (window as any).advanceTime = (ms = 16) => {
     const dt = Math.max(0, Math.min(0.05, Number(ms) / 1000));
     for (const mixer of mixers) mixer.update(dt);
+    controls.update();
     renderer.render(scene, camera);
   };
   renderer.setAnimationLoop(() => {
@@ -469,6 +704,7 @@ export async function bootKilnAssetViewer(): Promise<void> {
     const dt = Math.max(0, Math.min(0.05, (now - last) / 1000));
     last = now;
     for (const mixer of mixers) mixer.update(dt);
+    controls.update();
     renderer.render(scene, camera);
   });
 }
