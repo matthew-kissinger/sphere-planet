@@ -220,9 +220,9 @@ export interface KilnInstancedAssetPart {
   material: THREE.Material | THREE.Material[];
 }
 
-export type KilnInstancedOrientationPolicy = 'preserve-y-up' | 'preserve-y-up-x-front-to-z' | 'longest-axis-to-y' | 'longest-axis-to-z';
+export type KilnInstancedOrientationPolicy = 'preserve-y-up' | 'preserve-y-up-x-front-to-z' | 'preserve-y-up-neg-x-front-to-z' | 'longest-axis-to-y' | 'longest-axis-to-z';
 export type KilnSourceUpAxis = 'x' | 'y' | 'z';
-export type KilnSourceForwardAxis = '+x' | '+z';
+export type KilnSourceForwardAxis = '+x' | '-x' | '+z';
 
 export interface KilnInstancedOrientationSnapshot {
   policy: KilnInstancedOrientationPolicy;
@@ -307,7 +307,7 @@ export interface KilnTreeSkinFitSnapshot {
   normalizePolicy: 'center-xz-bottom-y';
   orientation: KilnInstancedOrientationSnapshot;
   batchingPolicy: 'instanced-merged-by-material';
-  animationPolicy: 'matrix-sway-near-and-damage-only';
+  animationPolicy: 'root-anchored-sway-near-and-damage-tilt';
   sourceUrl: string;
   sourceMeshCount: number;
   instancedMeshCount: number;
@@ -335,8 +335,10 @@ export interface KilnCreatureSkinFitSnapshot {
   socketRole: 'native-creature-body';
   sourceBboxSize: readonly number[];
   runtimeSourceBboxSize: readonly number[];
+  orientedSourceBboxSize: readonly number[];
   normalizedBboxSize: readonly number[];
   normalizePolicy: 'center-xz-bottom-y-fit-height';
+  orientation: KilnInstancedOrientationSnapshot;
   animationPolicy: 'mixer-near-freeze-far';
   sourceUrl: string;
   sourceMeshCount: number;
@@ -1356,6 +1358,14 @@ function orientationCorrectionFor(
       sourceForwardAxis: '+x',
     };
   }
+  if (policy === 'preserve-y-up-neg-x-front-to-z') {
+    const forward = new THREE.Matrix4().makeRotationY(Math.PI / 2);
+    return {
+      matrix: forward.multiply(up.matrix),
+      euler: [0, Number((Math.PI / 2).toFixed(6)), 0],
+      sourceForwardAxis: '-x',
+    };
+  }
   return up;
 }
 
@@ -1516,23 +1526,26 @@ export function makeInstancedAssetParts(
 function normalizeCreatureTemplate(source: THREE.Object3D, slug: string, targetHeight: number): {
   template: THREE.Object3D;
   runtimeSourceBboxSize: number[];
+  orientedSourceBboxSize: number[];
   normalizedBboxSize: number[];
   sourceMeshCount: number;
+  orientation: KilnInstancedOrientationSnapshot;
 } {
   source.updateMatrixWorld(true);
   const sourceBox = new THREE.Box3().setFromObject(source);
   const runtimeSourceBboxSize = bboxSizeOfBox(sourceBox);
-  const size = new THREE.Vector3();
-  sourceBox.getSize(size);
-  const center = new THREE.Vector3();
-  sourceBox.getCenter(center);
-  const scale = size.y > 0 ? Math.max(0.01, targetHeight / size.y) : 1;
+  const correction = orientationCorrectionFor('y', 'preserve-y-up-neg-x-front-to-z');
   const root = new THREE.Group();
   root.name = `kiln-creature-template-${slug}`;
+  const scaled = new THREE.Group();
+  scaled.name = `kiln-creature-scale-${slug}`;
+  const offset = new THREE.Group();
+  offset.name = `kiln-creature-pivot-${slug}`;
+  const corrected = new THREE.Group();
+  corrected.name = `kiln-creature-forward-${slug}`;
+  corrected.rotation.set(...correction.euler);
   const body = source.clone(true);
   body.name = `kiln-creature-body-${slug}`;
-  body.position.set(-center.x, -sourceBox.min.y, -center.z);
-  body.scale.setScalar(scale);
   let sourceMeshCount = 0;
   body.traverse((child) => {
     child.userData.kilnAssetSlug = slug;
@@ -1544,10 +1557,36 @@ function normalizeCreatureTemplate(source: THREE.Object3D, slug: string, targetH
       mesh.frustumCulled = false;
     }
   });
-  root.add(body);
+  corrected.add(body);
+  offset.add(corrected);
+  scaled.add(offset);
+  root.add(scaled);
+
+  root.updateMatrixWorld(true);
+  const orientedBox = new THREE.Box3().setFromObject(corrected);
+  const orientedSourceBboxSize = bboxSizeOfBox(orientedBox);
+  const orientedSize = new THREE.Vector3();
+  orientedBox.getSize(orientedSize);
+  const orientedCenter = new THREE.Vector3();
+  orientedBox.getCenter(orientedCenter);
+  const scale = orientedSize.y > 0 ? Math.max(0.01, targetHeight / orientedSize.y) : 1;
+  offset.position.set(-orientedCenter.x, -orientedBox.min.y, -orientedCenter.z);
+  scaled.scale.setScalar(scale);
   root.updateMatrixWorld(true);
   const normalizedBboxSize = fittedSize(root);
-  return { template: root, runtimeSourceBboxSize, normalizedBboxSize, sourceMeshCount };
+  return {
+    template: root,
+    runtimeSourceBboxSize,
+    orientedSourceBboxSize,
+    normalizedBboxSize,
+    sourceMeshCount,
+    orientation: {
+      policy: 'preserve-y-up-neg-x-front-to-z',
+      sourceUpAxis: 'y',
+      sourceForwardAxis: correction.sourceForwardAxis,
+      axisCorrection: correction.euler,
+    },
+  };
 }
 
 function normalizeFishTemplate(source: THREE.Object3D, slug: string, targetLength: number): {
@@ -2213,7 +2252,7 @@ export class KilnRuntimeAssets implements StructureSkinProvider, ResourceDropSki
           normalizePolicy: 'center-xz-bottom-y',
           orientation,
           batchingPolicy: 'instanced-merged-by-material',
-          animationPolicy: 'matrix-sway-near-and-damage-only',
+          animationPolicy: 'root-anchored-sway-near-and-damage-tilt',
           sourceUrl,
           sourceMeshCount,
           instancedMeshCount: parts.length,
@@ -2254,7 +2293,7 @@ export class KilnRuntimeAssets implements StructureSkinProvider, ResourceDropSki
         this.modelRequests.push(sourceUrl);
         const gltf = await this.loader.loadAsync(sourceUrl);
         const creature = RUNTIME_CREATURE_SKINS[slug];
-        const { template, runtimeSourceBboxSize, normalizedBboxSize, sourceMeshCount } =
+        const { template, runtimeSourceBboxSize, orientedSourceBboxSize, normalizedBboxSize, sourceMeshCount, orientation } =
           normalizeCreatureTemplate(gltf.scene as unknown as THREE.Object3D, slug, creature.fitHeight);
         const clips = gltf.animations ?? [];
         if (clips.length === 0) {
@@ -2280,8 +2319,10 @@ export class KilnRuntimeAssets implements StructureSkinProvider, ResourceDropSki
           socketRole: 'native-creature-body',
           sourceBboxSize: sourceBboxSize(asset),
           runtimeSourceBboxSize,
+          orientedSourceBboxSize,
           normalizedBboxSize,
           normalizePolicy: 'center-xz-bottom-y-fit-height',
+          orientation,
           animationPolicy: 'mixer-near-freeze-far',
           sourceUrl,
           sourceMeshCount,

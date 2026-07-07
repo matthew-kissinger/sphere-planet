@@ -213,6 +213,7 @@ function orientationPolicyFor(slug: string, asset?: KilnManifestAsset): KilnInst
   if (slug === 'tree-pine' || slug === 'tree-broadleaf' || slug === 'tree-dead-snag') return 'longest-axis-to-y';
   if (slug === 'lantern-post' || slug === 'weather-vane') return 'longest-axis-to-y';
   if (slug.startsWith('shrine-')) return 'preserve-y-up-x-front-to-z';
+  if (slug.startsWith('creature-') && slug !== 'creature-driftjelly') return 'preserve-y-up-neg-x-front-to-z';
   void asset;
   return 'preserve-y-up';
 }
@@ -483,11 +484,15 @@ function makeNormalizedAnimatedObject(
   source.updateMatrixWorld(true);
   const sourceBox = new THREE.Box3().setFromObject(source);
   const sourceSize = new THREE.Vector3();
-  const sourceCenter = new THREE.Vector3();
   sourceBox.getSize(sourceSize);
-  sourceBox.getCenter(sourceCenter);
+  const policy = orientationPolicyFor(slug);
+  const axisCorrection: [number, number, number] = policy === 'preserve-y-up-neg-x-front-to-z'
+    ? [0, Number((Math.PI / 2).toFixed(6)), 0]
+    : [0, 0, 0];
+  const orientation = policy === 'preserve-y-up-neg-x-front-to-z'
+    ? { policy, sourceUpAxis: 'y' as const, sourceForwardAxis: '-x' as const, axisCorrection }
+    : { policy: 'preserve-y-up' as const, sourceUpAxis: 'y' as const, axisCorrection };
   const body = source.clone(true);
-  body.position.set(-sourceCenter.x, -sourceBox.min.y, -sourceCenter.z);
   body.traverse((child) => {
     if ((child as THREE.Mesh).isMesh) {
       const mesh = child as THREE.Mesh;
@@ -498,8 +503,22 @@ function makeNormalizedAnimatedObject(
   });
   const root = new THREE.Group();
   root.name = `viewer-normalized-${slug}`;
-  root.add(body);
+  const offset = new THREE.Group();
+  offset.name = `viewer-pivot-${slug}`;
+  const corrected = new THREE.Group();
+  corrected.name = `viewer-forward-${slug}`;
+  corrected.rotation.set(...axisCorrection);
+  corrected.add(body);
+  offset.add(corrected);
+  root.add(offset);
+
   root.updateMatrixWorld(true);
+  const orientedBox = new THREE.Box3().setFromObject(corrected);
+  const orientedCenter = new THREE.Vector3();
+  orientedBox.getCenter(orientedCenter);
+  offset.position.set(-orientedCenter.x, -orientedBox.min.y, -orientedCenter.z);
+  root.updateMatrixWorld(true);
+  const orientedSize = bboxSizeOfObject(corrected);
   const normalizedSize = bboxSizeOfObject(root);
   const scale = scaleForSocket(normalizedSize, profile);
   root.scale.setScalar(scale);
@@ -511,9 +530,9 @@ function makeNormalizedAnimatedObject(
   return {
     object: root,
     record: {
-      orientation: { policy: 'preserve-y-up', sourceUpAxis: 'y', axisCorrection: [0, 0, 0] },
+      orientation,
       runtimeSourceBboxSize: size,
-      orientedSourceBboxSize: size,
+      orientedSourceBboxSize: orientedSize,
       normalizedBboxSize: normalizedSize,
       socketScale: scale,
       socketFootprint: profile.footprint,

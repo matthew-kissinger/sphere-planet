@@ -3,6 +3,30 @@ Current operating goal: Hearth and Horizon full crafting-survival cycle under th
 
 ## 2026-07-07
 
+- Diagnosed the confusing first-spawn ground cluster. Fresh empty-profile and
+  `nosave/resetSave` probes both reported `resourceDrops.count = 0`, so the apparent
+  plank/ore object was not `drop-wood-logs`, `drop-ore-chunk`, or a persisted GLB pickup
+  in a clean run. The visual was the procedural cave-mouth marker beside the generated
+  cave creatures, and the real spawn bug was that tile `603` started one ring from a dry
+  cave mouth/territorial cave bell-jaw, immediately applying `-10 stamina / +6 exposure`.
+  The far-left object in the follow-up screenshot was identified as a harmless cave
+  blinker plus a procedural dry-cave-mouth marker at tile `81418`, not a pickup. The spawn
+  selector now preserves the near-tree land-start/story vista while rejecting direct
+  one-ring cave/native-pressure starts, and fresh sessions get a short native-hazard grace
+  so a nearby cave hint does not drain stamina/exposure before the player can read it.
+  Approved native creature bodies now also hide their procedural fallback while GLB skins
+  are merely pending; the procedural body is reserved for actual load failure so first
+  impressions do not flash legacy creature art before Kiln models arrive.
+- Fixed the two immediate K5/K6 visual readability regressions from playtesting. Native
+  creature GLB skins now declare and apply an authored local `-X` front to runtime local
+  `+Z` movement-forward correction before center-XZ/bottom-Y fitting, and the Kiln asset
+  viewer/proofs assert that policy so walking creatures do not face sideways. Tree and
+  shrub wind now applies as root-anchored local tilt around the bottom pivot instead of
+  translating the whole instanced mesh, keeping vegetation bases planted while upper mass
+  sways. While reconciling the in-progress K6R behavior pass, native-life snapshots now
+  receive player proximity context and expose transient moods/states (`curious`, `flee`,
+  `warn`, `telegraph`, `lunge`) through `__world.nativeLife()` and renderer stats without
+  changing saved creature ids or home-site authority.
 - Closed the H5/K7 shrine-landmark GLB adoption slice and moved the approved ready pack
   from 58/70 to 70/70 runtime-adopted GLBs. `LandmarkRenderer` now receives the shared
   `KilnRuntimeAssets` provider, maps the 12 pentagon indices to the approved `shrine-*`

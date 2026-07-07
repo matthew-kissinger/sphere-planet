@@ -7,7 +7,14 @@ import type { ItemId } from './crafting';
 
 export type NativeCreatureKind = 'mossPuff' | 'shellSkitter' | 'reedbackGrazer' | 'caveBlinker' | 'tideLurker' | 'caveBelljaw' | 'screeSnapper' | 'stormBurr' | 'brambleback';
 export type NativeCreatureTemperament = 'harmless' | 'territorial' | 'combative';
-export type NativeCreatureRoamState = 'settled' | 'graze' | 'wander' | 'watch' | 'patrol' | 'warn' | 'prowl' | 'recover';
+export type NativeCreatureRoamState = 'settled' | 'graze' | 'wander' | 'curious' | 'flee' | 'return' | 'watch' | 'patrol' | 'warn' | 'telegraph' | 'lunge' | 'prowl' | 'recover';
+export type NativeCreatureMood = 'calm' | 'curious' | 'startled' | 'alert' | 'pressuring' | 'recovering';
+export type NativeCreatureAlertSource = 'player' | 'miningNoise' | 'fishingSplash' | 'wardFailed';
+
+export interface NativeCreatureBehaviorContext {
+  playerTile?: number;
+  alertSource?: NativeCreatureAlertSource;
+}
 
 export interface NativeCreatureMotion {
   homeTile: number;
@@ -20,6 +27,10 @@ export interface NativeCreatureMotion {
   state: NativeCreatureRoamState;
   clip: 'idle' | 'walk';
   leashRings: number;
+  mood?: NativeCreatureMood;
+  playerRings?: number;
+  alertSource?: NativeCreatureAlertSource;
+  behaviorNote?: string;
 }
 
 export interface NativeCreatureSite {
@@ -264,6 +275,136 @@ function smooth01(t: number): number {
   return x * x * (3 - 2 * x);
 }
 
+function defaultMoodFor(site: NativeCreatureSite): NativeCreatureMood {
+  if (site.tended) return 'calm';
+  if (site.warded) return 'recovering';
+  return site.temperament === 'harmless' ? 'calm' : 'alert';
+}
+
+function ringDistanceBetween(geo: Goldberg, fromTile: number, toTile: number, maxRings: number): number | undefined {
+  const from = Math.max(0, Math.min(geo.count - 1, Math.trunc(fromTile)));
+  const to = Math.max(0, Math.min(geo.count - 1, Math.trunc(toTile)));
+  for (const entry of tileEntriesAround(geo, from, Math.max(0, Math.trunc(maxRings)))) {
+    if (entry.tile === to) return entry.ring;
+  }
+  return undefined;
+}
+
+function farthestCandidateFromPlayer(
+  geo: Goldberg,
+  currentTile: number,
+  playerTile: number,
+  candidates: readonly number[],
+): number {
+  let best = currentTile;
+  let bestScore = -Infinity;
+  for (const candidate of candidates.length ? candidates : [currentTile]) {
+    if (candidate === playerTile) continue;
+    const rings = ringDistanceBetween(geo, candidate, playerTile, 5);
+    const score = (rings ?? 6) * 10 + (candidate === currentTile ? -2 : 0) - Math.abs(candidate - currentTile) * 0.0001;
+    if (score > bestScore) {
+      bestScore = score;
+      best = candidate;
+    }
+  }
+  return best;
+}
+
+function applyNativeCreatureBehavior(
+  site: NativeCreatureSite,
+  seedHash: number,
+  geo: Goldberg,
+  motion: NativeCreatureMotion,
+  candidates: readonly number[],
+  seconds: number,
+  context?: NativeCreatureBehaviorContext,
+): NativeCreatureMotion {
+  const base: NativeCreatureMotion = {
+    ...motion,
+    mood: motion.mood ?? defaultMoodFor(site),
+  };
+  const rawPlayerTile = context?.playerTile;
+  if (typeof rawPlayerTile !== 'number' || !Number.isFinite(rawPlayerTile)) return base;
+  const playerTile = Math.max(0, Math.min(geo.count - 1, Math.trunc(rawPlayerTile)));
+  const playerRings = ringDistanceBetween(geo, base.currentTile, playerTile, Math.max(5, base.leashRings + 3));
+  if (playerRings === undefined) return base;
+  const alertSource = context?.alertSource ?? 'player';
+
+  if (site.tended) return { ...base, mood: 'calm', playerRings };
+  if (site.warded) return { ...base, mood: 'recovering', playerRings, behaviorNote: 'already warded; recovering near its home tile' };
+
+  if (site.temperament === 'harmless') {
+    if (playerRings === 0) {
+      const fromTile = base.currentTile;
+      const toTile = farthestCandidateFromPlayer(geo, fromTile, playerTile, candidates);
+      const moving = toTile !== fromTile;
+      const phase = ((Math.max(0, seconds) * 0.82) + hash01(seedHash, site.id, 982)) % 1;
+      const progress = moving ? Math.max(0.08, Math.min(0.92, smooth01(phase))) : 1;
+      return {
+        ...base,
+        fromTile,
+        toTile: moving ? toTile : fromTile,
+        currentTile: moving && progress >= 0.5 ? toTile : fromTile,
+        targetTile: moving ? toTile : fromTile,
+        progress,
+        moving,
+        state: 'flee',
+        clip: moving ? 'walk' : 'idle',
+        mood: 'startled',
+        playerRings,
+        alertSource,
+        behaviorNote: 'startled by player proximity; backs toward a valid habitat tile',
+      };
+    }
+    if (playerRings <= 1) {
+      const currentTile = base.currentTile;
+      return {
+        ...base,
+        fromTile: currentTile,
+        toTile: currentTile,
+        currentTile,
+        targetTile: currentTile,
+        progress: 1,
+        moving: false,
+        state: 'curious',
+        clip: 'idle',
+        mood: 'curious',
+        playerRings,
+        alertSource,
+        behaviorNote: 'curious about the player; safe to tend instead of mine',
+      };
+    }
+    return base;
+  }
+
+  const pressureRings = Math.max(1, Math.trunc(site.pressure?.radiusRings ?? 1));
+  const warningRings = Math.max(2, pressureRings + (site.temperament === 'combative' ? 1 : 0));
+  if (playerRings <= warningRings) {
+    const currentTile = base.currentTile;
+    const state: NativeCreatureRoamState = playerRings <= pressureRings
+      ? (site.temperament === 'combative' && playerRings === 0 ? 'lunge' : 'telegraph')
+      : 'warn';
+    return {
+      ...base,
+      fromTile: currentTile,
+      toTile: currentTile,
+      currentTile,
+      targetTile: currentTile,
+      progress: 1,
+      moving: false,
+      state,
+      clip: state === 'lunge' ? 'walk' : 'idle',
+      mood: state === 'lunge' ? 'pressuring' : 'alert',
+      playerRings,
+      alertSource,
+      behaviorNote: state === 'warn'
+        ? (site.pressure?.label ?? 'keeps watch as the player gets close')
+        : (site.combat?.telegraph ?? site.pressure?.label ?? 'telegraphs before pressure applies'),
+    };
+  }
+  return base;
+}
+
 export function withNativeCreatureRoaming(
   seed: string,
   geo: Goldberg,
@@ -271,47 +412,50 @@ export function withNativeCreatureRoaming(
   terrain: Terrain,
   site: NativeCreatureSite,
   seconds: number,
+  context?: NativeCreatureBehaviorContext,
 ): NativeCreatureSite {
   const homeTile = site.homeTile ?? site.tile;
+  const seedHash = hashString(`${seed}:native-life-roaming`);
   if (!Number.isFinite(seconds) || site.tended || site.warded) {
+    const motion = applyNativeCreatureBehavior(site, seedHash, geo, {
+      homeTile,
+      fromTile: homeTile,
+      toTile: homeTile,
+      currentTile: homeTile,
+      targetTile: homeTile,
+      progress: 1,
+      moving: false,
+      state: roamStateFor(site, false),
+      clip: 'idle',
+      leashRings: roamLeashRings(site),
+    }, [homeTile], Number.isFinite(seconds) ? seconds : 0, context);
     return {
       ...site,
-      tile: homeTile,
+      tile: motion.currentTile,
       homeTile,
-      motion: {
-        homeTile,
-        fromTile: homeTile,
-        toTile: homeTile,
-        currentTile: homeTile,
-        targetTile: homeTile,
-        progress: 1,
-        moving: false,
-        state: roamStateFor(site, false),
-        clip: 'idle',
-        leashRings: roamLeashRings(site),
-      },
+      motion,
     };
   }
 
-  const seedHash = hashString(`${seed}:native-life-roaming`);
   const candidates = candidateRoamTiles(site, seedHash, geo, columns, terrain);
   if (candidates.length <= 1) {
+    const motion = applyNativeCreatureBehavior(site, seedHash, geo, {
+      homeTile,
+      fromTile: homeTile,
+      toTile: homeTile,
+      currentTile: homeTile,
+      targetTile: homeTile,
+      progress: 1,
+      moving: false,
+      state: roamStateFor(site, false),
+      clip: 'idle',
+      leashRings: roamLeashRings(site),
+    }, candidates, seconds, context);
     return {
       ...site,
-      tile: homeTile,
+      tile: motion.currentTile,
       homeTile,
-      motion: {
-        homeTile,
-        fromTile: homeTile,
-        toTile: homeTile,
-        currentTile: homeTile,
-        targetTile: homeTile,
-        progress: 1,
-        moving: false,
-        state: roamStateFor(site, false),
-        clip: 'idle',
-        leashRings: roamLeashRings(site),
-      },
+      motion,
     };
   }
 
@@ -340,7 +484,8 @@ export function withNativeCreatureRoaming(
     clip: moving ? 'walk' : 'idle',
     leashRings: roamLeashRings(site),
   };
-  return { ...site, tile: currentTile, homeTile, motion };
+  const adjustedMotion = applyNativeCreatureBehavior(site, seedHash, geo, motion, candidates, seconds, context);
+  return { ...site, tile: adjustedMotion.currentTile, homeTile, motion: adjustedMotion };
 }
 
 export function normalizeNativeCreatureTends(raw: unknown): number[] {
@@ -823,6 +968,7 @@ export function nativeCreatureSitesAround(
   maxSites = 6,
   kind: NativeCreatureKind | 'any' = 'any',
   roamingSeconds?: number,
+  behaviorContext?: NativeCreatureBehaviorContext,
 ): NativeCreatureSite[] {
   const sites: NativeCreatureSite[] = [];
   const baseRings = Math.max(0, Math.trunc(rings));
@@ -834,7 +980,7 @@ export function nativeCreatureSitesAround(
     if (!site) continue;
     if (kind !== 'any' && site.kind !== kind) continue;
     const finalSite = withRoaming
-      ? withNativeCreatureRoaming(seed, geo, columns, terrain, site, roamingSeconds!)
+      ? withNativeCreatureRoaming(seed, geo, columns, terrain, site, roamingSeconds!, behaviorContext)
       : site;
     if (visibleTiles && !visibleTiles.has(finalSite.tile) && !visibleTiles.has(finalSite.homeTile ?? finalSite.tile)) continue;
     sites.push(finalSite);

@@ -519,8 +519,50 @@ async function boot(): Promise<void> {
 
   // --- player + input + demos ---
   const player = new Player(geo, layers, columns);
+  const SPAWN_CLEAR_RINGS = 1;
+  const FRESH_SPAWN_NATIVE_HAZARD_GRACE_SECONDS = 12;
+  const spawnTileEntriesAround = (centerTile: number, rings = 1): CaveMouthTile[] => {
+    const center = Math.max(0, Math.min(geo.count - 1, Math.trunc(centerTile)));
+    const seen = new Set<number>([center]);
+    const queue: CaveMouthTile[] = [{ tile: center, ring: 0 }];
+    for (let i = 0; i < queue.length; i++) {
+      const entry = queue[i];
+      if (entry.ring >= rings) continue;
+      const deg = geo.degreeOf(entry.tile);
+      for (let k = 0; k < deg; k++) {
+        const n = geo.neighbor(entry.tile, k);
+        if (seen.has(n)) continue;
+        seen.add(n);
+        queue.push({ tile: n, ring: entry.ring + 1 });
+      }
+    }
+    return queue;
+  };
+
+  const spawnSafetyDiagnostics = (tile: number, rings = SPAWN_CLEAR_RINGS) => {
+    const clearRings = Math.max(1, Math.trunc(rings));
+    const clearTiles = spawnTileEntriesAround(tile, clearRings);
+    const caveMouths = caveMouthSignals(columns, clearTiles, 16);
+    const nativeThreats = clearTiles
+      .map((entry) => {
+        const site = nativeCreatureAt(SEED, geo, columns, terrain, entry.tile);
+        return site?.pressure && site.temperament !== 'harmless'
+          ? { tile: entry.tile, ring: entry.ring, kind: site.kind, label: site.label, pressure: site.pressure.label }
+          : null;
+      })
+      .filter((site): site is { tile: number; ring: number; kind: NativeCreatureKind; label: string; pressure: string } => site !== null);
+    return {
+      clearRings,
+      caveMouths: caveMouths.map((mouth) => ({ tile: mouth.tile, ring: mouth.ring, kind: mouth.kind, label: mouth.label })),
+      nativeThreats,
+      safe: caveMouths.length === 0 && nativeThreats.length === 0,
+    };
+  };
+
   // spawn on land near pentagon 0: BFS outward for comfortable grass altitude, preferring
-  // a clearing at the edge of a wood so the survival loop (chop -> craft) is in view
+  // a clearing at the edge of a wood so the survival loop (chop -> craft) is in view.
+  // Keep direct cave/native pressure off the spawn tile while preserving the authored
+  // first vista near the woods, plane loop, and nearby cave hint.
   const spawnTile = (() => {
     const seen = new Set<number>([0]);
     const queue = [0];
@@ -539,7 +581,10 @@ async function boot(): Promise<void> {
             if (trees.hasTree(geo.neighbor(nb, q)) && ++near >= 2) break outer;
           }
         }
-        if (near >= 2 && !trees.hasTree(t)) return t;
+        if (near >= 2 && !trees.hasTree(t)) {
+          if (fallback < 0) fallback = t;
+          if (spawnSafetyDiagnostics(t).safe) return t;
+        }
       }
       const deg = geo.degreeOf(t);
       for (let k = 0; k < deg; k++) {
@@ -748,7 +793,7 @@ async function boot(): Promise<void> {
   let saveDirty = !loadedSave && saveEnabled;
   let saveTimer = 0;
   let lastSaveMs = 0;
-  let nativeHazardCooldown = 0;
+  let nativeHazardCooldown = loadedSave ? 0 : FRESH_SPAWN_NATIVE_HAZARD_GRACE_SECONDS;
   let nativeLifeSeconds = 0;
   let nativeLifeTimeOverride: number | null = null;
 
@@ -1531,7 +1576,7 @@ async function boot(): Promise<void> {
     maxSites = 7,
     kind: NativeCreatureKind | 'any' = 'any',
   ): NativeCreatureSite[] =>
-    nativeCreatureSitesAround(SEED, geo, columns, terrain, player.tile, rings, tendedNativeCreatures, wardedNativeCreatures, maxSites, kind, nativeLifeSeconds);
+    nativeCreatureSitesAround(SEED, geo, columns, terrain, player.tile, rings, tendedNativeCreatures, wardedNativeCreatures, maxSites, kind, nativeLifeSeconds, { playerTile: player.tile, alertSource: 'player' });
   const currentNativeCreatureSites = (): NativeCreatureSite[] => nativeCreatureSitesNear(7, 7);
   const nativeCreatureOnTile = (tile: number): NativeCreatureSite | null => {
     if (!Number.isFinite(tile)) return null;
@@ -1625,12 +1670,12 @@ async function boot(): Promise<void> {
     const siteHeight = columns.heightOf(candidate.tile);
     let stand = candidate.tile;
     let score = 9999;
-    const deg = geo.degreeOf(candidate.tile);
-    for (let k = 0; k < deg; k++) {
-      const nb = geo.neighbor(candidate.tile, k);
+    const ring1 = tileSetAround(candidate.tile, 1);
+    for (const nb of tileSetAround(candidate.tile, 2)) {
+      if (nb === candidate.tile) continue;
       if (trees.hasTree(nb)) continue;
       const h = columns.heightOf(nb);
-      const s = Math.abs(h - siteHeight) + (h < 2.5 ? 20 : 0);
+      const s = Math.abs(h - siteHeight) + (h < 2.5 ? 20 : 0) + (ring1.has(nb) ? 0 : 1.25);
       if (s < score) {
         score = s;
         stand = nb;
@@ -1698,9 +1743,20 @@ async function boot(): Promise<void> {
       roaming: {
         actors: sites.filter((site) => !!site.motion).length,
         moving: sites.filter((site) => site.motion?.moving).length,
+        playerReactive: sites.filter((site) => Number.isFinite(site.motion?.playerRings)).length,
         states: sites.reduce<Record<string, number>>((totals, site) => {
           const state = site.motion?.state ?? 'static';
           totals[state] = (totals[state] ?? 0) + 1;
+          return totals;
+        }, {}),
+        moods: sites.reduce<Record<string, number>>((totals, site) => {
+          const mood = site.motion?.mood ?? 'unknown';
+          totals[mood] = (totals[mood] ?? 0) + 1;
+          return totals;
+        }, {}),
+        alertSources: sites.reduce<Record<string, number>>((totals, site) => {
+          const source = site.motion?.alertSource;
+          if (source) totals[source] = (totals[source] ?? 0) + 1;
           return totals;
         }, {}),
       },
@@ -5126,6 +5182,7 @@ async function boot(): Promise<void> {
       structures: structures.length,
       home: homeScore(structures, geo),
       lastStructureAction,
+      spawnSafety: spawnSafetyDiagnostics(spawnTile),
       naturalFeatureNearSpawn: columns.naturalFeature(undefined, spawnTile),
       spawnTile,
     }),
@@ -5355,6 +5412,13 @@ async function boot(): Promise<void> {
       return nativeLifeDiagnostics();
     },
     tendNativeLife: () => tryNativeCreature(),
+    debugInteractNativeLife: (targetId?: unknown) => {
+      const id = Number(targetId);
+      const site = Number.isFinite(id)
+        ? currentNativeCreatureSites().find((candidate) => candidate.id === Math.trunc(id)) ?? null
+        : null;
+      return tryTargetNativeCreature(site ?? undefined);
+    },
     debugSpawnAtNativeLifeKind: (kind: unknown = 'mossPuff', startTile?: number) => {
       const targetKind = normalizeNativeCreatureKind(kind);
       if (!targetKind) return { ok: false, reason: 'unknown native creature kind', kind, allowed: [...nativeCreatureKinds] };

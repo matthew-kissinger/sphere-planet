@@ -299,6 +299,16 @@ function assertViewerState(label, state, expected) {
         throw new Error(`${label}: ${slug} still appears side-loaded after normalization ${JSON.stringify(record)}`);
       }
     }
+    if (slug.startsWith('creature-') && slug !== 'creature-driftjelly') {
+      if (record.orientation.policy !== 'preserve-y-up-neg-x-front-to-z' || record.orientation.sourceForwardAxis !== '-x') {
+        throw new Error(`${label}: ${slug} missing creature forward policy ${JSON.stringify(record)}`);
+      }
+    }
+    if (slug.startsWith('shrine-')) {
+      if (record.orientation.policy !== 'preserve-y-up-x-front-to-z' || record.orientation.sourceForwardAxis !== '+x') {
+        throw new Error(`${label}: ${slug} missing shrine forward policy ${JSON.stringify(record)}`);
+      }
+    }
   }
 }
 

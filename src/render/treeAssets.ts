@@ -215,6 +215,8 @@ export class TreeAssetRenderer {
     const vZ = new THREE.Vector3();
     const basis = new THREE.Matrix4();
     const q = new THREE.Quaternion();
+    const swayQ = new THREE.Quaternion();
+    const swayEuler = new THREE.Euler();
     const pos = new THREE.Vector3();
     const scale = new THREE.Vector3();
     const instanceMatrix = new THREE.Matrix4();
@@ -241,20 +243,23 @@ export class TreeAssetRenderer {
       const params = trees.paramsFor(site.tile);
       const damage = trees.damageOf(site.tile);
       const phase = params.tint * 7.3;
-      const leanA = Math.sin(phase) * 0.14 * damage;
-      const leanB = Math.cos(phase * 1.3) * 0.12 * damage;
+      const damageLeanA = Math.sin(phase) * 0.14 * damage;
+      const damageLeanB = Math.cos(phase * 1.3) * 0.12 * damage;
       const rG = layers.topRadius(columns.topLayerOf(site.tile));
-      const baseX = ux * (rG - 0.2) + offsetAx * (params.offA + leanA) + offsetBx * (params.offB + leanB);
-      const baseY = uy * (rG - 0.2) + offsetAy * (params.offA + leanA) + offsetBy * (params.offB + leanB);
-      const baseZ = uz * (rG - 0.2) + offsetAz * (params.offA + leanA) + offsetBz * (params.offB + leanB);
+      const baseX = ux * (rG - 0.2) + offsetAx * params.offA + offsetBx * params.offB;
+      const baseY = uy * (rG - 0.2) + offsetAy * params.offA + offsetBy * params.offB;
+      const baseZ = uz * (rG - 0.2) + offsetAz * params.offA + offsetBz * params.offB;
       const distToCamera = Math.hypot(baseX - camWorld.x, baseY - camWorld.y, baseZ - camWorld.z);
-      const sway = distToCamera <= TREE_ANIMATION_LOD_DISTANCE
+      const windSway = distToCamera <= TREE_ANIMATION_LOD_DISTANCE
         ? Math.sin(seconds * 0.8 + site.tile * 0.013) * 0.025 * (site.kind === 'deadSnag' ? 0.35 : 1)
         : 0;
+      swayEuler.set(damageLeanB + windSway * 0.62, 0, -(damageLeanA + windSway), 'XYZ');
+      swayQ.setFromEuler(swayEuler);
+      q.multiply(swayQ);
       pos.set(
-        baseX + offsetAx * sway - camWorld.x,
-        baseY + offsetAy * sway - camWorld.y,
-        baseZ + offsetAz * sway - camWorld.z,
+        baseX - camWorld.x,
+        baseY - camWorld.y,
+        baseZ - camWorld.z,
       );
       const damageScale = 1 - damage * (site.kind === 'shrub' ? 0.08 : 0.12);
       scale.setScalar(treeScale(site.kind, batch.template.fit, params) * damageScale);

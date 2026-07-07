@@ -97,6 +97,10 @@ The asset-pack adoption track is done when:
   per-asset screenshot packet for scale, pivot, and orientation review.
 - Screenshots show the objects in real gameplay contexts at desktop, laptop, phone, tablet,
   and gamepad-relevant paths where the family affects input.
+- Fresh-spawn screenshots must not place cave-mouth markers, native hazards, resource drops,
+  or other collectible-looking affordances inside the opening clear radius or at the edge of
+  the first view unless the first-time HUD explains them and the player starts outside
+  damage/pressure range.
 - Performance proof records pack size, draw calls, mesh counts, and repetition strategy,
   especially for trees, creatures, drops, and resource nodes.
 - Animated-family proof records active mixer count by distance band and proves far creatures
@@ -163,8 +167,10 @@ The asset-pack adoption track is done when:
   bottom-pivoting. Stemmed trees use a longest-axis-to-local-Y policy, shrubs preserve
   authored Y-up orientation, and diagnostics report the source up axis plus correction so a
   sideways exported GLB cannot silently become a sideways forest.
-- Cosmetic sway is distance-gated to 96 world units. Chop damage remains matrix-driven so
-  hit feedback still works without starting per-tree animation systems.
+- Cosmetic sway is distance-gated to 96 world units and now applies as root-anchored tilt
+  around the bottom pivot, so trunks and shrubs stay planted on their hex while upper mass
+  moves in the wind. Chop damage remains matrix-driven so hit feedback still works without
+  starting per-tree animation systems.
 - `npm run proof:k5-trees` covers desktop and phone: all four committed tree GLBs load from
   `models/`, final proof frames show 210 resident trees on 11 instanced draw calls, pending
   and fallback stay at zero, a pine fells into wood drops that can be collected, screenshots
@@ -176,13 +182,17 @@ The asset-pack adoption track is done when:
 - `NativeLifeRenderer` keeps the native-life simulation authoritative while replacing the
   duplicated body with GLB skins. Code-authored reward and warning overlays remain visible,
   and the renderer reports loaded/pending/fallback, visible GLB, procedural fallback,
-  active/low-rate/frozen/hidden mixer bands, clip names, and fit metadata by slug.
+  active/low-rate/frozen/hidden mixer bands, clip names, and fit metadata by slug. Native
+  creature GLBs are corrected from authored local `-X` front into the runtime local `+Z`
+  movement/socket forward before center-XZ/bottom-Y fitting, and the fit metadata records
+  that policy so sideways walking regressions fail proofs.
 - `npm run proof:k6-creatures` covers desktop and phone: all nine committed creature GLBs
   load from `models/`, each accepted skin has `idle` and `walk` clips, mixer playback is
   distance-gated with active <=90wu, low-rate <=135wu, frozen <=180wu, and hidden beyond
-  180wu, active mixer count stays under the proof cap, harmless creatures can be tended,
-  hazards can be warded, screenshots pass PNG pixel probing, fallback stays at zero, and no
-  runtime request hits `generated/`.
+  180wu, active mixer count stays under the proof cap, the `-X` to `+Z` forward-axis
+  correction is present for every native creature skin, harmless creatures can be tended,
+  hazards can be warded, screenshots pass PNG pixel probing, fallback stays at zero, and
+  no runtime request hits `generated/`.
 - K6T native-life targetability is runtime-wired. Creature picks now win over terrain mining
   when the reticle/tap is on a visible native-life capsule, harmless targets route to tend
   behavior, territorial targets route to ward behavior, and structure placement receives a
@@ -275,6 +285,13 @@ while each visible actor exposes `homeTile`, `currentTile`, `fromTile`, `toTile`
 `progress`, `state`, and an `idle`/`walk` clip hint. The renderer interpolates approved
 Kiln GLB bodies between neighboring valid hexes and keeps `THREE.AnimationMixer` playback
 distance-gated.
+
+The next K6R layer has its first proximity-state slice as well: central native-life queries
+now pass the player tile into the transient actor snapshot, harmless creatures can report
+`curious` or `flee` moods, unwarded hazards can report `warn`, `telegraph`, or `lunge`
+moods, and `__world.nativeLife()` plus `NativeLifeRenderer.stats()` expose state, mood,
+alert source, and player ring counts. These are still ephemeral actor facts, not saved
+creature brains.
 
 The next creature-depth layer should build from that first slice into a fuller native-life
 state machine:

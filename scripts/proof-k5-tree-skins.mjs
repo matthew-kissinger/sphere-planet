@@ -241,7 +241,7 @@ function assertTreeRenderer(renderer, label, requiredVisibleSlug = null) {
     if (!bySlug?.instancedMeshes) throw new Error(`${label}: ${slug} did not create an instanced batch ${JSON.stringify(bySlug)}`);
     if ((bySlug.pending ?? 0) !== 0 || (bySlug.fallback ?? 0) !== 0) throw new Error(`${label}: ${slug} has pending/fallback state ${JSON.stringify(bySlug)}`);
     const fit = renderer.kilnTreeSkinFits?.[slug];
-    if (fit?.batchingPolicy !== 'instanced-merged-by-material' || fit?.animationPolicy !== 'matrix-sway-near-and-damage-only') {
+    if (fit?.batchingPolicy !== 'instanced-merged-by-material' || fit?.animationPolicy !== 'root-anchored-sway-near-and-damage-tilt') {
       throw new Error(`${label}: ${slug} policy drifted ${JSON.stringify(fit)}`);
     }
     const expectedOrientationPolicy = slug === 'tree-shrub' ? 'preserve-y-up' : 'longest-axis-to-y';
@@ -400,7 +400,7 @@ try {
     generatedAt: new Date().toISOString(),
     requiredTreeSlugs,
     drawCallBudget: '<=16 instanced tree draws after material batching',
-    animationLod: 'cosmetic sway only inside 96 world units; damage feedback remains matrix-driven',
+    animationLod: 'root-anchored canopy/trunk tilt only inside 96 world units; bases stay planted while damage feedback remains matrix-driven',
     results,
   };
   await fs.writeFile(path.join(outDir, 'proof.json'), JSON.stringify(proof, null, 2));

@@ -541,10 +541,15 @@ export class NativeLifeRenderer {
       obj.userData.nativeRoamState = site.motion?.state ?? 'static';
       obj.userData.nativeRoamMoving = site.motion?.moving === true;
       obj.userData.nativeClipHint = site.motion?.clip ?? 'idle';
+      obj.userData.nativeMood = site.motion?.mood ?? 'unknown';
+      obj.userData.nativePlayerRings = site.motion?.playerRings;
+      obj.userData.nativeAlertSource = site.motion?.alertSource;
       const slug = KILN_CREATURE_SKIN_BY_KIND[site.kind];
       this.ensureSkin(slug);
       const template = this.skinTemplates.get(slug);
       if (template) this.attachSkin(site, obj, template);
+      else if (this.skinStatus.get(slug) === 'pending') this.applyProceduralMeshVisibility(obj, false, true);
+      else this.applyProceduralMeshVisibility(obj, true, true);
     }
   }
 
@@ -641,15 +646,15 @@ export class NativeLifeRenderer {
       lastLowRateStepSeconds: 0,
       band: 'frozen',
     });
-    this.applyProceduralBodyVisibility(obj, false);
+    this.applyProceduralMeshVisibility(obj, false, false);
   }
 
-  private applyProceduralBodyVisibility(obj: THREE.Group, visible: boolean): void {
+  private applyProceduralMeshVisibility(obj: THREE.Group, visible: boolean, includeOverlays: boolean): void {
     obj.traverse((child) => {
       if (child.userData.kilnCreatureSkin) return;
       if (!(child as THREE.Mesh).isMesh) return;
-      if (typeof child.userData.nativeTelegraphRole === 'string') return;
-      if (typeof child.userData.nativeOverlayRole === 'string') return;
+      if (!includeOverlays && typeof child.userData.nativeTelegraphRole === 'string') return;
+      if (!includeOverlays && typeof child.userData.nativeOverlayRole === 'string') return;
       child.visible = visible;
     });
   }
@@ -657,7 +662,7 @@ export class NativeLifeRenderer {
   private updateCreatureSkin(site: NativeCreatureSite, obj: THREE.Group, seconds: number): void {
     const record = this.skinRecords.get(site.id);
     if (!record) return;
-    this.applyProceduralBodyVisibility(obj, false);
+    this.applyProceduralMeshVisibility(obj, false, false);
     const distance = obj.position.length();
     const desiredBand: CreatureAnimationBand =
       distance <= CREATURE_ACTIVE_MIXER_RADIUS ? 'active'
@@ -954,7 +959,10 @@ export class NativeLifeRenderer {
     frozenMixerRadius: number;
     roamingActors: number;
     movingActors: number;
+    playerReactiveActors: number;
     roamingStates: Record<string, number>;
+    moods: Record<string, number>;
+    alertSources: Record<string, number>;
     clipHints: Record<string, number>;
     kilnCreatureSkinsBySlug: Partial<Record<KilnCreatureSkinSlug, {
       loaded: number;
@@ -977,9 +985,12 @@ export class NativeLifeRenderer {
     const silhouettes = new Set<string>();
     const telegraphRoles = new Set<string>();
     const roamingStates: Record<string, number> = {};
+    const moods: Record<string, number> = {};
+    const alertSources: Record<string, number> = {};
     const clipHints: Record<string, number> = {};
     let roamingActors = 0;
     let movingActors = 0;
+    let playerReactiveActors = 0;
     for (const obj of this.objects.values()) {
       if (obj.visible) active++;
       if (typeof obj.userData.nativeKind === 'string') kinds.add(obj.userData.nativeKind);
@@ -990,6 +1001,13 @@ export class NativeLifeRenderer {
         roamingStates[obj.userData.nativeRoamState] = (roamingStates[obj.userData.nativeRoamState] ?? 0) + 1;
       }
       if (obj.userData.nativeRoamMoving === true) movingActors++;
+      if (Number.isFinite(obj.userData.nativePlayerRings)) playerReactiveActors++;
+      if (typeof obj.userData.nativeMood === 'string') {
+        moods[obj.userData.nativeMood] = (moods[obj.userData.nativeMood] ?? 0) + 1;
+      }
+      if (typeof obj.userData.nativeAlertSource === 'string') {
+        alertSources[obj.userData.nativeAlertSource] = (alertSources[obj.userData.nativeAlertSource] ?? 0) + 1;
+      }
       if (typeof obj.userData.nativeClipHint === 'string') {
         clipHints[obj.userData.nativeClipHint] = (clipHints[obj.userData.nativeClipHint] ?? 0) + 1;
       }
@@ -1020,7 +1038,14 @@ export class NativeLifeRenderer {
     }>> = {};
     const kilnCreatureSkinFits: Partial<Record<KilnCreatureSkinSlug, KilnCreatureSkinFitSnapshot>> = {};
     for (const [id, obj] of this.objects) {
-      if (!this.skinRecords.has(id) && obj.visible) proceduralCreatureFallbackVisible++;
+      if (this.skinRecords.has(id) || !obj.visible) continue;
+      let visibleFallbackMesh = false;
+      obj.traverse((child) => {
+        if (!visibleFallbackMesh && (child as THREE.Mesh).isMesh && child.visible && !child.userData.kilnCreatureSkin) {
+          visibleFallbackMesh = true;
+        }
+      });
+      if (visibleFallbackMesh) proceduralCreatureFallbackVisible++;
     }
     for (const slug of KILN_CREATURE_SKIN_SLUGS) {
       const status = this.skinStatus.get(slug);
@@ -1073,7 +1098,10 @@ export class NativeLifeRenderer {
       frozenMixerRadius: CREATURE_FROZEN_MIXER_RADIUS,
       roamingActors,
       movingActors,
+      playerReactiveActors,
       roamingStates,
+      moods,
+      alertSources,
       clipHints,
       kilnCreatureSkinsBySlug,
       kilnCreatureSkinFits,

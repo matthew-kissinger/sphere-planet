@@ -237,6 +237,27 @@ async function findMovingActor(page) {
   throw new Error(`no moving native-life actor found after scanning ${spawnKinds.join(', ')}`);
 }
 
+async function findReactiveActor(page) {
+  const reactiveStates = new Set(['curious', 'flee', 'warn', 'telegraph', 'lunge']);
+  const spawnKinds = ['brambleback', 'mossPuff', 'shellSkitter', 'reedbackGrazer', 'tideLurker'];
+  for (const kind of spawnKinds) {
+    const spawned = await page.evaluate((targetKind) => window.__world.debugSpawnAtNativeLifeKind(targetKind), kind);
+    if (!spawned?.ok) continue;
+    for (let seconds = 0; seconds <= 24; seconds += 0.5) {
+      const diagnostics = await page.evaluate((value) => window.__world.debugSetNativeLifeTime(value), seconds);
+      const reactive = (diagnostics.sites ?? []).find((site) => {
+        const state = site.motion?.state;
+        return site.id === spawned.site?.id
+          && reactiveStates.has(state)
+          && typeof site.motion?.mood === 'string'
+          && Number.isFinite(site.motion?.playerRings);
+      });
+      if (reactive) return { spawned, seconds, reactive, diagnostics };
+    }
+  }
+  throw new Error(`no reactive native-life actor found after scanning ${spawnKinds.join(', ')}`);
+}
+
 async function assertGlbRoaming(page, moving) {
   const slug = creatureSlugByKind[moving.kind];
   if (!slug) throw new Error(`no creature GLB slug mapped for ${moving.kind}`);
@@ -296,6 +317,14 @@ try {
     await waitForWorld(page);
     const moving = await findMovingActor(page);
     const glbProof = await assertGlbRoaming(page, moving.moving);
+    const reactive = await findReactiveActor(page);
+    if ((reactive.diagnostics.roaming?.playerReactive ?? 0) <= 0) {
+      throw new Error(`reactive actor did not register in native-life diagnostics ${JSON.stringify(reactive.diagnostics.roaming)}`);
+    }
+    const rendererMoods = reactive.diagnostics.renderer?.moods ?? {};
+    if (!Object.keys(rendererMoods).some((mood) => mood !== 'unknown' && rendererMoods[mood] > 0)) {
+      throw new Error(`reactive actor did not register renderer mood diagnostics ${JSON.stringify(reactive.diagnostics.renderer)}`);
+    }
     const screenshot = path.join(outDir, 'desktop-k6r-native-roaming.png');
     const screenshotBuffer = await page.screenshot({ path: screenshot, fullPage: true });
     const pixelProbe = await canvasPixelProbe(page);
@@ -310,6 +339,7 @@ try {
       name: 'desktop',
       screenshot,
       moving,
+      reactive,
       glbProof: {
         target: glbProof.target,
         renderer: glbProof.nativeLife.renderer,
@@ -327,7 +357,7 @@ try {
   const proof = {
     ok: true,
     generatedAt: new Date().toISOString(),
-    targetContract: 'approved creature GLBs expose deterministic roaming state, walk clip hints, current-tile picking, and no generated quarantine runtime paths',
+    targetContract: 'approved creature GLBs expose deterministic roaming state, proximity moods, walk clip hints, current-tile picking, and no generated quarantine runtime paths',
     result,
   };
   await fs.writeFile(path.join(outDir, 'proof.json'), JSON.stringify(proof, null, 2));
@@ -344,9 +374,19 @@ try {
       state: result.moving.moving.motion?.state,
       clip: result.moving.moving.motion?.clip,
     },
+    reactive: {
+      id: result.reactive.reactive.id,
+      kind: result.reactive.reactive.kind,
+      tile: result.reactive.reactive.tile,
+      seconds: result.reactive.seconds,
+      state: result.reactive.reactive.motion?.state,
+      mood: result.reactive.reactive.motion?.mood,
+      playerRings: result.reactive.reactive.motion?.playerRings,
+    },
     renderer: {
       roamingActors: result.glbProof.renderer.roamingActors,
       movingActors: result.glbProof.renderer.movingActors,
+      moods: result.reactive.diagnostics.renderer?.moods,
       clipHints: result.glbProof.renderer.clipHints,
       fallbacks: result.glbProof.renderer.kilnCreatureSkinFallbacks,
       generatedRequests: result.generatedRequests.length,

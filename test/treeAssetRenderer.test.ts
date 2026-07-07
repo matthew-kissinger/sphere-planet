@@ -54,7 +54,7 @@ function template(slug: KilnTreeSkinSlug): KilnTreeSkinTemplate {
       normalizePolicy: 'center-xz-bottom-y',
       orientation: { policy: slug === 'tree-shrub' ? 'preserve-y-up' : 'longest-axis-to-y', sourceUpAxis: 'y', axisCorrection: [0, 0, 0] },
       batchingPolicy: 'instanced-merged-by-material',
-      animationPolicy: 'matrix-sway-near-and-damage-only',
+      animationPolicy: 'root-anchored-sway-near-and-damage-tilt',
       sourceUrl: `/assets/kiln/models/${slug}.glb`,
       sourceMeshCount: 1,
       instancedMeshCount: 1,
@@ -154,8 +154,53 @@ describe('tree asset renderer Kiln skin batching', () => {
       sourceUrl: '/assets/kiln/models/tree-pine.glb',
       orientation: { policy: 'longest-axis-to-y', sourceUpAxis: 'y' },
       batchingPolicy: 'instanced-merged-by-material',
-      animationPolicy: 'matrix-sway-near-and-damage-only',
+      animationPolicy: 'root-anchored-sway-near-and-damage-tilt',
     });
+  });
+
+  it('keeps wind sway root-anchored so tree bases do not slide across the hex', async () => {
+    const { geo, layers, columns, trees } = fixtureWorld();
+    const byKind = firstLiveTreeByKind(trees, geo);
+    const tile = byKind.get('pine') ?? [...byKind.values()][0];
+    expect(tile).toBeDefined();
+    const chunks = chunksForTiles(geo, [tile!]);
+    const scene = new THREE.Scene();
+    const renderer = new TreeAssetRenderer(scene, new FakeTreeSkins());
+    const c = geo.centers;
+    const radius = layers.topRadius(columns.topLayerOf(tile!));
+    const camWorld = {
+      x: c[tile! * 3] * radius,
+      y: c[tile! * 3 + 1] * radius,
+      z: c[tile! * 3 + 2] * radius,
+    };
+
+    renderer.setChunks(chunks, geo, trees);
+    renderer.setRenderEnabled(true);
+    await flushSkinPromises();
+
+    renderer.update(geo, layers, columns, trees, camWorld, 1.25);
+    const mesh = renderer.group.children
+      .flatMap((child) => child.children)
+      .find((child): child is THREE.InstancedMesh => (child as THREE.InstancedMesh).isInstancedMesh);
+    expect(mesh).toBeDefined();
+    const first = new THREE.Matrix4();
+    const second = new THREE.Matrix4();
+    mesh!.getMatrixAt(0, first);
+
+    renderer.update(geo, layers, columns, trees, camWorld, 4.75);
+    mesh!.getMatrixAt(0, second);
+
+    const posA = new THREE.Vector3();
+    const posB = new THREE.Vector3();
+    const quatA = new THREE.Quaternion();
+    const quatB = new THREE.Quaternion();
+    const scaleA = new THREE.Vector3();
+    const scaleB = new THREE.Vector3();
+    first.decompose(posA, quatA, scaleA);
+    second.decompose(posB, quatB, scaleB);
+
+    expect(posA.distanceTo(posB)).toBeLessThan(1e-6);
+    expect(quatA.angleTo(quatB)).toBeGreaterThan(0.0001);
   });
 
   it('keeps procedural chunk trees active if any approved tree GLB fails', async () => {

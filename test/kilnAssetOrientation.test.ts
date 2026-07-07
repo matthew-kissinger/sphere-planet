@@ -57,4 +57,18 @@ describe('Kiln instanced asset orientation normalization', () => {
     expect(normalized.orientedSourceBboxSize).toEqual([1, 1, 4]);
     expect(normalized.normalizedBboxSize).toEqual([1, 1, 4]);
   });
+
+  it('rotates authored -X creature fronts into socket +Z forward', () => {
+    const normalized = makeInstancedAssetParts(sidewaysAsset(), 'test-neg-x-front-creature', 'preserve-y-up-neg-x-front-to-z');
+
+    expect(normalized.orientation).toMatchObject({
+      policy: 'preserve-y-up-neg-x-front-to-z',
+      sourceUpAxis: 'y',
+      sourceForwardAxis: '-x',
+      axisCorrection: [0, 1.570796, 0],
+    });
+    expect(normalized.runtimeSourceBboxSize).toEqual([4, 1, 1]);
+    expect(normalized.orientedSourceBboxSize).toEqual([1, 1, 4]);
+    expect(normalized.normalizedBboxSize).toEqual([1, 1, 4]);
+  });
 });

@@ -223,6 +223,8 @@ async function waitForWorld(page) {
       && !!world?.nativeLife
       && !!world?.tendNativeLife
       && !!world?.wardNativeHazard
+      && !!world?.debugAimAtTile
+      && !!world?.debugInteractNativeLife
       && !!world?.giveItem
       && !!world?.setZoom
       && typeof window.render_game_to_text === 'function';
@@ -289,6 +291,11 @@ function assertRendererPolicies(renderer, label, requiredVisibleSlug = null, opt
   for (const slug of slugsToCheck) {
     const fit = renderer.kilnCreatureSkinFits?.[slug];
     if (!fit) throw new Error(`${label}: missing fit diagnostics for ${slug}`);
+    if (fit.orientation?.policy !== 'preserve-y-up-neg-x-front-to-z'
+      || fit.orientation?.sourceForwardAxis !== '-x'
+      || JSON.stringify(fit.orientation?.axisCorrection) !== JSON.stringify([0, 1.570796, 0])) {
+      throw new Error(`${label}: ${slug} creature forward-axis correction drifted ${JSON.stringify(fit)}`);
+    }
     if (fit.animationPolicy !== 'mixer-near-freeze-far') throw new Error(`${label}: ${slug} animation policy drifted ${JSON.stringify(fit)}`);
     if (fit.activeMixerRadius !== 90 || fit.lowRateMixerRadius !== 135 || fit.frozenMixerRadius !== 180) {
       throw new Error(`${label}: ${slug} mixer radii drifted ${JSON.stringify(fit)}`);
@@ -343,10 +350,10 @@ async function visitCreatureKind(page, kind, distanceBandProof = false) {
   if (distanceBandProof) await assertDistanceBands(page, slug);
   else await waitForActiveCreatureSkin(page, slug);
   const beforeAction = await page.evaluate(() => window.__world.nativeLife());
-  const acted = harmlessKinds.has(kind)
-    ? await page.evaluate(() => window.__world.tendNativeLife())
-    : await page.evaluate(() => window.__world.wardNativeHazard());
-  if (acted !== true) throw new Error(`${kind}: expected gameplay action to be handled`);
+  const targetSite = (beforeAction.sites ?? []).find((site) => site.id === spawned.site?.id) ?? spawned.site;
+  if (targetSite?.tile !== undefined) await page.evaluate((tile) => window.__world.debugAimAtTile(tile), targetSite.tile);
+  const acted = await page.evaluate((id) => window.__world.debugInteractNativeLife(id), spawned.site?.id);
+  if (acted !== true) throw new Error(`${kind}: expected gameplay action to be handled ${JSON.stringify({ spawned, targetSite, beforeAction })}`);
   await page.waitForTimeout(300);
   const afterAction = await page.evaluate(() => window.__world.nativeLife());
   assertRendererPolicies(afterAction.renderer, `visit ${kind}`, slug, { requireOverlays: !harmlessKinds.has(kind) });

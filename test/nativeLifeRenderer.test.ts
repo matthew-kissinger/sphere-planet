@@ -104,8 +104,15 @@ function template(slug: KilnCreatureSkinSlug): KilnCreatureSkinTemplate {
       socketRole: 'native-creature-body',
       sourceBboxSize: [0.4, 0.6, 0.4],
       runtimeSourceBboxSize: [0.4, 0.6, 0.4],
+      orientedSourceBboxSize: [0.4, 0.6, 0.4],
       normalizedBboxSize: [0.4, 0.6, 0.4],
       normalizePolicy: 'center-xz-bottom-y-fit-height',
+      orientation: {
+        policy: 'preserve-y-up-neg-x-front-to-z',
+        sourceUpAxis: 'y',
+        sourceForwardAxis: '-x',
+        axisCorrection: [0, 1.570796, 0],
+      },
       animationPolicy: 'mixer-near-freeze-far',
       sourceUrl: `/assets/kiln/models/${slug}.glb`,
       sourceMeshCount: 1,
@@ -211,6 +218,9 @@ describe('native life renderer asset readability', () => {
     const { geo, layers, columns } = fixtureWorld();
 
     renderer.setSites(sites);
+    const pendingStats = renderer.stats();
+    expect(pendingStats.kilnCreatureSkinsPending).toBe(9);
+    expect(pendingStats.proceduralCreatureFallbackVisible).toBe(0);
     await flushSkinPromises();
     renderer.setSites(sites);
     renderer.update(sites, geo, layers, columns, { x: 0, y: 0, z: 0 }, 1.4);
@@ -228,6 +238,15 @@ describe('native life renderer asset readability', () => {
       loaded: 1,
       glbVisible: 0,
       clips: ['idle', 'walk'],
+    });
+    expect(farStats.kilnCreatureSkinFits['creature-brambleback']).toMatchObject({
+      normalizePolicy: 'center-xz-bottom-y-fit-height',
+      orientation: {
+        policy: 'preserve-y-up-neg-x-front-to-z',
+        sourceUpAxis: 'y',
+        sourceForwardAxis: '-x',
+        axisCorrection: [0, 1.570796, 0],
+      },
     });
     expect(farStats.kilnCreatureSkinFits['creature-tide-lurker']).toMatchObject({
       animationPolicy: 'mixer-near-freeze-far',
@@ -277,6 +296,9 @@ describe('native life renderer asset readability', () => {
         state: 'patrol',
         clip: 'walk',
         leashRings: 1,
+        mood: 'alert',
+        playerRings: 2,
+        alertSource: 'player',
       },
     };
 
@@ -289,13 +311,20 @@ describe('native life renderer asset readability', () => {
 
     expect(stats.roamingActors).toBe(1);
     expect(stats.movingActors).toBe(1);
+    expect(stats.playerReactiveActors).toBe(1);
     expect(stats.roamingStates).toMatchObject({ patrol: 1 });
+    expect(stats.moods).toMatchObject({ alert: 1 });
+    expect(stats.alertSources).toMatchObject({ player: 1 });
     expect(stats.clipHints).toMatchObject({ walk: 1 });
     expect(stats.kilnCreatureSkinsBySlug['creature-brambleback']).toMatchObject({
       loaded: 1,
       activeMixers: 1,
       glbVisible: 1,
       clips: ['idle', 'walk'],
+    });
+    expect(stats.kilnCreatureSkinFits['creature-brambleback']?.orientation).toMatchObject({
+      policy: 'preserve-y-up-neg-x-front-to-z',
+      sourceForwardAxis: '-x',
     });
   });
 });

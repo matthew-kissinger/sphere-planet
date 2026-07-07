@@ -73,6 +73,65 @@ describe('planet-native harmless life', () => {
     });
   });
 
+  it('derives harmless proximity moods without changing native-life identity', () => {
+    const seed = 'native-life-proximity-harmless';
+    const terrain = new Terrain(seed);
+    const columns = new Columns(geo, layers, terrain);
+    const site = nearestNativeCreatureSite(seed, geo, columns, terrain, 0, 120, new Set(), new Set(), 'mossPuff');
+    expect(site).not.toBeNull();
+    const neighbor = geo.neighbor(site!.tile, 0);
+
+    const curious = withNativeCreatureRoaming(seed, geo, columns, terrain, site!, Number.NaN, { playerTile: neighbor, alertSource: 'player' });
+    expect(curious.id).toBe(site!.id);
+    expect(curious.homeTile).toBe(site!.tile);
+    expect(curious.motion).toMatchObject({
+      state: 'curious',
+      mood: 'curious',
+      playerRings: 1,
+      alertSource: 'player',
+      moving: false,
+      clip: 'idle',
+    });
+
+    const fleeing = withNativeCreatureRoaming(seed, geo, columns, terrain, site!, Number.NaN, { playerTile: site!.tile, alertSource: 'player' });
+    expect(fleeing.id).toBe(site!.id);
+    expect(fleeing.homeTile).toBe(site!.tile);
+    expect(fleeing.motion).toMatchObject({
+      state: 'flee',
+      mood: 'startled',
+      playerRings: 0,
+      alertSource: 'player',
+    });
+  });
+
+  it('derives hazard telegraph moods near the player but leaves warded hazards recovering', () => {
+    const seed = 'native-life-proximity-hazard';
+    const terrain = new Terrain(seed);
+    const columns = new Columns(geo, layers, terrain);
+    const site = nearestNativeCreatureSite(seed, geo, columns, terrain, 0, 180, new Set(), new Set(), 'brambleback');
+    expect(site).not.toBeNull();
+
+    const telegraph = withNativeCreatureRoaming(seed, geo, columns, terrain, site!, Number.NaN, { playerTile: site!.tile, alertSource: 'player' });
+    expect(telegraph.id).toBe(site!.id);
+    expect(telegraph.homeTile).toBe(site!.tile);
+    expect(telegraph.motion).toMatchObject({
+      state: 'telegraph',
+      mood: 'alert',
+      playerRings: 0,
+      alertSource: 'player',
+      moving: false,
+      clip: 'idle',
+    });
+
+    const recovering = withNativeCreatureRoaming(seed, geo, columns, terrain, { ...site!, warded: true }, Number.NaN, { playerTile: site!.tile, alertSource: 'player' });
+    expect(recovering.motion).toMatchObject({
+      state: 'recover',
+      mood: 'recovering',
+      moving: false,
+      clip: 'idle',
+    });
+  });
+
   it('tends once, returns seed rewards, and normalizes saved tend ids', () => {
     const seed = 'native-life-tend';
     const terrain = new Terrain(seed);

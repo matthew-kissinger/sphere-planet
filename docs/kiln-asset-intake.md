@@ -207,14 +207,17 @@ First wired pilot:
   and bottom-pivoting; shrubs preserve authored Y-up because squat vegetation should not be
   spun simply for being wide. Procedural chunk tree meshes stay active until every tree skin
   is ready, then become fallback. The proof caps the family at 11 instanced draw calls for
-  210 resident trees and gates cosmetic sway to 96 world units while keeping chop damage
-  matrix-driven.
+  210 resident trees and gates cosmetic sway to 96 world units. Sway and chop feedback are
+  root-anchored tilt around the bottom pivot, not whole-instance translation, so vegetation
+  bases stay planted while upper mass moves.
 - All 9 `creature-*` native-life bodies: accepted as H5/K6 animated creature skins.
   `NativeLifeRenderer` keeps the native-life simulation, pressure, tend/ward rules, and
   reward/warning overlays code-authored, then hides duplicated procedural body meshes after
   a GLB skin attaches. Accepted creature assets must provide `idle` and `walk` clips.
   Runtime diagnostics split loaded/pending/fallback, visible GLB, procedural fallback,
   fit metadata, clip metadata, and active/low-rate/frozen/hidden mixer bands by slug.
+  Runtime fit now corrects authored creature local `-X` fronts into the game's local `+Z`
+  movement forward before pivot/scale fitting, and the Kiln viewer uses the same policy.
   `npm run proof:k6-creatures` proves all nine committed model requests, zero generated
   requests, zero fallback, distance-gated animation, desktop/phone screenshots, and
   harmless/hazard gameplay responses. Follow-on proofs now close creature-first
