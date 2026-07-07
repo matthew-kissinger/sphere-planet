@@ -123,4 +123,46 @@ describe('structure renderer asset readability', () => {
     expect(renderer.stats().kilnSkinsLoaded).toBe(1);
     expect(renderer.stats().kilnSkinFallbacks).toBe(0);
   });
+
+  it('renders functional shelter warmth and comfort signals from the room report', () => {
+    const scene = new THREE.Scene();
+    const geo = new Goldberg(8);
+    const layers = buildLayers();
+    const renderer = new StructureRenderer(scene);
+    const homeTile = Array.from({ length: geo.count }, (_, tile) => tile).find((tile) => geo.degreeOf(tile) >= 6);
+    if (homeTile === undefined) throw new Error('test Goldberg lacks a six-neighbor home tile');
+    const local = Array.from({ length: geo.degreeOf(homeTile) }, (_, edge) => geo.neighbor(homeTile, edge));
+    const structures: StructureSave[] = [
+      { id: 1, item: 'bedroll', tile: homeTile, layer: 100, yaw: 0, state: { home: true } },
+      { id: 2, item: 'roofBundle', tile: local[0], layer: 100, yaw: 0 },
+      { id: 3, item: 'roofBundle', tile: local[1], layer: 100, yaw: 0 },
+      { id: 4, item: 'doorKit', tile: local[2], layer: 100, yaw: 0 },
+      { id: 5, item: 'campfire', tile: local[3], layer: 100, yaw: 0, state: { lit: true } },
+      { id: 6, item: 'workbench', tile: local[4], layer: 100, yaw: 0 },
+      { id: 7, item: 'chest', tile: local[5], layer: 100, yaw: 0 },
+    ];
+
+    renderer.setStructures(structures);
+    renderer.update(structures, geo, layers, { x: 0, y: 0, z: 0 }, 1.25);
+    const stats = renderer.stats();
+
+    expect(namedObject(renderer, 'homeComfortRing')?.visible).toBe(true);
+    expect(namedObject(renderer, 'hearthWarmthHalo')?.visible).toBe(true);
+    expect(namedObject(renderer, 'roofShelterGlow')?.visible).toBe(true);
+    expect(stats.homeComfortSignals).toBeGreaterThanOrEqual(4);
+    expect(stats.shelterReadabilityRoles).toBeGreaterThanOrEqual(3);
+    expect(stats.homeComfort).toMatchObject({
+      visibleWarmthMeshes: 4,
+      visibleLightMeshes: 1,
+      visibleHomeMarkers: 1,
+      visibleSmokePuffs: 6,
+      litCampfires: 1,
+      litLanterns: 0,
+    });
+    expect([...readabilityRoles(renderer)]).toEqual(expect.arrayContaining([
+      'functional shelter comfort ring',
+      'warmth radius from lit shelter fire',
+      'roof coverage shelter glow',
+    ]));
+  });
 });

@@ -19,7 +19,9 @@ function loadPlaywright() {
 }
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
-const outDir = path.join(root, 'output', 'playwright', 'c2-c3-building-snap-grid');
+const proofSlug = process.env.PROOF_SLUG || 'c2-c3-building-snap-grid';
+const proofClaim = process.env.PROOF_CLAIM || 'C2/C3 building relocation and code-owned house-kit snap socket contract';
+const outDir = path.join(root, 'output', 'playwright', proofSlug);
 const requestedPort = Number(process.env.PROOF_PORT || 0);
 const profileFilter = (process.env.PROOF_PROFILE || '').trim().toLowerCase();
 
@@ -202,7 +204,7 @@ async function runSnapGridContract(page, name) {
   await waitForWorld(page);
   await page.evaluate(() => window.__world.setZoom?.(0.22));
 
-  const result = await page.evaluate(() => {
+  const result = await page.evaluate(async () => {
     const world = window.__world;
     for (const item of ['doorKit', 'windowFrame', 'roofBundle', 'bedroll', 'campfire', 'workbench', 'chest']) world.giveItem(item, 4);
     const playerTile = world.player.tile;
@@ -225,6 +227,17 @@ async function runSnapGridContract(page, name) {
     };
     const neighborsOf = (tile, rings = 1) => rawNeighborsOf(tile, rings).filter((candidate) => candidate !== playerTile);
     const structures = () => world.structures().items;
+    const assertHomeComfort = (label, renderer) => {
+      const comfort = renderer?.homeComfort ?? {};
+      if ((renderer?.homeComfortSignals ?? 0) < 4 || (renderer?.shelterReadabilityRoles ?? 0) < 3) {
+        throw new Error(`${label} missing comfort renderer signals ${JSON.stringify(renderer)}`);
+      }
+      if ((comfort.visibleWarmthMeshes ?? 0) < 4) throw new Error(`${label} expected visible warmth meshes ${JSON.stringify(comfort)}`);
+      if ((comfort.visibleLightMeshes ?? 0) < 1) throw new Error(`${label} expected visible light/home glow meshes ${JSON.stringify(comfort)}`);
+      if ((comfort.visibleHomeMarkers ?? 0) < 1) throw new Error(`${label} expected visible home marker ${JSON.stringify(comfort)}`);
+      if ((comfort.visibleSmokePuffs ?? 0) < 6) throw new Error(`${label} expected lit campfire smoke puffs ${JSON.stringify(comfort)}`);
+      if ((comfort.litCampfires ?? 0) < 1) throw new Error(`${label} expected a lit campfire readback ${JSON.stringify(comfort)}`);
+    };
     const place = (item, candidates) => {
       for (const tile of candidates) {
         if (used.has(tile)) continue;
@@ -253,13 +266,22 @@ async function runSnapGridContract(page, name) {
     const chest = place('chest', local);
     if (!world.useStructure(campfire.id)) throw new Error('failed to light campfire');
     if (!world.useStructure(bedroll.id)) throw new Error('failed to claim home bedroll');
+    await window.advanceTime(180);
     const ready = world.structures();
     if (!ready.home?.shelter?.functional) throw new Error(`setup did not create a functional shelter ${JSON.stringify(ready.home?.shelter)}`);
+    if (!ready.home.shelter.enclosure?.enclosed || !ready.home.shelter.enclosure?.serviceReady) {
+      throw new Error(`functional shelter did not expose enclosure/service readiness ${JSON.stringify(ready.home.shelter.enclosure)}`);
+    }
+    if (!['working', 'lived-in'].includes(ready.home.shelter.enclosure.comfortTier)) {
+      throw new Error(`functional shelter comfort tier was weak ${JSON.stringify(ready.home.shelter.enclosure)}`);
+    }
+    assertHomeComfort('functional shelter', ready.renderer);
 
     const originalRoof = structures().find((entry) => entry.id === roofA.id);
     const outsideTile = support.find((tile) => !used.has(tile) && !ready.home.shelter.tiles.includes(tile));
     if (outsideTile === undefined) throw new Error('could not find out-of-shelter snap tile');
     const movedOutOk = world.relocateStructure(roofA.id, outsideTile);
+    await window.advanceTime(180);
     const movedOut = world.structures();
     const moveOutCommand = world.buildCommands().last;
     const movedRoof = movedOut.items.find((entry) => entry.id === roofA.id);
@@ -273,11 +295,16 @@ async function runSnapGridContract(page, name) {
     const playerOk = world.relocateStructure(roofA.id, playerTile);
     const playerCommand = world.buildCommands().last;
     const movedBackOk = world.relocateStructure(roofA.id, originalRoof.tile);
+    await window.advanceTime(180);
     const movedBack = world.structures();
     const moveBackCommand = world.buildCommands().last;
     if (!movedBackOk || !movedBack.home.shelter.functional) {
       throw new Error(`shelter did not recover after snap-back ${JSON.stringify({ movedBackOk, shelter: movedBack.home.shelter })}`);
     }
+    if (!movedBack.home.shelter.enclosure?.enclosed || !movedBack.home.shelter.enclosure?.serviceReady) {
+      throw new Error(`shelter enclosure did not recover after snap-back ${JSON.stringify(movedBack.home.shelter.enclosure)}`);
+    }
+    assertHomeComfort('snap-back shelter', movedBack.renderer);
 
     const sockets = movedBack.sockets.houseKit;
     const text = JSON.parse(window.render_game_to_text());
@@ -427,7 +454,7 @@ async function main() {
     const proof = {
       ok: true,
       generatedAt: new Date().toISOString(),
-      claim: 'C2/C3 building relocation and code-owned house-kit snap socket contract',
+      claim: proofClaim,
       inputClaim: 'relocation is proven through runtime/debug hooks across device-sized profiles; touch relocation UI and real hardware gamepad support remain unclaimed',
       desktopUrl,
       touchUrl,
@@ -435,7 +462,7 @@ async function main() {
     };
     const proofFile = path.join(outDir, 'proof.json');
     await fs.writeFile(proofFile, JSON.stringify(proof, null, 2));
-    console.log(`C2/C3 building snap-grid proof passed: ${proofFile}`);
+    console.log(`${proofClaim} proof passed: ${proofFile}`);
   } finally {
     await stopServer(server);
   }

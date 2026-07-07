@@ -379,7 +379,11 @@ workbench, and chest. The HUD/debug label distinguishes a loose hearth from weat
 fully alive shelter, and resting in a complete shelter now turns night into meaningful
 expedition recovery instead of only tagging the bedroll as home. Lit campfires now raise a
 small smoke column, and a lit campfire in the home cluster becomes the homeward Hearth
-Beacon for return trips.
+Beacon for return trips. The shelter report now also exposes a derived single-room enclosure
+around the home bedroll, with spatial enclosure, warmth, service readiness, and comfort tier
+split into separate diagnostics. Functional rooms show readable comfort signals in the world:
+a warmth halo at the fire, a bedroll comfort ring, roof shelter glow, and warm window light
+when the matching pieces exist.
 
 ## Development direction
 

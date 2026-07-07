@@ -882,9 +882,125 @@ describe('Hearth and Horizon structures', () => {
       protected: true,
       functional: true,
       label: 'shelter alive',
+      enclosure: {
+        roofTiles: [101, 102],
+        openingTiles: [103],
+        utilityTiles: [104, 105, 106],
+        roofCoverage: 1,
+        utilityCoverage: 1,
+        doorOnBoundary: true,
+        warmthInside: true,
+        workbenchInside: true,
+        storageInside: true,
+        enclosed: true,
+        serviceReady: true,
+        comfortTier: 'working',
+        label: 'working shelter room',
+      },
     });
     expect(shelter.tiles).toEqual([100, 101, 102, 103, 104, 105, 106]);
+    expect(shelter.enclosure.boundaryTiles).toEqual([101, 102, 103, 104, 105, 106]);
+    expect(shelter.enclosure.boundaryCoverage).toBeCloseTo(0.75);
     expect(homeScore(structures, hubTopology)).toMatchObject({ functional: true, label: 'shelter alive' });
+  });
+
+  it('keeps the empty shelter enclosure stable when no home bedroll exists', () => {
+    const shelter = shelterReport([], hubTopology);
+
+    expect(shelter).toMatchObject({
+      centerTile: null,
+      functional: false,
+      protected: false,
+      missing: ['home bedroll'],
+      enclosure: {
+        roomTiles: [],
+        boundaryTiles: [],
+        supportTiles: [],
+        roofTiles: [],
+        openingTiles: [],
+        utilityTiles: [],
+        enclosed: false,
+        serviceReady: false,
+        comfortTier: 'none',
+        label: 'no room',
+      },
+    });
+  });
+
+  it('keeps global hearth scoring from bypassing topology-aware room validation', () => {
+    const structures: StructureSave[] = [
+      { id: 1, item: 'bedroll', tile: 100, layer: 2, yaw: 0, state: { home: true } },
+      { id: 2, item: 'campfire', tile: 104, layer: 2, yaw: 0, state: { lit: true } },
+      { id: 3, item: 'workbench', tile: 200, layer: 2, yaw: 0 },
+      { id: 4, item: 'chest', tile: 201, layer: 2, yaw: 0 },
+      { id: 5, item: 'doorKit', tile: 202, layer: 2, yaw: 0 },
+      { id: 6, item: 'roofBundle', tile: 203, layer: 2, yaw: 0 },
+      { id: 7, item: 'roofBundle', tile: 204, layer: 2, yaw: 0 },
+    ];
+
+    expect(homeScore(structures)).toMatchObject({ functional: true, label: 'hearth alive' });
+    const local = homeScore(structures, hubTopology);
+    expect(local).toMatchObject({ functional: false, label: 'shelter needs roof 0/2' });
+    expect(local.shelter.enclosure).toMatchObject({
+      roofTiles: [],
+      openingTiles: [],
+      utilityTiles: [104],
+      enclosed: false,
+      serviceReady: false,
+      utilityCoverage: 1 / 3,
+    });
+  });
+
+  it('separates spatial enclosure from warmth and utility readiness', () => {
+    const structures: StructureSave[] = [
+      { id: 1, item: 'bedroll', tile: 100, layer: 2, yaw: 0, state: { home: true } },
+      { id: 2, item: 'roofBundle', tile: 101, layer: 2, yaw: 0 },
+      { id: 3, item: 'roofBundle', tile: 102, layer: 2, yaw: 0 },
+      { id: 4, item: 'doorKit', tile: 103, layer: 2, yaw: 0 },
+      { id: 5, item: 'workbench', tile: 104, layer: 2, yaw: 0 },
+      { id: 6, item: 'chest', tile: 105, layer: 2, yaw: 0 },
+    ];
+
+    const shelter = shelterReport(structures, hubTopology);
+    expect(shelter.protected).toBe(false);
+    expect(shelter.functional).toBe(false);
+    expect(shelter.missing).toContain('lit campfire');
+    expect(shelter.enclosure).toMatchObject({
+      enclosed: true,
+      serviceReady: false,
+      warmthInside: false,
+      workbenchInside: true,
+      storageInside: true,
+      comfortTier: 'rough',
+      label: 'open room needs lit campfire',
+    });
+  });
+
+  it('recognizes a weather-safe room before it becomes a functional workshop', () => {
+    const structures: StructureSave[] = [
+      { id: 1, item: 'bedroll', tile: 100, layer: 2, yaw: 0, state: { home: true } },
+      { id: 2, item: 'roofBundle', tile: 101, layer: 2, yaw: 0 },
+      { id: 3, item: 'roofBundle', tile: 102, layer: 2, yaw: 0 },
+      { id: 4, item: 'doorKit', tile: 103, layer: 2, yaw: 0 },
+      { id: 5, item: 'campfire', tile: 104, layer: 2, yaw: 0, state: { lit: true } },
+    ];
+
+    const shelter = shelterReport(structures, hubTopology);
+    expect(shelter).toMatchObject({
+      protected: true,
+      functional: false,
+      label: 'weather safe',
+      enclosure: {
+        enclosed: true,
+        serviceReady: false,
+        warmthInside: true,
+        workbenchInside: false,
+        storageInside: false,
+        comfortTier: 'weather-safe',
+        label: 'weather-safe room',
+      },
+    });
+    expect(shelter.missing).toEqual(['workbench', 'chest']);
   });
 
   it('keeps incomplete or distant shelter props from granting full shelter rest', () => {
@@ -904,6 +1020,14 @@ describe('Hearth and Horizon structures', () => {
     expect(shelter.missing).toContain('roof 1/2');
     expect(shelter.missing).toContain('workbench');
     expect(shelter.missing).toContain('chest');
+    expect(shelter.enclosure).toMatchObject({
+      enclosed: false,
+      serviceReady: false,
+      roofCoverage: 0.5,
+      utilityCoverage: 1 / 3,
+      comfortTier: 'rough',
+      label: 'open room needs roof 1/2',
+    });
   });
 
   it('grants a stronger rest message inside a complete shelter', () => {

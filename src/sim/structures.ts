@@ -184,6 +184,7 @@ export interface StructureTopology {
 export interface ShelterReport {
   centerTile: number | null;
   tiles: number[];
+  enclosure: ShelterEnclosureReport;
   roofPieces: number;
   roofNeed: number;
   hasDoor: boolean;
@@ -198,6 +199,30 @@ export interface ShelterReport {
   functional: boolean;
   comfort: number;
   missing: string[];
+  label: string;
+}
+
+export type ShelterComfortTier = 'none' | 'rough' | 'weather-safe' | 'working' | 'lived-in';
+
+export interface ShelterEnclosureReport {
+  roomTiles: number[];
+  boundaryTiles: number[];
+  supportTiles: number[];
+  roofTiles: number[];
+  openingTiles: number[];
+  utilityTiles: number[];
+  roofCoverage: number;
+  boundaryCoverage: number;
+  utilityCoverage: number;
+  doorOnBoundary: boolean;
+  warmthInside: boolean;
+  lightInside: boolean;
+  workbenchInside: boolean;
+  storageInside: boolean;
+  cellarInSupport: boolean;
+  enclosed: boolean;
+  serviceReady: boolean;
+  comfortTier: ShelterComfortTier;
   label: string;
 }
 
@@ -908,12 +933,45 @@ function homeSupportTiles(structures: readonly StructureSave[], topology?: Struc
   return home ? tilesWithin(topology, home.tile, Math.max(0, Math.trunc(rings))) : [];
 }
 
+function emptyShelterEnclosure(): ShelterEnclosureReport {
+  return {
+    roomTiles: [],
+    boundaryTiles: [],
+    supportTiles: [],
+    roofTiles: [],
+    openingTiles: [],
+    utilityTiles: [],
+    roofCoverage: 0,
+    boundaryCoverage: 0,
+    utilityCoverage: 0,
+    doorOnBoundary: false,
+    warmthInside: false,
+    lightInside: false,
+    workbenchInside: false,
+    storageInside: false,
+    cellarInSupport: false,
+    enclosed: false,
+    serviceReady: false,
+    comfortTier: 'none',
+    label: 'no room',
+  };
+}
+
+function shelterComfortTier(functional: boolean, weatherSafe: boolean, home: boolean, comfort: number): ShelterComfortTier {
+  if (functional && comfort >= 6) return 'lived-in';
+  if (functional) return 'working';
+  if (weatherSafe) return 'weather-safe';
+  if (home) return 'rough';
+  return 'none';
+}
+
 export function shelterReport(structures: readonly StructureSave[], topology?: StructureTopology, rings = 1): ShelterReport {
   const home = structures.find((s) => s.item === 'bedroll' && s.state?.home === true) ?? null;
   if (!home) {
     return {
       centerTile: null,
       tiles: [],
+      enclosure: emptyShelterEnclosure(),
       roofPieces: 0,
       roofNeed: ROOF_NEED,
       hasDoor: false,
@@ -934,30 +992,71 @@ export function shelterReport(structures: readonly StructureSave[], topology?: S
 
   const tiles = tilesWithin(topology, home.tile, Math.max(0, Math.trunc(rings)));
   const local = new Set(tiles);
+  const boundaryTiles = tiles.filter((tile) => tile !== home.tile);
+  const boundary = new Set(boundaryTiles);
+  const supportTiles = tilesWithin(topology, home.tile, 2);
+  const support = new Set(supportTiles);
   const nearby = structures.filter((s) => local.has(s.tile));
+  const roofTiles = nearby.filter((s) => s.item === 'roofBundle').map((s) => s.tile);
+  const openingTiles = nearby.filter((s) => s.item === 'doorKit' || s.item === 'windowFrame').map((s) => s.tile);
+  const utilityTiles = nearby.filter((s) => s.item === 'campfire' || s.item === 'lantern' || s.item === 'workbench' || s.item === 'chest').map((s) => s.tile);
   const roofPieces = nearby.filter((s) => s.item === 'roofBundle').length;
   const hasDoor = nearby.some((s) => s.item === 'doorKit');
   const hasWindow = nearby.some((s) => s.item === 'windowFrame');
+  const doorOnBoundary = nearby.some((s) => s.item === 'doorKit' && boundary.has(s.tile));
   const hasWarmth = nearby.some((s) => s.item === 'campfire' && s.state?.lit === true);
   const hasStation = nearby.some((s) => s.item === 'workbench');
   const hasStorage = nearby.some((s) => s.item === 'chest');
-  const support = new Set(tilesWithin(topology, home.tile, 2));
   const supportStructures = structures.filter((s) => support.has(s.tile));
   const cellarProvisions = supportStructures.reduce((sum, s) => s.item === 'rootCellar' ? sum + rootCellarProvisionCount([s], undefined, false) : sum, 0);
   const hasCellar = supportStructures.some((s) => s.item === 'rootCellar');
   const hasLight = hasWarmth || nearby.some((s) => s.item === 'lantern' && s.state?.lit === true);
+  const comfort = (hasWindow ? 1 : 0) + (hasLight ? 1 : 0) + (hasStation ? 1 : 0) + (hasStorage ? 1 : 0) + (hasCellar ? 1 : 0) + Math.min(2, roofPieces);
+  const boundaryNeed = Math.max(1, Math.min(4, boundaryTiles.length || 1));
+  const boundaryCoverage = Math.min(1, (roofTiles.filter((tile) => boundary.has(tile)).length + openingTiles.filter((tile) => boundary.has(tile)).length) / boundaryNeed);
+  const utilityCoverage = Math.min(1, (Number(hasWarmth) + Number(hasStation) + Number(hasStorage)) / 3);
+  const spatiallyEnclosed = roofPieces >= ROOF_NEED && boundaryCoverage >= 0.75 && doorOnBoundary;
+  const weatherSafe = spatiallyEnclosed && hasWarmth;
+  const serviceReady = hasWarmth && hasStation && hasStorage;
+  const functional = weatherSafe && serviceReady;
   const missing: string[] = [];
   if (roofPieces < ROOF_NEED) missing.push(`roof ${roofPieces}/${ROOF_NEED}`);
   if (!hasDoor) missing.push('door');
+  else if (!doorOnBoundary) missing.push('door on room edge');
+  if (hasDoor && roofPieces >= ROOF_NEED && boundaryCoverage < 0.75) missing.push('room boundary');
   if (!hasWarmth) missing.push('lit campfire');
   if (!hasStation) missing.push('workbench');
   if (!hasStorage) missing.push('chest');
-  const weatherSafe = roofPieces >= ROOF_NEED && hasDoor && hasWarmth;
-  const functional = weatherSafe && hasStation && hasStorage;
-  const comfort = (hasWindow ? 1 : 0) + (hasLight ? 1 : 0) + (hasStation ? 1 : 0) + (hasStorage ? 1 : 0) + (hasCellar ? 1 : 0) + Math.min(2, roofPieces);
+  const tier = shelterComfortTier(functional, weatherSafe, true, comfort);
+  const enclosure: ShelterEnclosureReport = {
+    roomTiles: tiles,
+    boundaryTiles,
+    supportTiles,
+    roofTiles,
+    openingTiles,
+    utilityTiles,
+    roofCoverage: Math.min(1, roofPieces / ROOF_NEED),
+    boundaryCoverage,
+    utilityCoverage,
+    doorOnBoundary,
+    warmthInside: hasWarmth,
+    lightInside: hasLight,
+    workbenchInside: hasStation,
+    storageInside: hasStorage,
+    cellarInSupport: hasCellar,
+    enclosed: spatiallyEnclosed,
+    serviceReady,
+    comfortTier: tier,
+    label: functional
+      ? tier === 'lived-in' ? 'lived-in shelter room' : 'working shelter room'
+      : weatherSafe
+      ? 'weather-safe room'
+      : `open room needs ${missing[0] ?? 'more shelter'}`,
+  };
   return {
     centerTile: home.tile,
     tiles,
+    enclosure,
     roofPieces,
     roofNeed: ROOF_NEED,
     hasDoor,

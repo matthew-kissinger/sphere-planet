@@ -1,7 +1,7 @@
 import * as THREE from 'three/webgpu';
 import type { Goldberg } from '../geo/goldberg';
 import type { Layers } from '../world/layers';
-import type { StructureSave } from '../sim/structures';
+import { homeScore, type ShelterReport, type StructureSave } from '../sim/structures';
 import type { KilnAssetSnapshot, StructureSkinProvider } from './kilnAssets';
 
 type PropFactory = () => THREE.Group;
@@ -52,6 +52,7 @@ const cyl8 = new THREE.CylinderGeometry(0.5, 0.5, 1, 8);
 const cyl12 = new THREE.CylinderGeometry(0.5, 0.5, 1, 12);
 const cone8 = new THREE.ConeGeometry(0.5, 1, 8);
 const sphere8 = new THREE.SphereGeometry(0.5, 8, 6);
+const torus = new THREE.TorusGeometry(0.5, 0.025, 6, 24);
 
 function mesh(geom: THREE.BufferGeometry, material: THREE.Material, pos: [number, number, number], scale: [number, number, number], name: string): THREE.Mesh {
   const m = new THREE.Mesh(geom, material);
@@ -90,6 +91,10 @@ function makeWorkbench(): THREE.Group {
 function makeCampfire(): THREE.Group {
   const g = new THREE.Group();
   g.name = 'structure-campfire';
+  const halo = role(mesh(torus, materials.warm, [0, 0.075, 0], [1.18, 1.18, 1.18], 'hearthWarmthHalo'), 'warmth radius from lit shelter fire');
+  halo.rotation.x = Math.PI / 2;
+  halo.visible = false;
+  g.add(halo);
   for (let i = 0; i < 9; i++) {
     const a = (i / 9) * Math.PI * 2;
     const r = 0.48;
@@ -127,6 +132,10 @@ function makeChest(): THREE.Group {
 function makeBedroll(): THREE.Group {
   const g = new THREE.Group();
   g.name = 'structure-bedroll';
+  const ring = role(mesh(torus, materials.home, [0, 0.07, 0], [1.34, 1.34, 1.34], 'homeComfortRing'), 'functional shelter comfort ring');
+  ring.rotation.x = Math.PI / 2;
+  ring.visible = false;
+  g.add(ring);
   g.add(mesh(box, materials.cloth, [0, 0.12, 0], [1.25, 0.12, 0.62], 'sleepMat'));
   const roll = mesh(cyl12, materials.cloth, [-0.48, 0.24, 0], [0.18, 0.62, 0.18], 'rolledBlanket');
   roll.rotation.x = Math.PI / 2;
@@ -304,6 +313,9 @@ function makeWindowFrame(): THREE.Group {
   g.add(post('leftRail', -0.42, 0, 0.7));
   g.add(post('rightRail', 0.42, 0, 0.7));
   g.add(mesh(box, materials.glass, [0, 0.62, 0.02], [0.62, 0.4, 0.03], 'glassPane'));
+  const glow = role(mesh(box, materials.home, [0, 0.62, 0.055], [0.54, 0.32, 0.025], 'windowWarmLight'), 'window warm shelter light');
+  glow.visible = false;
+  g.add(glow);
   return g;
 }
 
@@ -316,6 +328,9 @@ function makeRoofBundle(): THREE.Group {
   right.rotation.z = 0.45;
   g.add(left, right);
   g.add(mesh(box, materials.wood, [0, 0.82, 0], [1.0, 0.09, 0.12], 'ridgeBeam'));
+  const glow = role(mesh(box, materials.home, [0, 0.32, 0], [0.82, 0.035, 0.72], 'roofShelterGlow'), 'roof coverage shelter glow');
+  glow.visible = false;
+  g.add(glow);
   return g;
 }
 
@@ -595,6 +610,7 @@ export class StructureRenderer {
     const vZ = new THREE.Vector3();
     const m = new THREE.Matrix4();
     const c = geo.centers;
+    const shelter = homeScore(structures, geo).shelter;
     for (const s of structures) {
       const obj = this.objects.get(s.id);
       if (!obj) continue;
@@ -620,13 +636,17 @@ export class StructureRenderer {
         c[s.tile * 3 + 2] * r - camWorld.z,
       );
       obj.visible = true;
-      this.applyState(obj, s, timeSec);
+      this.applyState(obj, s, timeSec, shelter);
     }
   }
 
-  private applyState(obj: THREE.Group, structure: StructureSave, timeSec: number): void {
+  private applyState(obj: THREE.Group, structure: StructureSave, timeSec: number, shelter: ShelterReport): void {
     const lit = structure.state?.lit === true;
     const home = structure.state?.home === true;
+    const shelterLocal = shelter.tiles.includes(structure.tile);
+    const shelterFunctional = shelter.functional && shelterLocal;
+    const shelterProtected = shelter.protected && shelterLocal;
+    const livedIn = shelter.enclosure.comfortTier === 'lived-in';
     const stored = Object.values(structure.state?.storage ?? {}).some((count) => (count ?? 0) > 0);
     const growth = Math.max(0, Math.min(3, Math.trunc(structure.state?.growth ?? 0)));
     const crop = structure.state?.crop ?? 'berries';
@@ -647,6 +667,12 @@ export class StructureRenderer {
     const netChecks = Math.max(0, Math.trunc(structure.state?.netChecks ?? 0));
     obj.traverse((child) => {
       if (child.name === 'flameCore' || child.name === 'lanternGlow') child.visible = lit;
+      if (child.name === 'hearthWarmthHalo') {
+        child.visible = lit;
+        const protectedScale = shelterProtected ? 1.32 : 1.05;
+        const breathe = 1 + Math.sin(timeSec * 1.6 + structure.id) * 0.045;
+        child.scale.set(protectedScale * breathe, protectedScale * breathe, protectedScale * breathe);
+      }
       if (child.name.startsWith('smokePuff')) {
         const i = Number(child.name.replace('smokePuff', '')) || 0;
         child.visible = lit;
@@ -657,6 +683,22 @@ export class StructureRenderer {
         child.scale.set((0.55 + i * 0.34) * breathe, (0.34 + i * 0.18) * breathe, (0.55 + i * 0.34) * breathe);
       }
       if (child.name === 'homeMarker') child.visible = home;
+      if (child.name === 'homeComfortRing') {
+        child.visible = home && shelter.functional;
+        const base = livedIn ? 1.52 : 1.34;
+        const pulse = 1 + Math.sin(timeSec * 1.15 + structure.id) * 0.035;
+        child.scale.set(base * pulse, base * pulse, base * pulse);
+      }
+      if (child.name === 'roofShelterGlow') {
+        child.visible = shelterFunctional && structure.item === 'roofBundle';
+        const pulse = 1 + Math.sin(timeSec * 0.9 + structure.id) * 0.04;
+        child.scale.set(0.82 * pulse, 0.035, 0.72 * pulse);
+      }
+      if (child.name === 'windowWarmLight') {
+        child.visible = shelter.hasWindow && shelter.hasLight && shelterLocal;
+        const glow = 1 + Math.sin(timeSec * 1.4 + structure.id) * 0.05;
+        child.scale.set(0.54 * glow, 0.32 * glow, 0.025);
+      }
       if (child.name.startsWith('waystoneGlyph-')) {
         const mark = structure.state?.waystone ?? 'survey';
         child.visible = child.name === `waystoneGlyph-${mark}`;
@@ -818,6 +860,16 @@ export class StructureRenderer {
     meshes: number;
     routeSilhouettes: number;
     routeReadabilityRoles: number;
+    shelterReadabilityRoles: number;
+    homeComfortSignals: number;
+    homeComfort: {
+      visibleWarmthMeshes: number;
+      visibleLightMeshes: number;
+      visibleHomeMarkers: number;
+      visibleSmokePuffs: number;
+      litCampfires: number;
+      litLanterns: number;
+    };
     kilnSkinsLoaded: number;
     kilnSkinsPending: number;
     kilnSkinFallbacks: number;
@@ -826,6 +878,16 @@ export class StructureRenderer {
     let meshes = 0;
     const routeSilhouettes = new Set<string>();
     const routeReadabilityRoles = new Set<string>();
+    const shelterReadabilityRoles = new Set<string>();
+    let homeComfortSignals = 0;
+    const homeComfort = {
+      visibleWarmthMeshes: 0,
+      visibleLightMeshes: 0,
+      visibleHomeMarkers: 0,
+      visibleSmokePuffs: 0,
+      litCampfires: 0,
+      litLanterns: 0,
+    };
     let kilnSkinsLoaded = 0;
     let kilnSkinsPending = 0;
     let kilnSkinFallbacks = 0;
@@ -837,6 +899,18 @@ export class StructureRenderer {
       obj.traverse((child) => {
         if ((child as THREE.Mesh).isMesh) meshes++;
         if (typeof child.userData.structureReadabilityRole === 'string') routeReadabilityRoles.add(child.userData.structureReadabilityRole);
+        if (typeof child.userData.structureReadabilityRole === 'string' && /shelter|warmth|roof coverage|window warm/.test(child.userData.structureReadabilityRole)) {
+          shelterReadabilityRoles.add(child.userData.structureReadabilityRole);
+        }
+        if (child.visible && (child.name === 'homeComfortRing' || child.name === 'hearthWarmthHalo' || child.name === 'roofShelterGlow' || child.name === 'windowWarmLight')) {
+          homeComfortSignals++;
+        }
+        if (child.visible && (child.name === 'flameCore' || child.name === 'hearthWarmthHalo' || child.name === 'roofShelterGlow')) homeComfort.visibleWarmthMeshes++;
+        if (child.visible && (child.name === 'lanternGlow' || child.name === 'windowWarmLight' || child.name === 'homeComfortRing')) homeComfort.visibleLightMeshes++;
+        if (child.visible && child.name === 'homeMarker') homeComfort.visibleHomeMarkers++;
+        if (child.visible && child.name.startsWith('smokePuff')) homeComfort.visibleSmokePuffs++;
+        if (child.visible && child.name === 'flameCore') homeComfort.litCampfires++;
+        if (child.visible && child.name === 'lanternGlow') homeComfort.litLanterns++;
       });
     }
     return {
@@ -844,6 +918,9 @@ export class StructureRenderer {
       meshes,
       routeSilhouettes: routeSilhouettes.size,
       routeReadabilityRoles: routeReadabilityRoles.size,
+      shelterReadabilityRoles: shelterReadabilityRoles.size,
+      homeComfortSignals,
+      homeComfort,
       kilnSkinsLoaded,
       kilnSkinsPending,
       kilnSkinFallbacks,

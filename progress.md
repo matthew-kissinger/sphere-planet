@@ -3,6 +3,22 @@ Current operating goal: Hearth and Horizon full crafting-survival cycle under th
 
 ## 2026-07-07
 
+- Closed the first C2 single-room shelter enclosure and comfort-readability slice under
+  the DAG/subagent workflow. `ShelterReport.enclosure` now derives room, boundary,
+  support, roof, opening, and utility tiles around the claimed home bedroll; separates
+  spatial enclosure from warmth and service readiness; reports rough, weather-safe,
+  working, or lived-in comfort tiers; and keeps save data unchanged with no saved room
+  entity or multi-room solver.
+- Added visible shelter comfort signals to the structure renderer: lit home fires show a
+  warmth halo, functional bedroll homes show a comfort ring, sheltered roofs glow softly,
+  and window frames can show warm interior light. Renderer diagnostics now expose
+  `homeComfortSignals`, `shelterReadabilityRoles`, and structured warmth/light/home/smoke
+  counters so art and GLB swaps cannot erase the readable shelter contract silently.
+- Added `npm run proof:c2-room-enclosure` as a named wrapper over the C2/C3 browser
+  harness. The proof builds a real functional shelter, asserts enclosure and service
+  readiness, asserts comfort-tier/readability diagnostics, moves a roof out so the room
+  weakens, snaps it back so the room and renderer comfort signals recover, and still
+  records that relocation is debug-hook proven rather than a touch/gamepad player UI claim.
 - Closed the first C2/C3 building relocation and snap-grid contract slice under the
   DAG/subagent workflow. Inactive placed props can now relocate across the same terrain
   snap rules as placement while preserving id, item, state, yaw turn, and save shape;
