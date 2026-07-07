@@ -75,7 +75,7 @@ input: left stick moves, right stick looks, full stick/RB sprints, LB+right stic
 `A` jumps/swims up, `LT` descends, `X` mines/chops, `RT` builds, D-pad left/right cycles the
 hotbar, `B` uses or closes the open panel, `LB+B` packs a safe prop, `Y` toggles crafting,
 Back opens the Route Slate, `LB+D-pad` pins or clears routes, and Start boards/stows the
-plane. While crafting or chest storage is open, D-pad moves the focused row/action, `A`
+plane. `LB+Back` toggles mute. While crafting or chest storage is open, D-pad moves the focused row/action, `A`
 confirms craft/place/transfer, and `B` closes the focused panel without leaking jump, use,
 hotbar, mine, or build input into the world.
 

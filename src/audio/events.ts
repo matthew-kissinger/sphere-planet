@@ -24,21 +24,26 @@ export interface AudioAssetDef {
   loop?: boolean;
 }
 
+export function audioUrl(relativePath: string, base = import.meta.env.BASE_URL): string {
+  const normalizedBase = base && base !== '/' ? base.replace(/\/?$/, '/') : '/';
+  return `${normalizedBase}${relativePath.replace(/^\/+/, '')}`;
+}
+
 export const AUDIO_ASSETS: Record<AudioAssetId, AudioAssetDef> = {
-  uiConfirm: { id: 'uiConfirm', url: '/audio/sfx/ui-confirm.mp3', group: 'ui', volume: 0.35 },
-  uiDeny: { id: 'uiDeny', url: '/audio/sfx/ui-deny.mp3', group: 'ui', volume: 0.34 },
-  uiOpen: { id: 'uiOpen', url: '/audio/sfx/ui-open.mp3', group: 'ui', volume: 0.32 },
-  craftConfirm: { id: 'craftConfirm', url: '/audio/sfx/craft-confirm.mp3', group: 'sfx', volume: 0.52 },
-  structurePlace: { id: 'structurePlace', url: '/audio/sfx/structure-place.mp3', group: 'sfx', volume: 0.5 },
-  gatherSoft: { id: 'gatherSoft', url: '/audio/sfx/gather-soft.mp3', group: 'sfx', volume: 0.42 },
-  routeSlate: { id: 'routeSlate', url: '/audio/sfx/route-slate.mp3', group: 'sfx', volume: 0.48 },
-  skyfallGather: { id: 'skyfallGather', url: '/audio/sfx/skyfall-gather.mp3', group: 'sfx', volume: 0.58 },
-  fishingCatch: { id: 'fishingCatch', url: '/audio/sfx/fishing-catch.mp3', group: 'sfx', volume: 0.5 },
-  hearthRest: { id: 'hearthRest', url: '/audio/sfx/hearth-rest.mp3', group: 'sfx', volume: 0.5 },
-  caveRead: { id: 'caveRead', url: '/audio/sfx/cave-read.mp3', group: 'sfx', volume: 0.48 },
-  waterCatch: { id: 'waterCatch', url: '/audio/sfx/water-catch.mp3', group: 'sfx', volume: 0.47 },
-  landmarkAwaken: { id: 'landmarkAwaken', url: '/audio/sfx/landmark-awaken.mp3', group: 'sfx', volume: 0.6 },
-  planetWindLoop: { id: 'planetWindLoop', url: '/audio/ambience/planet-wind-loop.mp3', group: 'ambience', volume: 0.28, loop: true },
+  uiConfirm: { id: 'uiConfirm', url: audioUrl('audio/sfx/ui-confirm.mp3'), group: 'ui', volume: 0.35 },
+  uiDeny: { id: 'uiDeny', url: audioUrl('audio/sfx/ui-deny.mp3'), group: 'ui', volume: 0.34 },
+  uiOpen: { id: 'uiOpen', url: audioUrl('audio/sfx/ui-open.mp3'), group: 'ui', volume: 0.32 },
+  craftConfirm: { id: 'craftConfirm', url: audioUrl('audio/sfx/craft-confirm.mp3'), group: 'sfx', volume: 0.52 },
+  structurePlace: { id: 'structurePlace', url: audioUrl('audio/sfx/structure-place.mp3'), group: 'sfx', volume: 0.5 },
+  gatherSoft: { id: 'gatherSoft', url: audioUrl('audio/sfx/gather-soft.mp3'), group: 'sfx', volume: 0.42 },
+  routeSlate: { id: 'routeSlate', url: audioUrl('audio/sfx/route-slate.mp3'), group: 'sfx', volume: 0.48 },
+  skyfallGather: { id: 'skyfallGather', url: audioUrl('audio/sfx/skyfall-gather.mp3'), group: 'sfx', volume: 0.58 },
+  fishingCatch: { id: 'fishingCatch', url: audioUrl('audio/sfx/fishing-catch.mp3'), group: 'sfx', volume: 0.5 },
+  hearthRest: { id: 'hearthRest', url: audioUrl('audio/sfx/hearth-rest.mp3'), group: 'sfx', volume: 0.5 },
+  caveRead: { id: 'caveRead', url: audioUrl('audio/sfx/cave-read.mp3'), group: 'sfx', volume: 0.48 },
+  waterCatch: { id: 'waterCatch', url: audioUrl('audio/sfx/water-catch.mp3'), group: 'sfx', volume: 0.47 },
+  landmarkAwaken: { id: 'landmarkAwaken', url: audioUrl('audio/sfx/landmark-awaken.mp3'), group: 'sfx', volume: 0.6 },
+  planetWindLoop: { id: 'planetWindLoop', url: audioUrl('audio/ambience/planet-wind-loop.mp3'), group: 'ambience', volume: 0.28, loop: true },
 };
 
 export type AudioEventId =
@@ -126,18 +131,18 @@ export interface MusicTrackDef {
 }
 
 export const MUSIC_TRACKS: MusicTrackDef[] = [
-  { id: 'prelude', url: '/audio/music/01-prelude.mp3', title: 'The Twelve Bells (Prelude)' },
-  { id: 'warmRing', url: '/audio/music/02-warm-ring.mp3', title: 'Warm-Ring' },
-  { id: 'saltTide', url: '/audio/music/03-salt-tide.mp3', title: 'Salt-Tide' },
-  { id: 'rootVault', url: '/audio/music/04-root-vault.mp3', title: 'Root-Vault' },
-  { id: 'snowDial', url: '/audio/music/05-snow-dial.mp3', title: 'Snow-Dial' },
-  { id: 'deepBell', url: '/audio/music/06-deep-bell.mp3', title: 'Deep-Bell' },
-  { id: 'stormSeat', url: '/audio/music/07-storm-seat.mp3', title: 'Storm-Seat' },
-  { id: 'reedWater', url: '/audio/music/08-reed-water.mp3', title: 'Reed-Water' },
-  { id: 'emberRing', url: '/audio/music/09-ember-ring.mp3', title: 'Ember-Ring' },
-  { id: 'starGlass', url: '/audio/music/10-star-glass.mp3', title: 'Star-Glass' },
-  { id: 'tideBell', url: '/audio/music/11-tide-bell.mp3', title: 'Tide-Bell' },
-  { id: 'windThread', url: '/audio/music/12-wind-thread.mp3', title: 'Wind-Thread' },
-  { id: 'rootWhisper', url: '/audio/music/13-root-whisper.mp3', title: 'Root-Whisper' },
-  { id: 'wholeChord', url: '/audio/music/14-the-whole-chord.mp3', title: 'The Whole Chord (Finale)' },
+  { id: 'prelude', url: audioUrl('audio/music/01-prelude.mp3'), title: 'The Twelve Bells (Prelude)' },
+  { id: 'warmRing', url: audioUrl('audio/music/02-warm-ring.mp3'), title: 'Warm-Ring' },
+  { id: 'saltTide', url: audioUrl('audio/music/03-salt-tide.mp3'), title: 'Salt-Tide' },
+  { id: 'rootVault', url: audioUrl('audio/music/04-root-vault.mp3'), title: 'Root-Vault' },
+  { id: 'snowDial', url: audioUrl('audio/music/05-snow-dial.mp3'), title: 'Snow-Dial' },
+  { id: 'deepBell', url: audioUrl('audio/music/06-deep-bell.mp3'), title: 'Deep-Bell' },
+  { id: 'stormSeat', url: audioUrl('audio/music/07-storm-seat.mp3'), title: 'Storm-Seat' },
+  { id: 'reedWater', url: audioUrl('audio/music/08-reed-water.mp3'), title: 'Reed-Water' },
+  { id: 'emberRing', url: audioUrl('audio/music/09-ember-ring.mp3'), title: 'Ember-Ring' },
+  { id: 'starGlass', url: audioUrl('audio/music/10-star-glass.mp3'), title: 'Star-Glass' },
+  { id: 'tideBell', url: audioUrl('audio/music/11-tide-bell.mp3'), title: 'Tide-Bell' },
+  { id: 'windThread', url: audioUrl('audio/music/12-wind-thread.mp3'), title: 'Wind-Thread' },
+  { id: 'rootWhisper', url: audioUrl('audio/music/13-root-whisper.mp3'), title: 'Root-Whisper' },
+  { id: 'wholeChord', url: audioUrl('audio/music/14-the-whole-chord.mp3'), title: 'The Whole Chord (Finale)' },
 ];

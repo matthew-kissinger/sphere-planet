@@ -223,7 +223,7 @@ Critical path:
 | G Native life/combat | G0 behavior state machine; G1 harmless depth; G2 hazard variety; G3 ward/stun/flee tool rules; G4 rewards/anti-farming | B3, D3, E4 | Several native families and ward loops exist; combat stays constrained until route/building loops carry it |
 | H Avatar/art/assets | H0 authored Soft-Facet model brief; H1 prop/socket catalog; H2 animation coverage; H3 asset readability pass; H4 external asset ledger/probes | A4 | Route-marker glyph dialect is the active H3 slice; avatar polish, cave anchors/waystones, and mobile readability remain reviewer-owned |
 | I UX/input | I0 device control matrix; I1 HUD/panel hierarchy; I2 touch/gamepad parity for all verbs; I3 settings/pause/help/accessibility | C0, B3 | Route choice parity and shared panel ownership are closed for their first slices; P2 responsive/device matrix and future building/combat verbs remain |
-| J QA/release | J0 unit suites; J1 browser proof scripts; J2 screenshot/readability matrix; J3 perf/audio/bundle gates; J4 deploy/live/docs truth | all feature lanes | Unit/build proof is strong; route-marker proof script is now committed for this H3 slice |
+| J QA/release | J0 unit suites; J1 browser proof scripts; J2 screenshot/readability matrix; J3 perf/audio/bundle gates; J4 deploy/live/docs truth | all feature lanes | Unit/build proof is strong; route, panel, and audio proof scripts now cover current risky slices |
 
 Active run ledger, 2026-07-07:
 
@@ -236,6 +236,7 @@ Active run ledger, 2026-07-07:
 | J1 browser proof scripts | QA/release lane | Done for route choice | `output/playwright/route-selection/proof.json` captures desktop pointer, gamepad, and phone touch proof |
 | H3 route-marker glyph dialect | Main implementation lane with asset-reviewer audit | Done for this slice | Cave anchors and waystones expose distinct route-marker silhouettes, named readability roles, desktop/phone screenshots, and text readback stats |
 | I2/P1 panel ownership | Main implementation with UX/input reviewers | Done for shared-owner slice | `PanelOwnershipSnapshot`, blocked-input runtime gate, touch/pointer cancellation, `npm test -- ux`, and `npm run proof:panel-ownership` prove panel-owned world-input blocking |
+| J3 music/audio gate | Main implementation with audio/runtime/proof reviewers | Done for soundtrack handoff | `npm run proof:audio-assets`, `npm run proof:audio-music`, base-path-safe URLs, and desktop/phone dev plus production-subpath browser proof validate streamed music |
 
 Progress accounting rule: after each substantial slice, move exactly one current node to
 `complete`, `blocked`, or `deferred` with the proof artifact that justifies the state. If
@@ -253,6 +254,7 @@ Living node ledger:
 | J1 | Browser proof tracks the actual player path | Done for route choice | QA/release lane | F1, I2 | R5 | `output/playwright/route-selection/proof.json` plus three screenshots | Extend reusable proof harness for the full device matrix |
 | H3 | Route markers read as route tools, not generic glowing props | Done for route-marker glyph dialect | Main implementation plus asset-readability lanes | A4, F1 | R4, R5 | `test/structureRenderer.test.ts`; `npm run proof:route-markers`; `output/playwright/route-marker-readability/proof.json` | Run blind screenshot review and continue to avatar/waystone/cave-anchor polish at normal play distance |
 | I2/P1 | Shared panel ownership blocks world-input leakage | Done for shared-owner slice | Main implementation plus UX/input reviewer lanes | C0, B3, F1 | R3, R5 | `src/player/panelOwnership.ts`, `test/ux.test.ts`, `scripts/proof-panel-ownership.mjs`, `output/playwright/panel-ownership/proof.json` | Extend to landscape tablet/phone proof and apply the same contract to future building/combat panels |
+| J3 | Soundtrack handoff is optimized, streamed, and release-path safe | Done for music handoff | Main implementation plus audio/proof reviewers | J0, J1 | R5 | `scripts/proof-audio-assets.mjs`, `scripts/proof-audio-music.mjs`, `output/audio/audio-asset-proof.json`, `output/playwright/audio-music/proof.json` | Follow up on SFX loudness/provenance, then add contextual music policy later |
 
 Subagent decision ledger:
 
@@ -263,7 +265,9 @@ Subagent decision ledger:
 | Current graph/frontier audit | A2, A3, H3, I2, J1 | Check whether F1 was still a truthful frontier after `c9bc338` | Accepted | Merged into current docs | F1/I2/J1 route choice is closed; H3 route-marker readability is the highest-leverage unblocked node |
 | Asset readability lane | H3, R4 | Review player/avatar, crystal-gate risk, native hazards, cave anchors, waystones, and generated GLBs | Accepted | Driving current implementation | Route markers are weaker than the current Soft-Facet avatar and native-life hooks; use code-authored glyphs before generated GLBs |
 | Gameplay/UX/input lane | I2/P1, F1, J1 | Audit cross-device loop and panel ownership after route choice | Accepted as next node | Deferred from this code slice | Shared panel-owned input blocking is the next UX task; do not mix it into the H3 renderer slice |
-| Music/audio lane | J3 | Re-check soundtrack only if a regression appears | Deferred | No current edits | Prior music integration already streams and enforces a size budget |
+| Music/runtime lane | J3 | Audit whether the Twelve Bells handoff is actually wired into the game | Accepted | Merged into code/tests/docs | Music already streamed through `GameAudio`; added base-path URL safety, media-error diagnostics, and gamepad mute doc follow-up |
+| Audio asset lane | J3, R5 | Check codec, bitrate, sample rate, sizes, metadata, loop suitability, and provenance | Accepted | Merged as proof plus follow-up debt | Music is optimized at 33.26 MiB total; SFX are tiny but need later loudness/provenance cleanup |
+| Audio proof lane | J3, R5 | Define authoritative unit, asset, browser, and production-subpath proof for the handoff | Accepted | Merged into scripts/tests | Added ffprobe asset proof and desktop/phone browser proof for dev root plus `/goldberg-planet/` production subpath |
 | Panel leakage code audit | I2/P1 | Inspect current main-loop and input-module leakage paths | Accepted | Merged into implementation | Movement, same-frame gamepad, touch mine/build, pointer lock, hotbar, and panel action risks were gated through the shared owner |
 | Panel proof matrix | I2/P1, J1 | Define realistic PC/laptop/tablet/phone/gamepad proof | Accepted | Merged into proof script | Proof now asserts active owner readback, one visible panel, blocked player motion, screenshots, and no page/console errors |
 | Docs/test alignment | A2, I2/P1, J1 | Identify docs, tests, and proof naming needed to close the node | Accepted | Merged into docs/tests | Added pure owner tests and moved I2/P1 from next-follow-up to done-with-evidence |
@@ -276,7 +280,7 @@ Gate evidence ledger:
 | R2 Playability gate | Real player loop changes state without debug-only shortcuts | Route Slate row selection pins a non-primary route target into the saved route plan | Passing for this slice | Later itinerary editing still needs reorder/remove polish |
 | R3 Cross-device gate | PC/laptop, touch, and gamepad evidence for affected verbs | Panel ownership proof covers PC, 1366x720 laptop, tablet touch portrait, phone touch portrait, and synthetic gamepad with blocked-motion assertions | Passing for the shared panel-owner slice | Landscape tablet/phone and future all-verb building/combat parity remain |
 | R4 Asset readability gate | Reviewer can name the gameplay noun and likely verb from screenshots | Route markers now expose `routeSilhouettes: 2`, `routeReadabilityRoles: 24`, named cave-anchor/waystone glyph roles, desktop/phone screenshots, and readback stats | Passing for route-marker glyph dialect | Blind screenshot review and further avatar/cave-anchor/waystone polish remain open |
-| R5 Performance/release gate | Typecheck, unit suite, build, browser screenshots, console check, canvas proof | `npm test -- ux`, `npm run typecheck`, `npm run proof:panel-ownership`, full `npm test` at 252 tests, `npm run build`, and generic develop-web-game smoke pass; screenshot pixel probes and no page/console errors in the panel proof | Passing for the shared panel-owner slice | Production large-chunk warning remains a known bundle-size follow-up |
+| R5 Performance/release gate | Typecheck, unit suite, build, browser screenshots, console check, canvas proof, bundle/audio budgets | `npm test -- audio`, `npm run typecheck`, `npm run proof:audio-assets`, `npm run build`, and `npm run proof:audio-music`; audio proof covers 14 optimized music tracks at 33.26 MiB, 13 SFX, 1 ambience loop, dev desktop/phone, and production `/goldberg-planet/` desktop/phone audio requests with no page/console/audio errors | Passing for the soundtrack handoff slice | Production large-chunk warning and later SFX loudness/provenance cleanup remain known follow-ups |
 
 Board update rule: update the node ledger at the start and end of each substantial
 continuation. No node moves to `Done` without an evidence link. Every subagent output must
@@ -1488,6 +1492,11 @@ The first full Hearth and Horizon vertical slice should include:
 - First-pass audio matrix: ambience loop, streamed soundtrack, UI confirm/deny/open sounds,
   and event-driven SFX for crafting, building, gathering, fishing, hearth/rest, cave
   reading, route planning, landmark awakening, and timed planetary events.
+- Music handoff proof: The Twelve Bells streams through the `music` gain path instead of
+  eager decoded buffers, asset format/budget proof lives at `npm run proof:audio-assets`,
+  runtime unlock/stream/mute/subpath proof lives at `npm run proof:audio-music`, and future
+  soundtrack changes must keep the album under the browser-streaming budget or document a
+  deliberate delivery change.
 - Functional shelter recognition.
 - One crop chain with fertility and rain-cistern irrigation, one staged-provision cache,
   plus one fishing chain.

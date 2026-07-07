@@ -3,6 +3,27 @@ Current operating goal: Hearth and Horizon full crafting-survival cycle under th
 
 ## 2026-07-07
 
+- Closed the J3 music/audio verification slice under the DAG/subagent workflow. Three
+  parallel lanes audited runtime music wiring, asset optimization, and proof coverage while
+  the main path added the enforceable gates. The Twelve Bells album was already correctly
+  streamed through `GameAudio`; the new work makes that state reproducible instead of
+  relying on a one-off handoff claim.
+- Fixed audio asset URLs to resolve through Vite's configured base path, so the same runtime
+  catalog works both at localhost root and when the production build is mounted under
+  `/goldberg-planet/`. Streamed music media errors now surface in `GameAudio` diagnostics
+  instead of silently advancing to the next track.
+- Added `npm run proof:audio-assets` and `npm run proof:audio-music`. The asset proof uses
+  `ffprobe` to enforce runtime catalog parity, MP3 codec, 44.1 kHz stereo, near-128 kbps
+  bitrate, stripped metadata/artwork, per-file budgets, and the 36 MiB album budget. The
+  browser proof unlocks audio by pointer/touch gesture, verifies ambience plus streamed
+  music state, toggles mute/resume, checks audio network responses, captures screenshots,
+  and serves `dist/` under `/goldberg-planet/` to catch root-absolute audio URLs.
+- Verified the audio slice with `npm test -- audio` (11 tests), `npm run typecheck`,
+  `npm run proof:audio-assets` (14 music tracks, 33.26 MiB; 13 SFX; 1 ambience loop),
+  `npm run build`, and `npm run proof:audio-music` using the existing sibling Playwright
+  `NODE_PATH`. Browser proof passed four targets: dev desktop, dev phone touch,
+  production-subpath desktop, and production-subpath phone touch. The asset audit noted
+  future SFX loudness/provenance debt, but the music files themselves are already optimized.
 - Closed the I2/P1 Shared Panel Ownership slice under the DAG/subagent workflow. Three
   parallel reviewer lanes audited panel leakage, device proof, and docs/test alignment while
   the main path implemented the shared owner. Route Slate, crafting, Hearth Journal, and

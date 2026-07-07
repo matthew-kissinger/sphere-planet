@@ -7,6 +7,8 @@
     "dev": "vite",
     "build": "tsc --noEmit && vite build",
     "preview": "vite preview",
+    "proof:audio-assets": "node scripts/proof-audio-assets.mjs",
+    "proof:audio-music": "node scripts/proof-audio-music.mjs",
     "proof:route-markers": "node scripts/proof-route-marker-readability.mjs",
     "proof:panel-ownership": "node scripts/proof-panel-ownership.mjs",
     "test": "vitest run",

@@ -178,7 +178,11 @@ export class GameAudio {
       const source = ctx.createMediaElementSource(el);
       source.connect(this.gains.get('music') ?? ctx.destination);
       el.addEventListener('ended', () => this.scheduleNextMusic());
-      el.addEventListener('error', () => this.scheduleNextMusic());
+      el.addEventListener('error', () => {
+        const code = el.error?.code ?? 'unknown';
+        this.recordError(`music ${this.musicTrackId ?? 'unknown'} failed: media ${code}`);
+        this.scheduleNextMusic();
+      });
       this.musicSource = source;
     } catch (err) {
       this.recordError(`music init failed: ${errorMessage(err)}`);
