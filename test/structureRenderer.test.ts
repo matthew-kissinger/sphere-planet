@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import * as THREE from 'three/webgpu';
 import { Goldberg } from '../src/geo/goldberg';
 import { StructureRenderer } from '../src/render/structures';
+import type { StructureSkinProvider } from '../src/render/kilnAssets';
 import type { StructureSave } from '../src/sim/structures';
 import { buildLayers } from '../src/world/layers';
 
@@ -20,6 +21,33 @@ function readabilityRoles(renderer: StructureRenderer): Set<string> {
     if (typeof role === 'string') roles.add(role);
   });
   return roles;
+}
+
+function namedObject(renderer: StructureRenderer, name: string): THREE.Object3D | null {
+  let found: THREE.Object3D | null = null;
+  renderer.group.traverse((part) => {
+    if (part.name === name) found = part;
+  });
+  return found;
+}
+
+async function flushAsyncSkinLoads(): Promise<void> {
+  await new Promise((resolve) => setTimeout(resolve, 0));
+}
+
+class FakeKilnAssets implements StructureSkinProvider {
+  async createStructureSkin() {
+    const object = new THREE.Group();
+    object.name = 'kiln-skin-waystone';
+    object.add(new THREE.Mesh(new THREE.BoxGeometry(1, 1, 1), new THREE.MeshBasicMaterial()));
+    return {
+      slug: 'waystone' as const,
+      object,
+      manifest: { slug: 'waystone', status: 'ready' as const, file: 'models/waystone.glb' },
+      sourceUrl: '/assets/kiln/models/waystone.glb',
+      hideProceduralNames: ['waystoneBase', 'waystoneCore', 'waystoneBand'],
+    };
+  }
 }
 
 describe('structure renderer asset readability', () => {
@@ -71,5 +99,28 @@ describe('structure renderer asset readability', () => {
       'set-anchor flood marker',
       'coiled return rope',
     ]));
+  });
+
+  it('skins waystones with Kiln GLB bodies while preserving attuned glyph overlays', async () => {
+    const scene = new THREE.Scene();
+    const geo = new Goldberg(8);
+    const layers = buildLayers();
+    const renderer = new StructureRenderer(scene, new FakeKilnAssets());
+    const structures: StructureSave[] = [
+      { id: 1, item: 'waystone', tile: 1, layer: 100, yaw: 0, state: { waystone: 'home', markerUses: 1 } },
+    ];
+
+    renderer.setStructures(structures);
+    await flushAsyncSkinLoads();
+    renderer.update(structures, geo, layers, { x: 0, y: 0, z: 0 }, 0.5);
+
+    expect(namedObject(renderer, 'kiln-skin-waystone')).toBeTruthy();
+    expect(namedObject(renderer, 'waystoneBase')?.visible).toBe(false);
+    expect(namedObject(renderer, 'waystoneCore')?.visible).toBe(false);
+    expect(namedObject(renderer, 'waystoneBand')?.visible).toBe(false);
+    expect(namedObject(renderer, 'waystoneGlyph-home')?.visible).toBe(true);
+    expect(namedObject(renderer, 'waystoneGlyph-survey')?.visible).toBe(false);
+    expect(renderer.stats().kilnSkinsLoaded).toBe(1);
+    expect(renderer.stats().kilnSkinFallbacks).toBe(0);
   });
 });

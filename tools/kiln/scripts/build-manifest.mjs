@@ -20,15 +20,43 @@ const OUT = resolve(HERE, '../../../public/assets/kiln/ASSET_MANIFEST.json');
 // Hex tile reference so the agent can scale GLB-local extents to world units.
 const HEX_FLAT_TO_FLAT = 5.6;
 
-// Best-effort pointers to the procedural code each asset supersedes (agent verifies).
+// Best-effort pointers to the procedural code each asset supersedes. These are ownership
+// hints for runtime wiring, not permission to delete the procedural fallback.
 const REPLACES = {
-  'cave-mouth-arch': 'src/render/caveMouths.ts makeMouth() [arch]',
-  'cave-mouth-dry': 'src/render/caveMouths.ts makeMouth() [dryCave]',
-  'cave-mouth-sea': 'src/render/caveMouths.ts makeMouth() [seaCave]',
-  'roof-bundle': 'procedural roof panels in the house/structure builder',
-  'tree-pine': 'src/render procedural parametric conifer (ambient scatter)',
-  'tree-broadleaf': 'src/render procedural broadleaf (if any)',
+  workbench: 'src/render/structures.ts makeWorkbench()',
+  chest: 'src/render/structures.ts makeChest()',
+  campfire: 'src/render/structures.ts makeCampfire()',
+  'door-kit': 'src/render/structures.ts makeDoorKit() as decorative skin inside code-authored build socket',
+  'window-frame': 'src/render/structures.ts makeWindowFrame() as decorative skin inside code-authored build socket',
+  'dock-segment': 'src/render/structures.ts makeDockSegment() as decorative skin inside code-authored build socket',
+  'roof-bundle': 'src/render/structures.ts roof/house-kit procedural panel placeholder as decorative skin inside code-authored build socket',
+  bedroll: 'src/render/structures.ts makeBedroll()',
+  'crop-plot': 'src/render/structures.ts makeCropPlot()',
+  'compost-bin': 'src/render/structures.ts makeCompostBin() as decorative skin inside code-authored utility socket',
+  'rain-cistern': 'src/render/structures.ts makeRainCistern()',
+  'root-cellar': 'src/render/structures.ts makeRootCellar() as decorative skin inside code-authored utility socket',
+  'cave-anchor': 'src/render/structures.ts makeCaveAnchor() with route glyph overlays retained',
+  'fish-trap': 'src/render/structures.ts makeFishTrap()',
+  'shore-net': 'src/render/structures.ts makeShoreNet()',
+  'drying-rack': 'src/render/structures.ts makeDryingRack()',
+  'weather-vane': 'src/render/structures.ts makeWeatherVane() with spinning needle overlay retained',
+  'lantern-post': 'src/render/structures.ts makeLantern()',
+  waystone: 'src/render/structures.ts makeWaystone() with attuned route glyph overlays retained',
+  'cave-mouth-arch': 'src/render/caveMouths.ts makeMouth() [arch] retained; GLB rejected by manifest',
+  'cave-mouth-dry': 'src/render/caveMouths.ts makeMouth() [dryCave] retained; GLB rejected by manifest',
+  'cave-mouth-sea': 'src/render/caveMouths.ts makeMouth() [seaCave] retained; GLB rejected by manifest',
 };
+
+function replacementFor(a) {
+  if (REPLACES[a.slug]) return REPLACES[a.slug];
+  if (a.slug.startsWith('shrine-')) return `src/render/landmarks.ts makeLandmark() / ${a.title} domain landmark shell`;
+  if (a.slug.startsWith('node-')) return `src/render/domainResources.ts ${a.slug.replace(/^node-/, '')} resource silhouette`;
+  if (a.slug.startsWith('creature-')) return `src/render/nativeLife.ts ${a.title} node-transform replacement candidate`;
+  if (a.slug.startsWith('tree-')) return `src/world/trees.ts + src/render/mesher.ts emitTree() / ${a.title} instanced scatter replacement candidate`;
+  if (a.slug.startsWith('crater-')) return `src/render/skyfall.ts ${a.title} crater shell`;
+  if (a.slug.startsWith('drop-')) return `src/render/resourceDrops.ts ${a.title} drop group`;
+  return undefined;
+}
 
 function parseGlb(buf) {
   if (buf.readUInt32LE(0) !== 0x46546c67) throw new Error('not a glTF binary');
@@ -94,7 +122,7 @@ for (const a of CATALOG.assets) {
     tier: a.tier ?? 'standard', footprint: a.footprint,
     status: a.unused ? 'unused' : 'ready',
     unusedReason: a.unused ? unusedReason(a.slug) : undefined,
-    replaces: REPLACES[a.slug] ?? undefined,
+    replaces: replacementFor(a),
     prompt: a.prompt,
   };
   if (!existsSync(glbPath)) { rec.file = null; rec.note = 'no GLB generated'; missing++; records.push(rec); continue; }

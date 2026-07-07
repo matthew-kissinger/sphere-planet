@@ -13,6 +13,7 @@ import { buildGeodesic } from './render/geodesic';
 import { Sky } from './render/sky';
 import { Character } from './render/character';
 import { StructureRenderer } from './render/structures';
+import { KilnRuntimeAssets } from './render/kilnAssets';
 import { LandmarkRenderer } from './render/landmarks';
 import { DomainResourceRenderer } from './render/domainResources';
 import { SkyfallRenderer } from './render/skyfall';
@@ -545,7 +546,8 @@ async function boot(): Promise<void> {
   const orbitDemo = new OrbitDemo(metrics, (msg) => hud.flash(msg, 10));
   const character = new Character(scene);
   const structures: StructureSave[] = normalizeStructureSaves(loadedSave?.structures, geo.count, layers.L);
-  const structureRenderer = new StructureRenderer(scene);
+  const kilnAssets = new KilnRuntimeAssets();
+  const structureRenderer = new StructureRenderer(scene, kilnAssets);
   structureRenderer.setStructures(structures);
   const discoveredPentagons = new Set(normalizePentagonDiscoveries(loadedSave?.progression?.pentagons, pentagonTiles));
   const completedPentagonSites = new Set(normalizePentagonSiteCompletions(loadedSave?.progression?.siteCompletions, pentagonTiles));

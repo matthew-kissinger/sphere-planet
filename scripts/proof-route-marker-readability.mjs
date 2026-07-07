@@ -237,28 +237,52 @@ async function runViewport(browser, targetUrl, name, viewport) {
   const page = await browser.newPage({ viewport });
   const consoleErrors = [];
   const pageErrors = [];
+  const kilnAssetRequests = [];
+  const kilnAssetResponses = [];
   page.on('console', (msg) => {
     if (msg.type() === 'error') consoleErrors.push(msg.text());
   });
   page.on('pageerror', (err) => pageErrors.push(err.message));
+  page.on('request', (request) => {
+    const url = request.url();
+    if (url.includes('/assets/kiln/')) kilnAssetRequests.push(url);
+  });
+  page.on('response', (response) => {
+    const url = response.url();
+    if (url.includes('/assets/kiln/')) kilnAssetResponses.push({ url, status: response.status() });
+  });
   await page.goto(targetUrl, { waitUntil: 'domcontentloaded' });
   await page.waitForFunction(() => !!window.__world && typeof window.render_game_to_text === 'function', null, { timeout: 30000 });
   await page.waitForTimeout(1200);
   const seeded = await seedRouteMarkers(page);
-  await page.waitForTimeout(900);
+  await page.waitForFunction(() => {
+    const text = JSON.parse(window.render_game_to_text());
+    const renderer = text.structures?.renderer;
+    return (renderer?.kilnSkinsLoaded ?? 0) + (renderer?.kilnSkinFallbacks ?? 0) > 0;
+  }, null, { timeout: 12000 });
+  await page.waitForTimeout(300);
+  const textAfterSkin = await page.evaluate(() => JSON.parse(window.render_game_to_text()));
   const canvasProbe = await canvasPixelProbe(page);
   const screenshot = path.join(outDir, `${name}-route-markers.png`);
   const screenshotBuffer = await page.screenshot({ path: screenshot, fullPage: true });
   const screenshotProbe = pngPixelProbe(screenshotBuffer);
   await page.close();
 
-  const renderer = seeded.textStructures?.renderer;
+  const renderer = textAfterSkin.structures?.renderer ?? seeded.textStructures?.renderer;
   const routeSilhouettes = renderer?.routeSilhouettes ?? 0;
   const routeReadabilityRoles = renderer?.routeReadabilityRoles ?? 0;
+  const kilnSkinsLoaded = renderer?.kilnSkinsLoaded ?? 0;
+  const kilnSkinFallbacks = renderer?.kilnSkinFallbacks ?? 0;
+  const waystoneModelResponses = kilnAssetResponses.filter((asset) => asset.url.includes('/assets/kiln/models/waystone.glb'));
+  const generatedRequests = kilnAssetRequests.filter((url) => url.includes('/assets/kiln/generated/'));
   const waystones = seeded.navigation?.waystones?.length ?? 0;
   const caveAnchors = seeded.navigation?.caveAnchors?.length ?? 0;
   if (routeSilhouettes < 2) throw new Error(`${name}: expected at least 2 route marker silhouettes, got ${routeSilhouettes}`);
   if (routeReadabilityRoles < 18) throw new Error(`${name}: expected at least 18 marker roles, got ${routeReadabilityRoles}`);
+  if (kilnSkinsLoaded < 1) throw new Error(`${name}: expected at least one loaded Kiln waystone skin, got ${kilnSkinsLoaded}`);
+  if (kilnSkinFallbacks > 0) throw new Error(`${name}: Kiln skin fallback triggered ${kilnSkinFallbacks} time(s)`);
+  if (!waystoneModelResponses.some((asset) => asset.status >= 200 && asset.status < 300)) throw new Error(`${name}: missing successful models/waystone.glb response`);
+  if (generatedRequests.length > 0) throw new Error(`${name}: runtime requested raw generated Kiln assets ${JSON.stringify(generatedRequests)}`);
   if (waystones < 1 || caveAnchors < 1) throw new Error(`${name}: missing route readback waystones/caveAnchors`);
   if (!canvasProbe.ok && !screenshotProbe.ok) throw new Error(`${name}: pixel probe failed ${JSON.stringify({ canvasProbe, screenshotProbe })}`);
   if (consoleErrors.length || pageErrors.length) throw new Error(`${name}: browser errors ${JSON.stringify({ consoleErrors, pageErrors })}`);
@@ -268,6 +292,12 @@ async function runViewport(browser, targetUrl, name, viewport) {
     viewport,
     screenshot,
     renderer,
+    kilnAssets: {
+      requests: kilnAssetRequests,
+      responses: kilnAssetResponses,
+      waystoneModelResponses,
+      generatedRequests,
+    },
     waystones,
     caveAnchors,
     pixelProbe: { canvas: canvasProbe, screenshot: screenshotProbe },

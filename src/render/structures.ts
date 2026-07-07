@@ -2,6 +2,7 @@ import * as THREE from 'three/webgpu';
 import type { Goldberg } from '../geo/goldberg';
 import type { Layers } from '../world/layers';
 import type { StructureSave } from '../sim/structures';
+import type { KilnAssetSnapshot, StructureSkinProvider } from './kilnAssets';
 
 type PropFactory = () => THREE.Group;
 type StructureSilhouette = 'cave-anchor-belay-marker' | 'waystone-attuned-marker';
@@ -562,8 +563,9 @@ const FACTORIES: Record<StructureSave['item'], PropFactory> = {
 export class StructureRenderer {
   readonly group = new THREE.Group();
   private readonly objects = new Map<number, THREE.Group>();
+  private readonly kilnSkinStatus = new Map<number, 'pending' | 'loaded' | 'fallback'>();
 
-  constructor(scene: THREE.Scene) {
+  constructor(scene: THREE.Scene, private readonly kilnAssets?: StructureSkinProvider) {
     this.group.name = 'placed-structures';
     scene.add(this.group);
   }
@@ -574,6 +576,7 @@ export class StructureRenderer {
       if (!wanted.has(id)) {
         this.group.remove(obj);
         this.objects.delete(id);
+        this.kilnSkinStatus.delete(id);
       }
     }
     for (const s of structures) {
@@ -582,6 +585,7 @@ export class StructureRenderer {
       obj.userData.structureId = s.id;
       this.objects.set(s.id, obj);
       this.group.add(obj);
+      this.attachKilnSkin(s, obj);
     }
   }
 
@@ -773,17 +777,77 @@ export class StructureRenderer {
     });
   }
 
-  stats(): { groups: number; meshes: number; routeSilhouettes: number; routeReadabilityRoles: number } {
+  private attachKilnSkin(structure: StructureSave, obj: THREE.Group): void {
+    if (!this.kilnAssets || structure.item !== 'waystone') return;
+    this.kilnSkinStatus.set(structure.id, 'pending');
+    obj.userData.kilnSkinStatus = 'pending';
+    void this.kilnAssets.createStructureSkin('waystone')
+      .then((skin) => {
+        const current = this.objects.get(structure.id);
+        if (current !== obj || obj.parent !== this.group) return;
+        if (!skin) {
+          this.kilnSkinStatus.set(structure.id, 'fallback');
+          obj.userData.kilnSkinStatus = 'fallback';
+          return;
+        }
+        obj.add(skin.object);
+        this.hideProceduralParts(obj, skin.hideProceduralNames);
+        this.kilnSkinStatus.set(structure.id, 'loaded');
+        obj.userData.kilnSkinStatus = 'loaded';
+        obj.userData.kilnAssetSlug = skin.slug;
+        obj.userData.kilnAssetFile = skin.manifest.file;
+      })
+      .catch((err: unknown) => {
+        const current = this.objects.get(structure.id);
+        if (current !== obj || obj.parent !== this.group) return;
+        this.kilnSkinStatus.set(structure.id, 'fallback');
+        obj.userData.kilnSkinStatus = 'fallback';
+        obj.userData.kilnSkinError = err instanceof Error ? err.message : String(err);
+      });
+  }
+
+  private hideProceduralParts(obj: THREE.Group, names: readonly string[]): void {
+    const hidden = new Set(names);
+    obj.traverse((child) => {
+      if (hidden.has(child.name)) child.visible = false;
+    });
+  }
+
+  stats(): {
+    groups: number;
+    meshes: number;
+    routeSilhouettes: number;
+    routeReadabilityRoles: number;
+    kilnSkinsLoaded: number;
+    kilnSkinsPending: number;
+    kilnSkinFallbacks: number;
+    kilnAssets?: KilnAssetSnapshot;
+  } {
     let meshes = 0;
     const routeSilhouettes = new Set<string>();
     const routeReadabilityRoles = new Set<string>();
+    let kilnSkinsLoaded = 0;
+    let kilnSkinsPending = 0;
+    let kilnSkinFallbacks = 0;
     for (const obj of this.objects.values()) {
       if (typeof obj.userData.structureSilhouette === 'string') routeSilhouettes.add(obj.userData.structureSilhouette);
+      if (obj.userData.kilnSkinStatus === 'loaded') kilnSkinsLoaded++;
+      if (obj.userData.kilnSkinStatus === 'pending') kilnSkinsPending++;
+      if (obj.userData.kilnSkinStatus === 'fallback') kilnSkinFallbacks++;
       obj.traverse((child) => {
         if ((child as THREE.Mesh).isMesh) meshes++;
         if (typeof child.userData.structureReadabilityRole === 'string') routeReadabilityRoles.add(child.userData.structureReadabilityRole);
       });
     }
-    return { groups: this.objects.size, meshes, routeSilhouettes: routeSilhouettes.size, routeReadabilityRoles: routeReadabilityRoles.size };
+    return {
+      groups: this.objects.size,
+      meshes,
+      routeSilhouettes: routeSilhouettes.size,
+      routeReadabilityRoles: routeReadabilityRoles.size,
+      kilnSkinsLoaded,
+      kilnSkinsPending,
+      kilnSkinFallbacks,
+      kilnAssets: this.kilnAssets?.snapshot?.(),
+    };
   }
 }

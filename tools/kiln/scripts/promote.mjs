@@ -17,16 +17,37 @@ const GEN = resolve(ROOT, 'generated');
 const MODELS = resolve(ROOT, 'models');
 const MANIFEST = resolve(ROOT, 'ASSET_MANIFEST.json');
 
+function assertGlb(file, slug) {
+  const bytes = readFileSync(file);
+  if (bytes.length < 12) throw new Error(`${slug}: ${file} is too small to be a GLB`);
+  const magic = bytes.toString('ascii', 0, 4);
+  const version = bytes.readUInt32LE(4);
+  const declaredLength = bytes.readUInt32LE(8);
+  if (magic !== 'glTF') throw new Error(`${slug}: ${file} has GLB magic ${JSON.stringify(magic)}, expected glTF`);
+  if (version !== 2) throw new Error(`${slug}: ${file} is GLB version ${version}, expected 2`);
+  if (declaredLength !== bytes.length) throw new Error(`${slug}: ${file} declares ${declaredLength} bytes but is ${bytes.length}`);
+}
+
+const plan = [];
+let skipped = 0;
+for (const a of CATALOG.assets) {
+  if (a.unused) {
+    skipped++;
+    continue;
+  }
+  const src = resolve(GEN, a.slug, 'model.glb');
+  if (!existsSync(src)) throw new Error(`${a.slug}: no GLB in generated/; run the raw proof and regenerate before promotion`);
+  assertGlb(src, a.slug);
+  plan.push({ slug: a.slug, src, dst: resolve(MODELS, `${a.slug}.glb`) });
+}
+
 // clean models/ so removed/renamed assets don't linger
 if (existsSync(MODELS)) for (const f of readdirSync(MODELS)) rmSync(resolve(MODELS, f), { force: true });
 mkdirSync(MODELS, { recursive: true });
 
-let promoted = 0, skipped = 0;
-for (const a of CATALOG.assets) {
-  const src = resolve(GEN, a.slug, 'model.glb');
-  if (a.unused) { skipped++; continue; }
-  if (!existsSync(src)) { console.warn(`  ! ${a.slug}: no GLB in generated/, skipped`); skipped++; continue; }
-  copyFileSync(src, resolve(MODELS, `${a.slug}.glb`));
+let promoted = 0;
+for (const asset of plan) {
+  copyFileSync(asset.src, asset.dst);
   promoted++;
 }
 

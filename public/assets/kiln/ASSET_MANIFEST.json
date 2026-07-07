@@ -61,7 +61,8 @@
       "paletteId": "sphere-planet",
       "kilnTris": 1612,
       "instanceability": "C",
-      "source": "generated/workbench/model.glb (gitignored raw drop)"
+      "source": "generated/workbench/model.glb (gitignored raw drop)",
+      "replaces": "src/render/structures.ts makeWorkbench()"
     },
     {
       "slug": "chest",
@@ -103,7 +104,8 @@
       "paletteId": "sphere-planet",
       "kilnTris": 2400,
       "instanceability": "B",
-      "source": "generated/chest/model.glb (gitignored raw drop)"
+      "source": "generated/chest/model.glb (gitignored raw drop)",
+      "replaces": "src/render/structures.ts makeChest()"
     },
     {
       "slug": "campfire",
@@ -145,7 +147,8 @@
       "paletteId": "sphere-planet",
       "kilnTris": 3068,
       "instanceability": "B",
-      "source": "generated/campfire/model.glb (gitignored raw drop)"
+      "source": "generated/campfire/model.glb (gitignored raw drop)",
+      "replaces": "src/render/structures.ts makeCampfire()"
     },
     {
       "slug": "door-kit",
@@ -189,7 +192,8 @@
       "instanceability": "B",
       "source": "generated/door-kit/model.glb (gitignored raw drop)",
       "modularKit": true,
-      "wiringRisk": "proportion/snapping: no shared dimensional contract with the rest of the house kit — normalize to grid before assembly"
+      "wiringRisk": "proportion/snapping: no shared dimensional contract with the rest of the house kit — normalize to grid before assembly",
+      "replaces": "src/render/structures.ts makeDoorKit() as decorative skin inside code-authored build socket"
     },
     {
       "slug": "window-frame",
@@ -233,7 +237,8 @@
       "instanceability": "C",
       "source": "generated/window-frame/model.glb (gitignored raw drop)",
       "modularKit": true,
-      "wiringRisk": "proportion/snapping: no shared dimensional contract with the rest of the house kit — normalize to grid before assembly"
+      "wiringRisk": "proportion/snapping: no shared dimensional contract with the rest of the house kit — normalize to grid before assembly",
+      "replaces": "src/render/structures.ts makeWindowFrame() as decorative skin inside code-authored build socket"
     },
     {
       "slug": "dock-segment",
@@ -277,7 +282,8 @@
       "instanceability": "A",
       "source": "generated/dock-segment/model.glb (gitignored raw drop)",
       "modularKit": true,
-      "wiringRisk": "proportion/snapping: no shared dimensional contract with the rest of the house kit — normalize to grid before assembly"
+      "wiringRisk": "proportion/snapping: no shared dimensional contract with the rest of the house kit — normalize to grid before assembly",
+      "replaces": "src/render/structures.ts makeDockSegment() as decorative skin inside code-authored build socket"
     },
     {
       "slug": "roof-bundle",
@@ -287,7 +293,7 @@
       "tier": "standard",
       "footprint": "single",
       "status": "ready",
-      "replaces": "procedural roof panels in the house/structure builder",
+      "replaces": "src/render/structures.ts roof/house-kit procedural panel placeholder as decorative skin inside code-authored build socket",
       "prompt": "A single low-poly triangular prism wedge made of weathered wooden planks: two equal flat rectangular plank panels leaning together and joined along their top edge to form one long peaked ridge, hollow and open underneath, like a simple plank tent or wedge lying on the ground. Only this one wedge shape by itself, nothing else, no walls, no rooms, no doors, no windows.",
       "file": "models/roof-bundle.glb",
       "bytes": 23812,
@@ -364,7 +370,8 @@
       "paletteId": "sphere-planet",
       "kilnTris": 3724,
       "instanceability": "B",
-      "source": "generated/bedroll/model.glb (gitignored raw drop)"
+      "source": "generated/bedroll/model.glb (gitignored raw drop)",
+      "replaces": "src/render/structures.ts makeBedroll()"
     },
     {
       "slug": "crop-plot",
@@ -406,7 +413,8 @@
       "paletteId": "sphere-planet",
       "kilnTris": 2606,
       "instanceability": "B",
-      "source": "generated/crop-plot/model.glb (gitignored raw drop)"
+      "source": "generated/crop-plot/model.glb (gitignored raw drop)",
+      "replaces": "src/render/structures.ts makeCropPlot()"
     },
     {
       "slug": "compost-bin",
@@ -450,7 +458,8 @@
       "instanceability": "B",
       "source": "generated/compost-bin/model.glb (gitignored raw drop)",
       "modularKit": true,
-      "wiringRisk": "proportion/snapping: no shared dimensional contract with the rest of the house kit — normalize to grid before assembly"
+      "wiringRisk": "proportion/snapping: no shared dimensional contract with the rest of the house kit — normalize to grid before assembly",
+      "replaces": "src/render/structures.ts makeCompostBin() as decorative skin inside code-authored utility socket"
     },
     {
       "slug": "rain-cistern",
@@ -492,7 +501,8 @@
       "paletteId": "sphere-planet",
       "kilnTris": 1516,
       "instanceability": "C",
-      "source": "generated/rain-cistern/model.glb (gitignored raw drop)"
+      "source": "generated/rain-cistern/model.glb (gitignored raw drop)",
+      "replaces": "src/render/structures.ts makeRainCistern()"
     },
     {
       "slug": "root-cellar",
@@ -536,7 +546,8 @@
       "instanceability": "B",
       "source": "generated/root-cellar/model.glb (gitignored raw drop)",
       "modularKit": true,
-      "wiringRisk": "proportion/snapping: no shared dimensional contract with the rest of the house kit — normalize to grid before assembly"
+      "wiringRisk": "proportion/snapping: no shared dimensional contract with the rest of the house kit — normalize to grid before assembly",
+      "replaces": "src/render/structures.ts makeRootCellar() as decorative skin inside code-authored utility socket"
     },
     {
       "slug": "cave-anchor",
@@ -578,7 +589,8 @@
       "paletteId": "sphere-planet",
       "kilnTris": 3040,
       "instanceability": "B",
-      "source": "generated/cave-anchor/model.glb (gitignored raw drop)"
+      "source": "generated/cave-anchor/model.glb (gitignored raw drop)",
+      "replaces": "src/render/structures.ts makeCaveAnchor() with route glyph overlays retained"
     },
     {
       "slug": "fish-trap",
@@ -620,7 +632,8 @@
       "paletteId": "sphere-planet",
       "kilnTris": 8308,
       "instanceability": "C",
-      "source": "generated/fish-trap/model.glb (gitignored raw drop)"
+      "source": "generated/fish-trap/model.glb (gitignored raw drop)",
+      "replaces": "src/render/structures.ts makeFishTrap()"
     },
     {
       "slug": "shore-net",
@@ -662,7 +675,8 @@
       "paletteId": "sphere-planet",
       "kilnTris": 5712,
       "instanceability": "B",
-      "source": "generated/shore-net/model.glb (gitignored raw drop)"
+      "source": "generated/shore-net/model.glb (gitignored raw drop)",
+      "replaces": "src/render/structures.ts makeShoreNet()"
     },
     {
       "slug": "drying-rack",
@@ -704,7 +718,8 @@
       "paletteId": "sphere-planet",
       "kilnTris": 3232,
       "instanceability": "A",
-      "source": "generated/drying-rack/model.glb (gitignored raw drop)"
+      "source": "generated/drying-rack/model.glb (gitignored raw drop)",
+      "replaces": "src/render/structures.ts makeDryingRack()"
     },
     {
       "slug": "weather-vane",
@@ -746,7 +761,8 @@
       "paletteId": "sphere-planet",
       "kilnTris": 1180,
       "instanceability": "B",
-      "source": "generated/weather-vane/model.glb (gitignored raw drop)"
+      "source": "generated/weather-vane/model.glb (gitignored raw drop)",
+      "replaces": "src/render/structures.ts makeWeatherVane() with spinning needle overlay retained"
     },
     {
       "slug": "lantern-post",
@@ -788,7 +804,8 @@
       "paletteId": "sphere-planet",
       "kilnTris": 996,
       "instanceability": "C",
-      "source": "generated/lantern-post/model.glb (gitignored raw drop)"
+      "source": "generated/lantern-post/model.glb (gitignored raw drop)",
+      "replaces": "src/render/structures.ts makeLantern()"
     },
     {
       "slug": "waystone",
@@ -830,7 +847,8 @@
       "paletteId": "sphere-planet",
       "kilnTris": 910,
       "instanceability": "B",
-      "source": "generated/waystone/model.glb (gitignored raw drop)"
+      "source": "generated/waystone/model.glb (gitignored raw drop)",
+      "replaces": "src/render/structures.ts makeWaystone() with attuned route glyph overlays retained"
     },
     {
       "slug": "shrine-first-hearth",
@@ -872,7 +890,8 @@
       "paletteId": "sphere-planet",
       "kilnTris": 2068,
       "instanceability": "B",
-      "source": "generated/shrine-first-hearth/model.glb (gitignored raw drop)"
+      "source": "generated/shrine-first-hearth/model.glb (gitignored raw drop)",
+      "replaces": "src/render/landmarks.ts makeLandmark() / hearth-ring domain landmark shell"
     },
     {
       "slug": "shrine-rainward-gate",
@@ -914,7 +933,8 @@
       "paletteId": "sphere-planet",
       "kilnTris": 540,
       "instanceability": "B",
-      "source": "generated/shrine-rainward-gate/model.glb (gitignored raw drop)"
+      "source": "generated/shrine-rainward-gate/model.glb (gitignored raw drop)",
+      "replaces": "src/render/landmarks.ts makeLandmark() / rain-fins domain landmark shell"
     },
     {
       "slug": "shrine-salt-mirror",
@@ -956,7 +976,8 @@
       "paletteId": "sphere-planet",
       "kilnTris": 7012,
       "instanceability": "C",
-      "source": "generated/shrine-salt-mirror/model.glb (gitignored raw drop)"
+      "source": "generated/shrine-salt-mirror/model.glb (gitignored raw drop)",
+      "replaces": "src/render/landmarks.ts makeLandmark() / salt-ribs domain landmark shell"
     },
     {
       "slug": "shrine-high-lantern",
@@ -998,7 +1019,8 @@
       "paletteId": "sphere-planet",
       "kilnTris": 1448,
       "instanceability": "B",
-      "source": "generated/shrine-high-lantern/model.glb (gitignored raw drop)"
+      "source": "generated/shrine-high-lantern/model.glb (gitignored raw drop)",
+      "replaces": "src/render/landmarks.ts makeLandmark() / lamp-spire domain landmark shell"
     },
     {
       "slug": "shrine-root-vault",
@@ -1040,7 +1062,8 @@
       "paletteId": "sphere-planet",
       "kilnTris": 14640,
       "instanceability": "B",
-      "source": "generated/shrine-root-vault/model.glb (gitignored raw drop)"
+      "source": "generated/shrine-root-vault/model.glb (gitignored raw drop)",
+      "replaces": "src/render/landmarks.ts makeLandmark() / root-knuckles domain landmark shell"
     },
     {
       "slug": "shrine-red-cairn",
@@ -1082,7 +1105,8 @@
       "paletteId": "sphere-planet",
       "kilnTris": 1100,
       "instanceability": "B",
-      "source": "generated/shrine-red-cairn/model.glb (gitignored raw drop)"
+      "source": "generated/shrine-red-cairn/model.glb (gitignored raw drop)",
+      "replaces": "src/render/landmarks.ts makeLandmark() / red-scree domain landmark shell"
     },
     {
       "slug": "shrine-snow-dial",
@@ -1124,7 +1148,8 @@
       "paletteId": "sphere-planet",
       "kilnTris": 1316,
       "instanceability": "C",
-      "source": "generated/shrine-snow-dial/model.glb (gitignored raw drop)"
+      "source": "generated/shrine-snow-dial/model.glb (gitignored raw drop)",
+      "replaces": "src/render/landmarks.ts makeLandmark() / snow-steps domain landmark shell"
     },
     {
       "slug": "shrine-glass-shoal",
@@ -1166,7 +1191,8 @@
       "paletteId": "sphere-planet",
       "kilnTris": 1876,
       "instanceability": "C",
-      "source": "generated/shrine-glass-shoal/model.glb (gitignored raw drop)"
+      "source": "generated/shrine-glass-shoal/model.glb (gitignored raw drop)",
+      "replaces": "src/render/landmarks.ts makeLandmark() / glass-teeth domain landmark shell"
     },
     {
       "slug": "shrine-storm-seat",
@@ -1208,7 +1234,8 @@
       "paletteId": "sphere-planet",
       "kilnTris": 2854,
       "instanceability": "B",
-      "source": "generated/shrine-storm-seat/model.glb (gitignored raw drop)"
+      "source": "generated/shrine-storm-seat/model.glb (gitignored raw drop)",
+      "replaces": "src/render/landmarks.ts makeLandmark() / storm-bowl domain landmark shell"
     },
     {
       "slug": "shrine-reed-crown",
@@ -1250,7 +1277,8 @@
       "paletteId": "sphere-planet",
       "kilnTris": 6290,
       "instanceability": "C",
-      "source": "generated/shrine-reed-crown/model.glb (gitignored raw drop)"
+      "source": "generated/shrine-reed-crown/model.glb (gitignored raw drop)",
+      "replaces": "src/render/landmarks.ts makeLandmark() / reed-crown domain landmark shell"
     },
     {
       "slug": "shrine-deep-bell",
@@ -1292,7 +1320,8 @@
       "paletteId": "sphere-planet",
       "kilnTris": 2676,
       "instanceability": "B",
-      "source": "generated/shrine-deep-bell/model.glb (gitignored raw drop)"
+      "source": "generated/shrine-deep-bell/model.glb (gitignored raw drop)",
+      "replaces": "src/render/landmarks.ts makeLandmark() / bell-stones domain landmark shell"
     },
     {
       "slug": "shrine-last-horizon",
@@ -1334,7 +1363,8 @@
       "paletteId": "sphere-planet",
       "kilnTris": 3160,
       "instanceability": "B",
-      "source": "generated/shrine-last-horizon/model.glb (gitignored raw drop)"
+      "source": "generated/shrine-last-horizon/model.glb (gitignored raw drop)",
+      "replaces": "src/render/landmarks.ts makeLandmark() / horizon-vanes domain landmark shell"
     },
     {
       "slug": "node-hearth-coal",
@@ -1376,7 +1406,8 @@
       "paletteId": "sphere-planet",
       "kilnTris": 2736,
       "instanceability": "B",
-      "source": "generated/node-hearth-coal/model.glb (gitignored raw drop)"
+      "source": "generated/node-hearth-coal/model.glb (gitignored raw drop)",
+      "replaces": "src/render/domainResources.ts hearthCoal resource silhouette"
     },
     {
       "slug": "node-rain-reed",
@@ -1418,7 +1449,8 @@
       "paletteId": "sphere-planet",
       "kilnTris": 5036,
       "instanceability": "B",
-      "source": "generated/node-rain-reed/model.glb (gitignored raw drop)"
+      "source": "generated/node-rain-reed/model.glb (gitignored raw drop)",
+      "replaces": "src/render/domainResources.ts rainReed resource silhouette"
     },
     {
       "slug": "node-salt-shell",
@@ -1460,7 +1492,8 @@
       "paletteId": "sphere-planet",
       "kilnTris": 3632,
       "instanceability": "B",
-      "source": "generated/node-salt-shell/model.glb (gitignored raw drop)"
+      "source": "generated/node-salt-shell/model.glb (gitignored raw drop)",
+      "replaces": "src/render/domainResources.ts saltShell resource silhouette"
     },
     {
       "slug": "node-lantern-shard",
@@ -1502,7 +1535,8 @@
       "paletteId": "sphere-planet",
       "kilnTris": 1964,
       "instanceability": "B",
-      "source": "generated/node-lantern-shard/model.glb (gitignored raw drop)"
+      "source": "generated/node-lantern-shard/model.glb (gitignored raw drop)",
+      "replaces": "src/render/domainResources.ts lanternShard resource silhouette"
     },
     {
       "slug": "node-root-pod",
@@ -1544,7 +1578,8 @@
       "paletteId": "sphere-planet",
       "kilnTris": 13836,
       "instanceability": "B",
-      "source": "generated/node-root-pod/model.glb (gitignored raw drop)"
+      "source": "generated/node-root-pod/model.glb (gitignored raw drop)",
+      "replaces": "src/render/domainResources.ts rootPod resource silhouette"
     },
     {
       "slug": "node-red-nodule",
@@ -1586,7 +1621,8 @@
       "paletteId": "sphere-planet",
       "kilnTris": 836,
       "instanceability": "B",
-      "source": "generated/node-red-nodule/model.glb (gitignored raw drop)"
+      "source": "generated/node-red-nodule/model.glb (gitignored raw drop)",
+      "replaces": "src/render/domainResources.ts redNodule resource silhouette"
     },
     {
       "slug": "node-snow-bloom",
@@ -1628,7 +1664,8 @@
       "paletteId": "sphere-planet",
       "kilnTris": 1236,
       "instanceability": "C",
-      "source": "generated/node-snow-bloom/model.glb (gitignored raw drop)"
+      "source": "generated/node-snow-bloom/model.glb (gitignored raw drop)",
+      "replaces": "src/render/domainResources.ts snowBloom resource silhouette"
     },
     {
       "slug": "node-glass-shard",
@@ -1670,7 +1707,8 @@
       "paletteId": "sphere-planet",
       "kilnTris": 830,
       "instanceability": "C",
-      "source": "generated/node-glass-shard/model.glb (gitignored raw drop)"
+      "source": "generated/node-glass-shard/model.glb (gitignored raw drop)",
+      "replaces": "src/render/domainResources.ts glassShard resource silhouette"
     },
     {
       "slug": "node-storm-amber",
@@ -1712,7 +1750,8 @@
       "paletteId": "sphere-planet",
       "kilnTris": 2680,
       "instanceability": "C",
-      "source": "generated/node-storm-amber/model.glb (gitignored raw drop)"
+      "source": "generated/node-storm-amber/model.glb (gitignored raw drop)",
+      "replaces": "src/render/domainResources.ts stormAmber resource silhouette"
     },
     {
       "slug": "node-reed-kelp",
@@ -1754,7 +1793,8 @@
       "paletteId": "sphere-planet",
       "kilnTris": 2484,
       "instanceability": "C",
-      "source": "generated/node-reed-kelp/model.glb (gitignored raw drop)"
+      "source": "generated/node-reed-kelp/model.glb (gitignored raw drop)",
+      "replaces": "src/render/domainResources.ts reedKelp resource silhouette"
     },
     {
       "slug": "node-bell-crystal",
@@ -1796,7 +1836,8 @@
       "paletteId": "sphere-planet",
       "kilnTris": 3428,
       "instanceability": "B",
-      "source": "generated/node-bell-crystal/model.glb (gitignored raw drop)"
+      "source": "generated/node-bell-crystal/model.glb (gitignored raw drop)",
+      "replaces": "src/render/domainResources.ts bellCrystal resource silhouette"
     },
     {
       "slug": "node-horizon-shard",
@@ -1838,7 +1879,8 @@
       "paletteId": "sphere-planet",
       "kilnTris": 1044,
       "instanceability": "B",
-      "source": "generated/node-horizon-shard/model.glb (gitignored raw drop)"
+      "source": "generated/node-horizon-shard/model.glb (gitignored raw drop)",
+      "replaces": "src/render/domainResources.ts horizonShard resource silhouette"
     },
     {
       "slug": "creature-moss-puff",
@@ -1891,7 +1933,8 @@
       "paletteId": "sphere-planet",
       "kilnTris": 4918,
       "instanceability": "B",
-      "source": "generated/creature-moss-puff/model.glb (gitignored raw drop)"
+      "source": "generated/creature-moss-puff/model.glb (gitignored raw drop)",
+      "replaces": "src/render/nativeLife.ts makeMossPuff() node-transform replacement candidate"
     },
     {
       "slug": "creature-brambleback",
@@ -1944,7 +1987,8 @@
       "paletteId": "sphere-planet",
       "kilnTris": 1912,
       "instanceability": "B",
-      "source": "generated/creature-brambleback/model.glb (gitignored raw drop)"
+      "source": "generated/creature-brambleback/model.glb (gitignored raw drop)",
+      "replaces": "src/render/nativeLife.ts makeBrambleback() node-transform replacement candidate"
     },
     {
       "slug": "creature-shell-skitter",
@@ -1997,7 +2041,8 @@
       "paletteId": "sphere-planet",
       "kilnTris": 3476,
       "instanceability": "C",
-      "source": "generated/creature-shell-skitter/model.glb (gitignored raw drop)"
+      "source": "generated/creature-shell-skitter/model.glb (gitignored raw drop)",
+      "replaces": "src/render/nativeLife.ts makeShellSkitter() node-transform replacement candidate"
     },
     {
       "slug": "creature-reedback-grazer",
@@ -2050,7 +2095,8 @@
       "paletteId": "sphere-planet",
       "kilnTris": 3278,
       "instanceability": "A",
-      "source": "generated/creature-reedback-grazer/model.glb (gitignored raw drop)"
+      "source": "generated/creature-reedback-grazer/model.glb (gitignored raw drop)",
+      "replaces": "src/render/nativeLife.ts makeReedbackGrazer() node-transform replacement candidate"
     },
     {
       "slug": "creature-cave-belljaw",
@@ -2103,7 +2149,8 @@
       "paletteId": "sphere-planet",
       "kilnTris": 1340,
       "instanceability": "B",
-      "source": "generated/creature-cave-belljaw/model.glb (gitignored raw drop)"
+      "source": "generated/creature-cave-belljaw/model.glb (gitignored raw drop)",
+      "replaces": "src/render/nativeLife.ts makeCaveBelljaw() node-transform replacement candidate"
     },
     {
       "slug": "creature-cave-blinker",
@@ -2156,7 +2203,8 @@
       "paletteId": "sphere-planet",
       "kilnTris": 9352,
       "instanceability": "B",
-      "source": "generated/creature-cave-blinker/model.glb (gitignored raw drop)"
+      "source": "generated/creature-cave-blinker/model.glb (gitignored raw drop)",
+      "replaces": "src/render/nativeLife.ts makeCaveBlinker() node-transform replacement candidate"
     },
     {
       "slug": "creature-scree-snapper",
@@ -2209,7 +2257,8 @@
       "paletteId": "sphere-planet",
       "kilnTris": 516,
       "instanceability": "B",
-      "source": "generated/creature-scree-snapper/model.glb (gitignored raw drop)"
+      "source": "generated/creature-scree-snapper/model.glb (gitignored raw drop)",
+      "replaces": "src/render/nativeLife.ts makeScreeSnapper() node-transform replacement candidate"
     },
     {
       "slug": "creature-storm-burr",
@@ -2262,7 +2311,8 @@
       "paletteId": "sphere-planet",
       "kilnTris": 2068,
       "instanceability": "B",
-      "source": "generated/creature-storm-burr/model.glb (gitignored raw drop)"
+      "source": "generated/creature-storm-burr/model.glb (gitignored raw drop)",
+      "replaces": "src/render/nativeLife.ts makeStormBurr() node-transform replacement candidate"
     },
     {
       "slug": "creature-tide-lurker",
@@ -2315,7 +2365,8 @@
       "paletteId": "sphere-planet",
       "kilnTris": 5112,
       "instanceability": "C",
-      "source": "generated/creature-tide-lurker/model.glb (gitignored raw drop)"
+      "source": "generated/creature-tide-lurker/model.glb (gitignored raw drop)",
+      "replaces": "src/render/nativeLife.ts makeTideLurker() node-transform replacement candidate"
     },
     {
       "slug": "cave-mouth-arch",
@@ -2326,7 +2377,7 @@
       "footprint": "landmark",
       "status": "unused",
       "unusedReason": "Caves are real carved voxel voids; a hex-sized arch prop reads as a small door inside a bigger hole. Keep the bare carved entrance.",
-      "replaces": "src/render/caveMouths.ts makeMouth() [arch]",
+      "replaces": "src/render/caveMouths.ts makeMouth() [arch] retained; GLB rejected by manifest",
       "prompt": "A weathered stone cave-entrance arch: two leaning rock piers and a lintel, mossy rugged rock, a natural gateway.",
       "file": null,
       "bytes": 352888,
@@ -2370,7 +2421,7 @@
       "footprint": "landmark",
       "status": "unused",
       "unusedReason": "Caves are real carved voxel voids; a hex-sized arch prop reads as a small door inside a bigger hole. Keep the bare carved entrance.",
-      "replaces": "src/render/caveMouths.ts makeMouth() [dryCave]",
+      "replaces": "src/render/caveMouths.ts makeMouth() [dryCave] retained; GLB rejected by manifest",
       "prompt": "A rocky cave mouth framed by rugged stone lips with a stacked-stone cairn marker beside the opening.",
       "file": null,
       "bytes": 32964,
@@ -2414,7 +2465,7 @@
       "footprint": "landmark",
       "status": "unused",
       "unusedReason": "Caves are real carved voxel voids; a hex-sized arch prop reads as a small door inside a bigger hole. Keep the bare carved entrance.",
-      "replaces": "src/render/caveMouths.ts makeMouth() [seaCave]",
+      "replaces": "src/render/caveMouths.ts makeMouth() [seaCave] retained; GLB rejected by manifest",
       "prompt": "A sea-cave mouth in wet dark rock with a stacked-stone cairn and a horizontal tide-line mark.",
       "file": null,
       "bytes": 284732,
@@ -2457,7 +2508,7 @@
       "tier": "standard",
       "footprint": "single",
       "status": "ready",
-      "replaces": "src/render procedural parametric conifer (ambient scatter)",
+      "replaces": "src/world/trees.ts + src/render/mesher.ts emitTree() / instanced scatter replacement candidate",
       "prompt": "A simple stylized low-poly pine tree made of smooth solid shapes: one short straight brown trunk, topped by two or three smooth solid green cones stacked to a rounded point. The foliage is smooth and simple like clean geometric cones, NOT spiky. No individual needles, no separate branches, no twigs, no loose spikes, no clutter, no random shapes sticking out. Entirely green, no snow. Clean tidy silhouette, one neat object.",
       "file": "models/tree-pine.glb",
       "bytes": 24488,
@@ -2500,7 +2551,7 @@
       "tier": "standard",
       "footprint": "single",
       "status": "ready",
-      "replaces": "src/render procedural broadleaf (if any)",
+      "replaces": "src/world/trees.ts + future instanced broadleaf scatter layer",
       "prompt": "A stylized low-poly broadleaf tree: a faceted trunk and a rounded leafy green canopy, a single clean mesh.",
       "file": "models/tree-broadleaf.glb",
       "bytes": 217496,
@@ -2575,7 +2626,8 @@
       "paletteId": "sphere-planet",
       "kilnTris": 3876,
       "instanceability": "B",
-      "source": "generated/tree-dead-snag/model.glb (gitignored raw drop)"
+      "source": "generated/tree-dead-snag/model.glb (gitignored raw drop)",
+      "replaces": "src/world/trees.ts + future instanced dead-snag scatter layer"
     },
     {
       "slug": "tree-shrub",
@@ -2617,7 +2669,8 @@
       "paletteId": "sphere-planet",
       "kilnTris": 3524,
       "instanceability": "B",
-      "source": "generated/tree-shrub/model.glb (gitignored raw drop)"
+      "source": "generated/tree-shrub/model.glb (gitignored raw drop)",
+      "replaces": "src/world/trees.ts + future instanced shrub scatter layer"
     },
     {
       "slug": "crater-emberfall",
@@ -2659,7 +2712,8 @@
       "paletteId": "sphere-planet",
       "kilnTris": 1598,
       "instanceability": "B",
-      "source": "generated/crater-emberfall/model.glb (gitignored raw drop)"
+      "source": "generated/crater-emberfall/model.glb (gitignored raw drop)",
+      "replaces": "src/render/skyfall.ts crater/emberfall shell"
     },
     {
       "slug": "crater-glassrain",
@@ -2701,7 +2755,8 @@
       "paletteId": "sphere-planet",
       "kilnTris": 1292,
       "instanceability": "C",
-      "source": "generated/crater-glassrain/model.glb (gitignored raw drop)"
+      "source": "generated/crater-glassrain/model.glb (gitignored raw drop)",
+      "replaces": "src/render/skyfall.ts crater/glassrain shell"
     },
     {
       "slug": "crater-starbloom",
@@ -2743,7 +2798,8 @@
       "paletteId": "sphere-planet",
       "kilnTris": 972,
       "instanceability": "B",
-      "source": "generated/crater-starbloom/model.glb (gitignored raw drop)"
+      "source": "generated/crater-starbloom/model.glb (gitignored raw drop)",
+      "replaces": "src/render/skyfall.ts crater/starbloom shell"
     },
     {
       "slug": "drop-wood-logs",
@@ -2785,7 +2841,8 @@
       "paletteId": "sphere-planet",
       "kilnTris": 2480,
       "instanceability": "B",
-      "source": "generated/drop-wood-logs/model.glb (gitignored raw drop)"
+      "source": "generated/drop-wood-logs/model.glb (gitignored raw drop)",
+      "replaces": "src/render/resourceDrops.ts wood drop group"
     },
     {
       "slug": "drop-ore-chunk",
@@ -2827,7 +2884,8 @@
       "paletteId": "sphere-planet",
       "kilnTris": 256,
       "instanceability": "B",
-      "source": "generated/drop-ore-chunk/model.glb (gitignored raw drop)"
+      "source": "generated/drop-ore-chunk/model.glb (gitignored raw drop)",
+      "replaces": "src/render/resourceDrops.ts ore/rock drop group"
     }
   ],
   "runtimePath": "public/assets/kiln/models/<slug>.glb (committed). Raw drops stay in generated/ (gitignored).",

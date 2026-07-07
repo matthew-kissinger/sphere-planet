@@ -3,6 +3,30 @@ Current operating goal: Hearth and Horizon full crafting-survival cycle under th
 
 ## 2026-07-07
 
+- Reconciled the parallel Kiln Drop 1 branch into the H4 DAG node instead of treating it
+  as a competing source of truth. Local `main` now carries the promoted pack with
+  `public/assets/kiln/ASSET_MANIFEST.json`, 61 committed GLBs under
+  `public/assets/kiln/models/`, and 3 unused cave-mouth records that stay rejected for
+  runtime because carved terrain entrances are stronger.
+- Hardened `npm run proof:kiln-assets` as the authoritative promoted-pack gate. The proof
+  now validates manifest/model parity, GLB headers and lengths, animation metadata, palette
+  ids, cave-mouth rejection, modular-kit wiring risk, tracked raw-drop hygiene, and local
+  generated provenance when present. Current result: 61 curated assets accepted, 5.12 MiB,
+  18 runtime pilot candidates, 43 deferred, 3 rejected, 19 warnings, 0 failures.
+- Merged the stale asset handoff into one canonical doc at `docs/kiln-asset-intake.md`.
+  `public/assets/kiln/HANDOFF.md` is now only a pointer. The doc records the promotion
+  order, source-of-truth split between proof/promote/build-manifest helpers, modular
+  house-kit snap risk, cave-mouth rejection, creature AnimationMixer follow-up, and the
+  room-for-wonder lane.
+- Wired the first constrained runtime pilot: `waystone` loads through
+  `src/render/kilnAssets.ts` as a manifest-driven decorative shell on top of the existing
+  procedural waystone socket. The code hides only `waystoneBase`, `waystoneCore`, and
+  `waystoneBand` after GLB success, preserving route glyph overlays, placement, collision,
+  route readback, and procedural fallback.
+- Extended `npm run proof:route-markers` so desktop and phone proof now assert a successful
+  `assets/kiln/models/waystone.glb` response, no `assets/kiln/generated/` runtime
+  requests, loaded Kiln skin diagnostics, route-marker readability stats, screenshots,
+  canvas pixels, and no page/console errors.
 - Corrected the current continuation back onto the explicit DAG after the user called out
   that subagents and graph execution were not visible enough. Opened H4 as the local
   critical-path node and deployed three parallel explorer lanes for generated-asset
