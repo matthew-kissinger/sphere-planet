@@ -8,11 +8,15 @@ import {
   homeScore,
   interactStructure,
   normalizeStructureSaves,
+  normalizeStructureYaw,
+  rotateStructure,
   rootCellarProvisionCapacity,
   rootCellarProvisionCount,
   shelterReport,
   spendRootCellarProvision,
   spendPlacedItem,
+  STRUCTURE_YAW_STEP,
+  structureYawTurn,
   structureStationInventory,
   transferChestMaterial,
   waystoneMarkLabel,
@@ -72,6 +76,29 @@ describe('Hearth and Horizon structures', () => {
     expect(spendPlacedItem(items, 'campfire')).toBe(true);
     expect(items.campfire).toBeUndefined();
     expect(spendPlacedItem(items, 'campfire')).toBe(false);
+  });
+
+  it('normalizes and rotates placed props in hex-facing steps', () => {
+    const structures: StructureSave[] = [];
+    const door = addStructure(structures, { item: 'doorKit', tile: 6, layer: 2, yaw: -STRUCTURE_YAW_STEP })!;
+    expect(door.yaw).toBeCloseTo(Math.PI * 2 - STRUCTURE_YAW_STEP);
+    expect(structureYawTurn(door.yaw)).toBe(5);
+
+    expect(rotateStructure(structures, door.id, 2)).toMatchObject({
+      ok: true,
+      id: door.id,
+      item: 'doorKit',
+      turn: 1,
+      message: 'rotated door kit to hex face 2',
+    });
+    expect(door.yaw).toBeCloseTo(STRUCTURE_YAW_STEP);
+    expect(rotateStructure(structures, door.id, -1)).toMatchObject({ ok: true, turn: 0 });
+    expect(door.yaw).toBeCloseTo(0);
+    expect(rotateStructure(structures, 999, 1)).toEqual({ ok: false, message: 'no structure' });
+
+    const normalized = normalizeStructureSaves([{ id: 4, item: 'windowFrame', tile: 8, layer: 2, yaw: Math.PI * 3 }], 20, 8);
+    expect(normalized[0].yaw).toBeCloseTo(Math.PI);
+    expect(normalizeStructureYaw(Number.NaN)).toBe(0);
   });
 
   it('saves dock segments and identifies them as fishing platforms', () => {

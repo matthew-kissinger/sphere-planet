@@ -34,6 +34,8 @@ export interface StructureSave {
   state?: StructureState;
 }
 
+export const STRUCTURE_YAW_STEP = Math.PI / 3;
+
 export interface StructureState {
   storage?: InventoryItems;
   lit?: boolean;
@@ -214,6 +216,15 @@ export interface StructureDismantleResult {
   blockers?: string[];
 }
 
+export interface StructureRotationResult {
+  ok: boolean;
+  message: string;
+  item?: PlaceableItemId;
+  id?: number;
+  yaw?: number;
+  turn?: number;
+}
+
 export interface RootCellarSpendResult {
   ok: boolean;
   cellarId?: number;
@@ -256,6 +267,18 @@ export function isPlaceableItemId(id: unknown): id is PlaceableItemId {
 
 export function placeableName(item: PlaceableItemId): string {
   return ITEM_DEFS[item].name;
+}
+
+export function normalizeStructureYaw(yaw: number): number {
+  if (!Number.isFinite(yaw)) return 0;
+  const tau = Math.PI * 2;
+  const value = yaw % tau;
+  return value < 0 ? value + tau : value;
+}
+
+export function structureYawTurn(yaw: number): number {
+  const step = Math.round(normalizeStructureYaw(yaw) / STRUCTURE_YAW_STEP);
+  return ((step % 6) + 6) % 6;
 }
 
 export function isWaystoneMark(value: unknown): value is WaystoneMark {
@@ -446,7 +469,7 @@ export function normalizeStructureSaves(raw: unknown, tileCount: number, layerCo
       item: entry.item,
       tile,
       layer,
-      yaw: Number.isFinite(entry.yaw) ? entry.yaw! : 0,
+      yaw: normalizeStructureYaw(Number.isFinite(entry.yaw) ? entry.yaw! : 0),
       state: normalizeState(entry.item, entry.state),
     });
   }
@@ -473,11 +496,38 @@ export function addStructure(structures: StructureSave[], input: PlaceStructureI
     item: input.item,
     tile,
     layer,
-    yaw: Number.isFinite(input.yaw) ? input.yaw : 0,
+    yaw: normalizeStructureYaw(Number.isFinite(input.yaw) ? input.yaw : 0),
     state: undefined,
   };
   structures.push(structure);
   return structure;
+}
+
+export function rotateStructure(structures: StructureSave[], id: number, turns = 1): StructureRotationResult {
+  const targetId = Math.trunc(id);
+  const structure = structures.find((entry) => entry.id === targetId);
+  if (!structure) return { ok: false, message: 'no structure' };
+  const turnDelta = Math.trunc(Number.isFinite(turns) ? turns : 0);
+  if (turnDelta === 0) {
+    return {
+      ok: true,
+      id: structure.id,
+      item: structure.item,
+      yaw: structure.yaw,
+      turn: structureYawTurn(structure.yaw),
+      message: `${placeableName(structure.item).toLowerCase()} already aligned`,
+    };
+  }
+  structure.yaw = normalizeStructureYaw(structure.yaw + turnDelta * STRUCTURE_YAW_STEP);
+  const turn = structureYawTurn(structure.yaw);
+  return {
+    ok: true,
+    id: structure.id,
+    item: structure.item,
+    yaw: structure.yaw,
+    turn,
+    message: `rotated ${placeableName(structure.item).toLowerCase()} to hex face ${turn + 1}`,
+  };
 }
 
 export function structureDismantleBlockers(structure: StructureSave): string[] {

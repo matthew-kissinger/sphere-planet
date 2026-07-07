@@ -3,6 +3,23 @@ Current operating goal: Hearth and Horizon full crafting-survival cycle under th
 
 ## 2026-07-07
 
+- Closed a first C1 build-placement contract slice. Placed structures now normalize yaw,
+  selected crafted props rotate in six hex-facing steps before placement, nearby placed
+  props can rotate afterward, and placement diagnostics expose selected build face plus
+  placed prop turns through `__world.structures()`, `__THREE_GAME_DIAGNOSTICS__`, and
+  `render_game_to_text`.
+- Added keyboard/gamepad-facing build controls: `Z/X` rotate the selected build piece or
+  nearest placed prop, while gamepad `LB+D-pad` rotates selected build pieces before falling
+  back to route pin/clear behavior. Safe pack-back still returns inactive props to inventory,
+  and active lit props keep their blocker path.
+- Added `npm run proof:c1-build-placement`. The proof places a small procedural house-kit
+  cluster, proves keyboard selected-placement rotation, synthetic gamepad build rotation,
+  placed-prop rotation, safe workbench pack-back inventory return, lit campfire pack
+  refusal, placement readback, screenshot pixel variance, and no page/console errors across
+  desktop keyboard, laptop keyboard, tablet touch, phone touch, and desktop gamepad profiles.
+- Recorded the two subagent lanes in the cycle docs: C1 rotate/pack proof is now the right
+  pre-GLB house-kit step, while B1 command extraction remains the next architecture move
+  before broader relocation/snap-grid rules widen.
 - Closed the F1 active-stop itinerary polish slice under the DAG/subagent workflow. Saved
   route itineraries can now move the active stop later or drop the active stop without
   clearing the whole route, and the pure helpers rebuild through the normalized route-plan

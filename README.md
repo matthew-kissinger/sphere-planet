@@ -48,6 +48,7 @@ muted).
 | **Q** | eat the best packed food to restore stamina and reduce exposure |
 | **B** | open crafting plus the Pack Ledger inventory readout: sticks, workbench, stone tools, stone blade, reed bow, whistling arrows, fishing rod, bait, campfire, chest, bedroll, crop plot, compost bin, rain cistern, root cellar, shelter kits, dock segment, fish trap, shore net, drying rack, weather vane, lantern, waystone, plane frame |
 | set button in crafting + RMB | place crafted camp/house props on the highlighted hex |
+| **Z / X** | rotate the selected crafted prop before placing it, or rotate a nearby placed prop by one hex face |
 | **R** | use a nearby placed prop: open chest storage, tend/harvest/fertilize/irrigate crop plots, turn scraps into compost at compost bins, catch rain at rain cisterns, cache or pull provisions at root cellars, cook at lit campfires, set/check/collect fish traps, set/check/comb shore nets, preserve food at drying racks, read weather vanes, light campfires/lanterns, set bedroll home/rest, cast from dock segments, or attune waystones; with no nearby prop, discover pentagon landmarks, gather active Skyfall craters, listen to active World Murmurs, read completed season afterglows, cast from shore with a fishing rod, or forage the current terrain |
 | **Shift+R** | pack a nearby empty/inactive placed prop back into inventory; stocked, lit, planted, home, attuned, anchored, or set trap props must be cleared first |
 | **M** | open the Route Slate: Hearth Beacon home signal, active Skyfall events, active World Murmurs, completed season afterglows, nearby cave/ecology pins, and after the first pentagon awakens, Horizon Chart target distance, turn direction, and expedition prep |
@@ -74,7 +75,7 @@ Long-press the touch `use` button to pack a nearby safe prop, matching `Shift+R`
 input: left stick moves, right stick looks, full stick/RB sprints, LB+right stick zooms,
 `A` jumps/swims up, `LT` descends, `X` mines/chops, `RT` builds, D-pad left/right cycles the
 hotbar, `B` uses or closes the open panel, `LB+B` packs a safe prop, `Y` toggles crafting,
-Back opens the Route Slate, D-pad left/right inside the slate drops or moves the active itinerary stop later, `LB+D-pad` pins or clears routes, and Start boards/stows the
+Back opens the Route Slate, D-pad left/right inside the slate drops or moves the active itinerary stop later, `LB+D-pad` rotates selected build pieces before placement or pins/clears routes, and Start boards/stows the
 plane. `LB+Back` toggles mute. While crafting or chest storage is open, D-pad moves the focused row/action, `A`
 confirms craft/place/transfer, and `B` closes the focused panel without leaking jump, use,
 hotbar, mine, or build input into the world.
@@ -110,7 +111,11 @@ shelter kits, fishing rod, dock segments, fish traps, compost bins, rain cistern
 weather vanes, waystones, field repair kits, pack frames, storm cloaks, a compact Stone
 Hatchet, a Stone Blade, a Reed Bow with whistling arrows, and a visible plane-frame recipe. Crafted camp and house props
 can be selected with their `set` button and placed on the spherical hex world; placed
-workbenches count as crafting stations even after they leave inventory. Stone axe, pick,
+workbenches count as crafting stations even after they leave inventory. Build placement now
+has an explicit facing contract: `Z/X` rotate the selected prop or nearby placed prop one
+hex face at a time, gamepad `LB+D-pad` rotates selected build pieces, and the C1 browser
+proof verifies rotated placement, safe pack-back, and lit-prop pack refusal across desktop,
+laptop, tablet, phone, and gamepad profiles. Stone axe, pick,
 shovel, and hatchet now matter in play: matching tools reach a little farther, repeat
 faster while held, and track saved wear. The Stone Hatchet is a short-reach, quick,
 fragile one-handed chopping and brambleback-warding sidearm that sits below the full stone
@@ -480,7 +485,7 @@ water, or a cliff stows it; E brings it back mid-fall.
 - GitHub Pages deploys from the `main` branch workflow in `.github/workflows/deploy.yml`.
   The app is static: no server secrets, runtime API keys, or backend configuration are expected.
 
-Test suite: 267 tests — icosahedron invariants; 10m²+2 counts with exactly 12 pentagons;
+Test suite: 268 tests — icosahedron invariants; 10m²+2 counts with exactly 12 pentagons;
 neighbor symmetry; CCW winding and bit-identical shared corners; id round-trips; seam
 agreement; `tileOf` vs brute force; layer-grid inverses; terrain determinism and
 ocean/land/mountain balance; column edit semantics incl. tunnels and immutable bedrock;
@@ -490,7 +495,7 @@ regeneration**; edit persistence through regeneration; **Hearth and Horizon save
 serialization** for edits, trees, inventory, crafted items, plane unlock, and player state;
 **Hearth and Horizon crafting rules** for recipe readiness, station gating, material
 spending, bait crafting, stone-blade crafting, pack-frame crafting, storm-cloak crafting, waystone crafting, dock crafting, drying-rack crafting, rain-cistern crafting, root-cellar crafting, cave-anchor crafting, weather-vane crafting, and the echo lantern recipe; **Hearth and Horizon tool rules** for target matching, defensive tool readiness, reach/cooldown effects,
-wear normalization, and breakage; **Hearth and Horizon structure rules** for placed-prop normalization, station
+wear normalization, and breakage; **Hearth and Horizon structure rules** for placed-prop normalization, hex-facing rotation, station
 availability, duplicate-tile prevention, inventory spending, hearth scoring, local shelter
 recognition around the home bedroll, prop utility state for campfires, bedrolls, chests, docks, compost bins, rain cisterns, root cellars, cave anchors, drying racks, weather vanes, and waystones,
 crop condition gating, compost fertility, rain-cistern irrigation, root-cellar provision caching, protected-yield bonuses, growth/harvest, campfire cooking, and drying-rack preserving.

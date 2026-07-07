@@ -89,6 +89,7 @@ import {
 import { caveMouthSignals, nearestCaveMouthSignal, type CaveMouthTile } from './sim/caveMouths';
 import {
   PLACEABLE_ITEM_IDS,
+  STRUCTURE_YAW_STEP,
   addStructure,
   caveAnchorKindLabel,
   chestStorageView,
@@ -101,8 +102,10 @@ import {
   normalizeStructureSaves,
   placeableName,
   rootCellarProvisionCount,
+  rotateStructure as rotatePlacedStructure,
   spendRootCellarProvision,
   spendPlacedItem,
+  structureYawTurn,
   structureStationInventory,
   transferChestMaterial,
   type ChestTransferAction,
@@ -270,7 +273,7 @@ const WOOD_SLOT = 4;
 const STORAGE_FOCUS_ACTIONS: ChestTransferAction[] = ['depositOne', 'depositAll', 'withdrawOne', 'withdrawAll'];
 
 const KEYBOARD_HELP = `WASD move · space jump · shift sprint · wheel zoom
-LMB mine + chop trees · RMB build · 1-5 pick block · Q eat
+LMB mine + chop trees · RMB build · Z/X rotate build/prop · 1-5 pick block · Q eat
 Plane: chop 2 trees for 12 wood · B craft · R use/open chest/farm/fish/forage · Shift+R pack prop · M chart · P itinerary · Shift+P clear · J journal · E board/stow
 Route Slate: Arrow keys choose/drop/move stops · Enter pin · Esc close
 F free-flight · F3 stats · H help`;
@@ -281,7 +284,7 @@ Craft opens recipes/pack · route panel buttons pin/later/drop/clear itinerary s
 
 const GAMEPAD_HELP = `Gamepad: LS move · RS look · full stick/RB sprint · LB+RS zoom
 A jump/swim · LT descend · X mine/chop · RT build · D-pad hotbar
-B use · LB+B pack prop · Y craft · Back route slate · D-pad edits open itinerary · LB+D-pad pin/clear · Start board/stow`;
+B use · LB+B pack prop · Y craft · Back route slate · D-pad edits open itinerary · LB+D-pad rotates selected build or pins/clears routes · Start board/stow`;
 
 function inputHelpText(mode: UxInputMode): string {
   if (mode === 'gamepad' || mode === 'hybrid') return GAMEPAD_HELP;
@@ -649,6 +652,7 @@ async function boot(): Promise<void> {
   let routeFocusDirty = false;
   let routeFocusActive = false;
   let selectedStructureItem: PlaceableItemId | null = null;
+  let placementYawTurns = 0;
   let lastStructureAction = '';
   let lastFoodAction = '';
   let lastLandmarkAction = '';
@@ -1207,7 +1211,7 @@ async function boot(): Promise<void> {
     syncHudUx(currentUxProfile);
   });
 
-  let fWas = false, gWas = false, oWas = false, eWas = false, bWas = false, rWas = false, qWas = false, mWas = false, pWas = false, nWas = false, jWas = false, escWas = false, f3Was = false, hWas = false;
+  let fWas = false, gWas = false, oWas = false, eWas = false, bWas = false, rWas = false, qWas = false, mWas = false, pWas = false, nWas = false, jWas = false, zWas = false, xWas = false, escWas = false, f3Was = false, hWas = false;
   let showDiag = params.get('debug') === '1';
   let prevSel = -1;
   let lockHinted = false;
@@ -1710,6 +1714,52 @@ async function boot(): Promise<void> {
     );
   };
 
+  const normalizePlacementTurns = (turns: number): number => ((Math.trunc(turns) % 6) + 6) % 6;
+  const placementYawOffset = (): number => placementYawTurns * STRUCTURE_YAW_STEP;
+  const placementDiagnostics = () => ({
+    selected: selectedStructureItem,
+    turn: placementYawTurns,
+    degrees: placementYawTurns * 60,
+    offset: placementYawOffset(),
+    targetTile: lastPick?.hitTile ?? null,
+  });
+
+  const rotateBuildFacing = (turns = 1, id?: number): boolean => {
+    const delta = Math.trunc(Number.isFinite(turns) ? turns : 1);
+    if (selectedStructureItem && id === undefined) {
+      placementYawTurns = normalizePlacementTurns(placementYawTurns + delta);
+      const name = placeableName(selectedStructureItem).toLowerCase();
+      lastStructureAction = `${selectedStructureItem}:placement-rotate:hex face ${placementYawTurns + 1}`;
+      hud.slotName(`place ${placeableName(selectedStructureItem)} · face ${placementYawTurns + 1}`);
+      hud.flash(`${name} facing hex face ${placementYawTurns + 1}`, 1.8);
+      triggerCharacterAction('build', selectedStructureItem, 0.38);
+      refreshCraftingHud();
+      return true;
+    }
+    const target = id !== undefined
+      ? structures.find((s) => s.id === Math.trunc(id)) ?? null
+      : nearestStructureOnTiles(structures, nearbyStructureTiles());
+    if (!target) {
+      playAudio('uiDeny');
+      hud.flash('no nearby prop to rotate', 1.8);
+      lastStructureAction = 'rotate:none';
+      return false;
+    }
+    const result = rotatePlacedStructure(structures, target.id, delta);
+    lastStructureAction = `${target.item}:rotate:${result.message}`;
+    if (!result.ok) {
+      playAudio('uiDeny');
+      hud.flash(result.message, 1.8);
+      return false;
+    }
+    structureRenderer.setStructures(structures);
+    triggerCharacterAction('build', result.item, 0.38);
+    playAudio('uiConfirm');
+    markSaveDirty();
+    hud.flash(result.message, 1.8);
+    return true;
+  };
+
   const placeStructureAt = (item: PlaceableItemId, tile: number, layer?: number, yaw?: number): boolean => {
     if (!isPlaceableItemId(item)) return false;
     if (!creativeActive && itemCount(counts, craftedItems, item) <= 0) {
@@ -1738,7 +1788,7 @@ async function boot(): Promise<void> {
       hud.flash('needs solid ground', 2);
       return false;
     }
-    const placed = addStructure(structures, { item, tile, layer: k, yaw: yaw ?? yawForTile(tile) });
+    const placed = addStructure(structures, { item, tile, layer: k, yaw: yaw ?? yawForTile(tile) + placementYawOffset() });
     if (!placed) {
       playAudio(audioEventForPlacement(false));
       hud.flash('that hex already has a prop', 2);
@@ -1750,6 +1800,7 @@ async function boot(): Promise<void> {
     triggerCharacterAction('build', item, 0.52);
     playAudio(audioEventForPlacement(true));
     markSaveDirty();
+    lastStructureAction = `${item}:placed:hex face ${structureYawTurn(placed.yaw) + 1}:placement face ${placementYawTurns + 1}`;
     const score = homeScore(structures, geo);
     hud.flash(`${placeableName(item)} placed${score.hasHearth ? ' · hearth ready' : ''}`, 3);
     refreshCraftingHud();
@@ -1775,7 +1826,7 @@ async function boot(): Promise<void> {
     refreshCraftingHud();
     hud.slotName(`place ${placeableName(id)}`);
     playAudio('uiOpen');
-    hud.flash(touch.enabled ? 'hold terrain to set it down' : 'RMB sets it on the highlighted hex', 3);
+    hud.flash(touch.enabled ? 'hold terrain to set it down' : 'RMB sets it · Z/X rotates facing', 3);
   };
 
   hud.onPlaceSelect = selectStructureForPlacement;
@@ -4720,7 +4771,7 @@ async function boot(): Promise<void> {
     }),
     craft: (recipeId: string) => craftSelected(recipeId),
     crafting: () => ({ open: craftingOpen, crafted: { ...craftedItems }, recipes: craftingRows(), ledger: packLedger() }),
-    structures: () => ({ items: structures.map((s) => ({ ...s, state: s.state ? { ...s.state } : undefined })), crops: cropDiagnostics(), compostBins: compostBinDiagnostics(), rainCisterns: rainCisternDiagnostics(), rootCellars: rootCellarDiagnostics(), caveAnchors: caveAnchorDiagnostics(), waystones: waystoneDiagnostics(), weatherVanes: weatherVaneDiagnostics(), fishTraps: fishTrapDiagnostics(), shoreNets: shoreNetDiagnostics(), storage: { open: openChestId !== null, chestId: openChestId, state: currentChestStorage() }, home: homeScore(structures, geo), renderer: structureRenderer.stats(), lastAction: lastStructureAction }),
+    structures: () => ({ items: structures.map((s) => ({ ...s, state: s.state ? { ...s.state } : undefined, turn: structureYawTurn(s.yaw) })), placement: placementDiagnostics(), crops: cropDiagnostics(), compostBins: compostBinDiagnostics(), rainCisterns: rainCisternDiagnostics(), rootCellars: rootCellarDiagnostics(), caveAnchors: caveAnchorDiagnostics(), waystones: waystoneDiagnostics(), weatherVanes: weatherVaneDiagnostics(), fishTraps: fishTrapDiagnostics(), shoreNets: shoreNetDiagnostics(), storage: { open: openChestId !== null, chestId: openChestId, state: currentChestStorage() }, home: homeScore(structures, geo), renderer: structureRenderer.stats(), lastAction: lastStructureAction }),
     selectStructure: (item: string) => selectStructureForPlacement(item),
     placeStructure: (item: string, tile?: number) => {
       if (!isPlaceableItemId(item)) return false;
@@ -4729,6 +4780,8 @@ async function boot(): Promise<void> {
     },
     useStructure: (id?: number) => useStructure(id),
     dismantleStructure: (id?: number) => tryDismantleStructure(id),
+    rotatePlacement: (turns = 1) => rotateBuildFacing(turns),
+    rotateStructure: (id?: number, turns = 1) => rotateBuildFacing(turns, id),
     save: {
       key: saveKey,
       enabled: () => saveEnabled,
@@ -5074,6 +5127,8 @@ async function boot(): Promise<void> {
     structures: {
       count: structures.length,
       selected: selectedStructureItem,
+      placement: placementDiagnostics(),
+      yawTurns: structures.map((s) => ({ id: s.id, item: s.item, tile: s.tile, turn: structureYawTurn(s.yaw), yaw: s.yaw })),
       crops: cropDiagnostics(),
       compostBins: compostBinDiagnostics(),
       rainCisterns: rainCisternDiagnostics(),
@@ -5169,7 +5224,7 @@ async function boot(): Promise<void> {
     if (gamepadNotice) hud.flash(gamepadNotice === 'gamepad disconnected' ? gamepadNotice : 'gamepad ready', 2.4);
 
     // key edges
-    const fDown = input.down('KeyF'), gDown = input.down('KeyG'), oDown = input.down('KeyO'), eDown = input.down('KeyE'), bDown = input.down('KeyB'), rDown = input.down('KeyR'), qDown = input.down('KeyQ'), mDown = input.down('KeyM'), pDown = input.down('KeyP'), nDown = input.down('KeyN'), jDown = input.down('KeyJ'), escDown = input.down('Escape');
+    const fDown = input.down('KeyF'), gDown = input.down('KeyG'), oDown = input.down('KeyO'), eDown = input.down('KeyE'), bDown = input.down('KeyB'), rDown = input.down('KeyR'), qDown = input.down('KeyQ'), mDown = input.down('KeyM'), pDown = input.down('KeyP'), nDown = input.down('KeyN'), jDown = input.down('KeyJ'), zDown = input.down('KeyZ'), xDown = input.down('KeyX'), escDown = input.down('Escape');
     const f3Down = input.down('F3'), hDown = input.down('KeyH');
     const fPressed = input.pressed('KeyF') || (fDown && !fWas);
     const gPressed = input.pressed('KeyG') || (gDown && !gWas);
@@ -5182,6 +5237,8 @@ async function boot(): Promise<void> {
     const pPressed = input.pressed('KeyP') || (pDown && !pWas);
     const nPressed = input.pressed('KeyN') || (nDown && !nWas);
     const jPressed = input.pressed('KeyJ') || (jDown && !jWas);
+    const zPressed = input.pressed('KeyZ') || (zDown && !zWas);
+    const xPressed = input.pressed('KeyX') || (xDown && !xWas);
     const escPressed = input.pressed('Escape') || (escDown && !escWas);
     const f3Pressed = input.pressed('F3') || (f3Down && !f3Was);
     const hPressed = input.pressed('KeyH') || (hDown && !hWas);
@@ -5244,8 +5301,12 @@ async function boot(): Promise<void> {
     if ((mPressed || tf.chart || (gp.chart && !worldBlocked())) && !autopilot.active) {
       openRouteSlateCommand();
     }
-    if ((pPressed || tf.pin || tf.clearPin || ((gp.pin || gp.clearPin) && !worldBlocked())) && (!worldBlocked() || routeSlateOpen()) && !autopilot.active) {
-      if (input.down('ShiftLeft') || tf.clearPin || (gp.clearPin && !worldBlocked())) clearRouteCommand();
+    const gamepadBuildRotate = selectedStructureItem !== null && !routeSlateOpen() && !worldBlocked() && (gp.pin || gp.clearPin);
+    if ((zPressed || xPressed || gamepadBuildRotate) && !worldBlocked() && !autopilot.active) {
+      rotateBuildFacing((zPressed || gp.clearPin) && !xPressed ? -1 : 1);
+    }
+    if ((pPressed || tf.pin || tf.clearPin || ((gp.pin || gp.clearPin) && !worldBlocked() && !gamepadBuildRotate)) && (!worldBlocked() || routeSlateOpen()) && !autopilot.active) {
+      if (input.down('ShiftLeft') || tf.clearPin || (gp.clearPin && !worldBlocked() && !gamepadBuildRotate)) clearRouteCommand();
       else pinRouteCommand();
     }
     if (nPressed || (gp.mute && !gpPanelConsumed)) {
@@ -5255,7 +5316,7 @@ async function boot(): Promise<void> {
     }
     if (f3Pressed || (gp.diag && !gpPanelConsumed)) showDiag = !showDiag;
     if (hPressed || (gp.help && !gpPanelConsumed)) hud.toggleHelp();
-    fWas = fDown; gWas = gDown; oWas = oDown; eWas = eDown; bWas = bDown; rWas = rDown; qWas = qDown; mWas = mDown; pWas = pDown; nWas = nDown; jWas = jDown; escWas = escDown; f3Was = f3Down; hWas = hDown;
+    fWas = fDown; gWas = gDown; oWas = oDown; eWas = eDown; bWas = bDown; rWas = rDown; qWas = qDown; mWas = mDown; pWas = pDown; nWas = nDown; jWas = jDown; zWas = zDown; xWas = xDown; escWas = escDown; f3Was = f3Down; hWas = hDown;
     worldInputBlocked = worldBlocked();
     if (worldInputBlocked) {
       input.cancelWorldInput();
