@@ -7,7 +7,7 @@ import {
   type KilnInstancedOrientationSnapshot,
 } from '../render/kilnAssets';
 
-type KilnViewerFamily = 'structures' | 'drops' | 'nodes' | 'trees' | 'creatures' | 'fish' | 'birds' | 'adopted' | 'ready' | 'generated';
+type KilnViewerFamily = 'structures' | 'drops' | 'nodes' | 'trees' | 'creatures' | 'fish' | 'birds' | 'wonders' | 'adopted' | 'ready' | 'generated';
 
 interface KilnManifestAsset {
   slug: string;
@@ -93,6 +93,7 @@ const FAMILY_SLUGS: Record<KilnViewerFamily, readonly string[]> = {
     'compost-bin',
     'rain-cistern',
     'root-cellar',
+    'cave-anchor',
     'dock-segment',
     'fish-trap',
     'shore-net',
@@ -140,6 +141,11 @@ const FAMILY_SLUGS: Record<KilnViewerFamily, readonly string[]> = {
     'bird-forest-flutter',
     'bird-storm-finch',
   ],
+  wonders: [
+    'crater-emberfall',
+    'crater-glassrain',
+    'crater-starbloom',
+  ],
   adopted: [],
   ready: [],
   generated: [],
@@ -153,6 +159,7 @@ FAMILY_SLUGS.adopted = [
   ...FAMILY_SLUGS.creatures,
   ...FAMILY_SLUGS.fish,
   ...FAMILY_SLUGS.birds,
+  ...FAMILY_SLUGS.wonders,
 ];
 
 function publicAssetUrl(relativePath: string): string {
@@ -163,13 +170,13 @@ function publicAssetUrl(relativePath: string): string {
 
 function selectedFamily(params: URLSearchParams): KilnViewerFamily {
   const raw = params.get('family') ?? 'ready';
-  return raw === 'structures' || raw === 'drops' || raw === 'nodes' || raw === 'trees' || raw === 'creatures' || raw === 'fish' || raw === 'birds' || raw === 'adopted' || raw === 'ready' || raw === 'generated'
+  return raw === 'structures' || raw === 'drops' || raw === 'nodes' || raw === 'trees' || raw === 'creatures' || raw === 'fish' || raw === 'birds' || raw === 'wonders' || raw === 'adopted' || raw === 'ready' || raw === 'generated'
     ? raw
     : 'ready';
 }
 
 function familyForSlug(slug: string): KilnViewerFamily {
-  for (const family of ['structures', 'drops', 'nodes', 'trees', 'creatures', 'fish', 'birds'] as KilnViewerFamily[]) {
+  for (const family of ['structures', 'drops', 'nodes', 'trees', 'creatures', 'fish', 'birds', 'wonders'] as KilnViewerFamily[]) {
     if (FAMILY_SLUGS[family].includes(slug)) return family;
   }
   return 'ready';
@@ -491,6 +498,7 @@ function defaultColumnsFor(family: KilnViewerFamily, count: number): number {
   if (count <= 2) return count;
   if (family === 'structures') return Math.min(6, count);
   if (family === 'trees') return count;
+  if (family === 'wonders') return Math.min(3, count);
   if (family === 'ready') return Math.min(8, count);
   if (family === 'adopted') return Math.min(6, count);
   return Math.min(4, count);

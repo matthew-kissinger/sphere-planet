@@ -4,6 +4,12 @@ import type { Columns } from '../world/columns';
 import type { Layers } from '../world/layers';
 import { WATER_SURFACE } from '../world/layers';
 import type { SkyfallKind, SkyfallSite } from '../sim/skyfall';
+import type {
+  KilnAssetSnapshot,
+  KilnSkyfallSkinFitSnapshot,
+  KilnSkyfallSkinSlug,
+  SkyfallSkinProvider,
+} from './kilnAssets';
 
 function mat(color: number, roughness = 0.7, metalness = 0.05, emissive = 0x000000, intensity = 0.35): THREE.MeshStandardMaterial {
   return new THREE.MeshStandardMaterial({ color, roughness, metalness, emissive, emissiveIntensity: emissive === 0 ? 0 : intensity });
@@ -27,6 +33,14 @@ const kindColors: Record<SkyfallKind, { crust: number; shard: number; glow: numb
   glassRain: { crust: 0x4b5c62, shard: 0xc6e8df, glow: 0x9fe4e0 },
   starBloom: { crust: 0x4a4732, shard: 0xc7d77a, glow: 0xf0da7a },
 };
+
+const KILN_SKYFALL_SKIN_BY_KIND: Record<SkyfallKind, KilnSkyfallSkinSlug> = {
+  emberFall: 'crater-emberfall',
+  glassRain: 'crater-glassrain',
+  starBloom: 'crater-starbloom',
+};
+
+const PROCEDURAL_CRATER_PARTS = new Set(['skyfallShadow', 'skyfallCraterRing', 'skyfallCraterRock', 'skyfallShard', 'skyfallPetal']);
 
 const craterMat = mat(0x2f3735, 0.94, 0.02);
 const shadowMat = mat(0x20292c, 0.96);
@@ -107,8 +121,9 @@ function makeSite(site: SkyfallSite): THREE.Group {
 export class SkyfallRenderer {
   readonly group = new THREE.Group();
   private readonly objects = new Map<number, THREE.Group>();
+  private readonly kilnSkinStatus = new Map<number, 'pending' | 'loaded' | 'fallback'>();
 
-  constructor(scene: THREE.Scene) {
+  constructor(scene: THREE.Scene, private readonly kilnAssets?: SkyfallSkinProvider) {
     this.group.name = 'skyfall-events';
     scene.add(this.group);
   }
@@ -119,15 +134,18 @@ export class SkyfallRenderer {
       if (!wanted.has(id)) {
         this.group.remove(obj);
         this.objects.delete(id);
+        this.kilnSkinStatus.delete(id);
       }
     }
     for (const site of sites) {
       if (this.objects.has(site.id)) continue;
       const obj = makeSite(site);
       obj.userData.skyfallId = site.id;
+      obj.userData.skyfallKind = site.kind;
       obj.userData.tile = site.tile;
       this.objects.set(site.id, obj);
       this.group.add(obj);
+      this.attachKilnSkin(site, obj);
     }
   }
 
@@ -199,19 +217,125 @@ export class SkyfallRenderer {
     }
   }
 
-  stats(): { groups: number; meshes: number; active: number; omens: number } {
+  private attachKilnSkin(site: SkyfallSite, obj: THREE.Group): void {
+    if (!this.kilnAssets) return;
+    const slug = KILN_SKYFALL_SKIN_BY_KIND[site.kind];
+    this.kilnSkinStatus.set(site.id, 'pending');
+    obj.userData.kilnSkyfallSkinStatus = 'pending';
+    obj.userData.kilnAssetSlug = slug;
+    obj.userData.kilnSkyfallKind = site.kind;
+    void this.kilnAssets.createSkyfallSkinTemplate(slug)
+      .then((template) => {
+        const current = this.objects.get(site.id);
+        if (current !== obj || obj.parent !== this.group) return;
+        if (!template) {
+          this.kilnSkinStatus.set(site.id, 'fallback');
+          obj.userData.kilnSkyfallSkinStatus = 'fallback';
+          return;
+        }
+        const skin = template.template.clone(true);
+        skin.name = `kiln-skyfall-skin-${slug}`;
+        skin.userData.kilnAssetSlug = slug;
+        skin.userData.kilnSkyfallKind = site.kind;
+        skin.userData.kilnSkyfallSkin = true;
+        skin.userData.kilnSkyfallFit = template.fit;
+        skin.traverse((child) => {
+          child.userData.kilnAssetSlug = slug;
+          child.userData.kilnSkyfallKind = site.kind;
+          if ((child as THREE.Mesh).isMesh) {
+            const mesh = child as THREE.Mesh;
+            mesh.castShadow = false;
+            mesh.receiveShadow = true;
+          }
+        });
+        obj.add(skin);
+        this.hideProceduralCraterParts(obj);
+        this.kilnSkinStatus.set(site.id, 'loaded');
+        obj.userData.kilnSkyfallSkinStatus = 'loaded';
+        obj.userData.kilnAssetSlug = slug;
+        obj.userData.kilnAssetFile = template.manifest.file;
+        obj.userData.kilnAssetSourceUrl = template.sourceUrl;
+        obj.userData.kilnSkyfallSkinFit = template.fit;
+      })
+      .catch((err: unknown) => {
+        const current = this.objects.get(site.id);
+        if (current !== obj || obj.parent !== this.group) return;
+        this.kilnSkinStatus.set(site.id, 'fallback');
+        obj.userData.kilnSkyfallSkinStatus = 'fallback';
+        obj.userData.kilnSkyfallSkinError = err instanceof Error ? err.message : String(err);
+      });
+  }
+
+  private hideProceduralCraterParts(obj: THREE.Group): void {
+    obj.traverse((child) => {
+      if (child.userData.kilnAssetSlug) return;
+      if (PROCEDURAL_CRATER_PARTS.has(child.name)) child.visible = false;
+    });
+  }
+
+  stats(): {
+    groups: number;
+    meshes: number;
+    active: number;
+    omens: number;
+    proceduralCraterPartsVisible: number;
+    kilnSkyfallSkinsLoaded: number;
+    kilnSkyfallSkinsPending: number;
+    kilnSkyfallSkinFallbacks: number;
+    kilnSkyfallGlbMeshesVisible: number;
+    kilnSkyfallSkinsBySlug: Partial<Record<KilnSkyfallSkinSlug, { loaded: number; pending: number; fallback: number }>>;
+    kilnSkyfallSkinFits: Partial<Record<KilnSkyfallSkinSlug, KilnSkyfallSkinFitSnapshot>>;
+    kilnAssets?: KilnAssetSnapshot;
+  } {
     let meshes = 0;
     let active = 0;
     let omens = 0;
+    let proceduralCraterPartsVisible = 0;
+    let kilnSkyfallSkinsLoaded = 0;
+    let kilnSkyfallSkinsPending = 0;
+    let kilnSkyfallSkinFallbacks = 0;
+    let kilnSkyfallGlbMeshesVisible = 0;
+    const kilnSkyfallSkinsBySlug: Partial<Record<KilnSkyfallSkinSlug, { loaded: number; pending: number; fallback: number }>> = {};
+    const kilnSkyfallSkinFits: Partial<Record<KilnSkyfallSkinSlug, KilnSkyfallSkinFitSnapshot>> = {};
     for (const obj of this.objects.values()) {
       if (obj.visible) active++;
+      const skinStatus = obj.userData.kilnSkyfallSkinStatus as 'pending' | 'loaded' | 'fallback' | undefined;
+      const skinSlug = obj.userData.kilnAssetSlug as KilnSkyfallSkinSlug | undefined;
+      if (skinStatus === 'loaded') kilnSkyfallSkinsLoaded++;
+      if (skinStatus === 'pending') kilnSkyfallSkinsPending++;
+      if (skinStatus === 'fallback') kilnSkyfallSkinFallbacks++;
+      if (skinSlug && skinStatus) {
+        const entry = kilnSkyfallSkinsBySlug[skinSlug] ?? { loaded: 0, pending: 0, fallback: 0 };
+        entry[skinStatus] += 1;
+        kilnSkyfallSkinsBySlug[skinSlug] = entry;
+      }
+      if (skinSlug && obj.userData.kilnSkyfallSkinFit) {
+        kilnSkyfallSkinFits[skinSlug] = obj.userData.kilnSkyfallSkinFit as KilnSkyfallSkinFitSnapshot;
+      }
       obj.traverse((child) => {
         if ((child as THREE.Mesh).isMesh) {
           meshes++;
           if (child.name.startsWith('skyfallOmen')) omens++;
+          if (child.userData.kilnAssetSlug && child.visible) kilnSkyfallGlbMeshesVisible++;
+          if (!child.userData.kilnAssetSlug && PROCEDURAL_CRATER_PARTS.has(child.name) && child.visible) {
+            proceduralCraterPartsVisible++;
+          }
         }
       });
     }
-    return { groups: this.objects.size, meshes, active, omens };
+    return {
+      groups: this.objects.size,
+      meshes,
+      active,
+      omens,
+      proceduralCraterPartsVisible,
+      kilnSkyfallSkinsLoaded,
+      kilnSkyfallSkinsPending,
+      kilnSkyfallSkinFallbacks,
+      kilnSkyfallGlbMeshesVisible,
+      kilnSkyfallSkinsBySlug,
+      kilnSkyfallSkinFits,
+      kilnAssets: this.kilnAssets?.snapshot?.(),
+    };
   }
 }

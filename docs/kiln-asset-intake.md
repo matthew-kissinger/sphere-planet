@@ -174,6 +174,12 @@ First wired pilot:
   the code-authored waystone, with `waystoneBase`, `waystoneCore`, and `waystoneBand`
   hidden only after GLB success. Attuned route glyph overlays, placement, collision, route
   readback, and fallback remain procedural.
+- `cave-anchor`: accepted beside `waystone` as a K7 route-marker decorative shell.
+  `StructureRenderer` hides duplicated static stone/cairn/post/rope-rail parts only after
+  the committed GLB loads, while cave glyphs, rope pulses, flood/spring markers, route
+  readback, active glow, placement, collision, and fallback remain procedural. `npm run
+  proof:route-markers` now proves five waystones plus three cave anchors on committed
+  model paths with zero fallback and zero generated-path requests.
 - `door-kit`, `window-frame`, and `roof-bundle`: conditionally accepted as the first
   modular house-kit skins only after runtime normalization to the code-owned C2/C3 sockets.
   The game measures each loaded GLB template, computes the decorative scale from the actual
@@ -214,10 +220,21 @@ First wired pilot:
   harmless/hazard gameplay responses. Follow-on proofs now close creature-first
   targetability, occupied-tile placement blockers, and first sparse roaming over approved
   GLB skins; richer behavior states remain future K6R work.
+- K4 utility and waterline structure skins are accepted for `compost-bin`, `rain-cistern`,
+  `root-cellar`, `dock-segment`, `fish-trap`, `shore-net`, and `lantern-post`.
+  They attach over code-owned center or shore sockets, hide duplicated static bodies, and
+  keep waterline blockers, trap/net/cistern/cellar/lantern state overlays authoritative.
+- K7 skyfall crater shells are accepted for `crater-emberfall`, `crater-glassrain`, and
+  `crater-starbloom`. `SkyfallRenderer` loads them through the shared Kiln runtime asset
+  provider, normalizes them under the existing skyfall parent scale, and hides only the
+  duplicated procedural crater floor/ring/rocks/shards. Core glow, signal discs, falling
+  beams, omen trails/halos, sparks, harvest state, reward timing, and fallback remain
+  code-owned. `npm run proof:k7-wonders` proves all three committed crater GLBs with zero
+  fallback and zero generated-path requests.
 
 Runtime pilot candidates from the proof:
 
-- `chest`, `campfire`, `bedroll`, `crop-plot`, `cave-anchor`, `drying-rack`,
+- `chest`, `campfire`, `bedroll`, `crop-plot`, `drying-rack`,
   `weather-vane`, `waystone`.
 - Resource/drop candidates: `drop-wood-logs` and `drop-ore-chunk` are H5/K1
   runtime-wired through `ResourceDropRenderer` with instanced material batches.
@@ -239,14 +256,14 @@ Runtime pilot candidates from the proof:
 
 Deferred until scale, snap, budget, readability, or animation proof exists:
 
-- Remaining modular house/build pieces: `dock-segment`, `compost-bin`, and `root-cellar`.
-  The house-kit warning still applies: independently generated pieces do not share wall
-  heights, opening sizes, wall thickness, or grid units unless the game imposes that
-  contract. The accepted door/window/roof skins prove the cheapest safe path: keep the
-  procedural socket/collider/snap volume as load-bearing, measure each loaded GLB template,
-  normalize it to the socket, and hide duplicated procedural body parts only after GLB
-  success. Future pieces need the same fitted-bbox diagnostics, fallback proof, and
-  screenshot proof before shipping as craftable art.
+- Any remaining modular house/build pieces outside the accepted utility props. The house-kit
+  warning still applies: independently generated pieces do not share wall heights, opening
+  sizes, wall thickness, or grid units unless the game imposes that contract. The accepted
+  door/window/roof skins prove the cheapest safe path: keep the procedural
+  socket/collider/snap volume as load-bearing, measure each loaded GLB template, normalize
+  it to the socket, and hide duplicated procedural body parts only after GLB success. Future
+  wall-shell pieces need the same fitted-bbox diagnostics, fallback proof, and screenshot
+  proof before shipping as craftable art.
 - House walls are not solved by the current pack. A `window-frame` is an insert, not a
   wall; a `door-kit` is an opening/threshold, not a full enclosure; a `roof-bundle` needs
   supports and joins. The second C6 slice now adds code-owned `floorFoundation`,
@@ -257,12 +274,11 @@ Deferred until scale, snap, budget, readability, or animation proof exists:
   craftable house pieces ship, finish edge-based shelter coverage, collision, and broader
   room-shape proof. New Kiln wall pieces should be generated as one shared-scale house-shell
   pack and then treated as decorative skins over measured sockets.
-- Functional props with warnings or watery placement needs: `workbench`, `rain-cistern`,
-  `fish-trap`, `shore-net`, `lantern-post`.
-- Shrines and craters: defer for blind screenshot readability, world-placement scale,
-  repetition/LOD policy, and collision proof. Trees are no longer deferred for the first
-  vegetation slice; broader forest art direction can still revise placement, density, and
-  regeneration prompts after K5 proof.
+- Shrine landmark shells: defer for blind screenshot readability, world-placement scale,
+  water/glow/threshold ownership, repetition/LOD policy, and collision proof. Craters are no
+  longer deferred for the first skyfall-shell slice. Trees are no longer deferred for the
+  first vegetation slice; broader forest art direction can still revise placement, density,
+  and regeneration prompts after K5 proof.
 - Native-life roaming: creature GLB skinning, first targeting ownership, and a first
   sparse-roaming actor layer are wired. Future K6R work should deepen `NativeCreatureActor`
   state over deterministic native sites so harmless creatures graze/wander/flee with more

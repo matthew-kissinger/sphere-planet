@@ -53,6 +53,7 @@ async function flushAsyncSkinLoads(): Promise<void> {
 
 const FAKE_KILN_SKIN_ITEMS: Record<KilnStructureSkinSlug, StructureSave['item']> = {
   waystone: 'waystone',
+  'cave-anchor': 'caveAnchor',
   'door-kit': 'doorKit',
   'window-frame': 'windowFrame',
   'roof-bundle': 'roofBundle',
@@ -74,6 +75,7 @@ const FAKE_KILN_SKIN_ITEMS: Record<KilnStructureSkinSlug, StructureSave['item']>
 
 const FAKE_KILN_SOCKET_ROLES: Record<KilnStructureSkinSlug, string> = {
   waystone: 'route-marker',
+  'cave-anchor': 'route-marker',
   'door-kit': 'wall-opening',
   'window-frame': 'wall-light',
   'roof-bundle': 'roof-cap',
@@ -95,6 +97,7 @@ const FAKE_KILN_SOCKET_ROLES: Record<KilnStructureSkinSlug, string> = {
 
 const FAKE_KILN_HIDE_NAMES: Record<KilnStructureSkinSlug, string[]> = {
   waystone: ['waystoneBase', 'waystoneCore', 'waystoneBand'],
+  'cave-anchor': ['caveAnchorStoneBase', 'caveAnchorCairnStone', 'caveAnchorPost', 'caveAnchorRopeRail'],
   'door-kit': ['leftJamb', 'rightJamb', 'lintel', 'doorSlab', 'knob'],
   'window-frame': ['topRail', 'bottomRail', 'leftRail', 'rightRail', 'glassPane'],
   'roof-bundle': ['leftRoofPlane', 'rightRoofPlane', 'ridgeBeam'],
@@ -293,6 +296,49 @@ describe('structure renderer asset readability', () => {
     expect(renderer.stats().kilnSkinsLoaded).toBe(1);
     expect(renderer.stats().kilnSkinFallbacks).toBe(0);
     expect(renderer.stats().kilnSkinsBySlug.waystone).toMatchObject({ loaded: 1, pending: 0, fallback: 0 });
+  });
+
+  it('skins cave anchors with Kiln GLB bodies while preserving cave-route overlays', async () => {
+    const scene = new THREE.Scene();
+    const geo = new Goldberg(8);
+    const layers = buildLayers();
+    const renderer = new StructureRenderer(scene, new FakeKilnAssets());
+    const structures: StructureSave[] = [
+      {
+        id: 1,
+        item: 'caveAnchor',
+        tile: 1,
+        layer: 100,
+        yaw: 0,
+        state: { anchorUses: 1, anchorKind: 'seaCave', anchorFlooded: true, anchorSpring: true },
+      },
+    ];
+
+    renderer.setStructures(structures);
+    await flushAsyncSkinLoads();
+    renderer.update(structures, geo, layers, { x: 0, y: 0, z: 0 }, 0.5);
+    const stats = renderer.stats();
+
+    expect(namedObject(renderer, 'kiln-skin-cave-anchor')).toBeTruthy();
+    expect(namedObject(renderer, 'caveAnchorStoneBase')?.visible).toBe(false);
+    expect(namedObject(renderer, 'caveAnchorCairnStone')?.visible).toBe(false);
+    expect(namedObject(renderer, 'caveAnchorPost')?.visible).toBe(false);
+    expect(namedObject(renderer, 'caveAnchorRopeRail')?.visible).toBe(false);
+    expect(namedObject(renderer, 'caveAnchorGlyph-seaCave')?.visible).toBe(true);
+    expect(namedObject(renderer, 'caveAnchorGlyph-arch')?.visible).toBe(false);
+    expect(namedObject(renderer, 'caveAnchorGlyph-dryCave')?.visible).toBe(false);
+    expect(namedObject(renderer, 'caveAnchorRopePulse0')?.visible).toBe(true);
+    expect(namedObject(renderer, 'caveAnchorGlow')?.visible).toBe(true);
+    expect(namedObject(renderer, 'caveAnchorFloodMark')?.visible).toBe(true);
+    expect(namedObject(renderer, 'caveAnchorSpringMark')?.visible).toBe(true);
+    expect(stats.kilnSkinsLoaded).toBe(1);
+    expect(stats.kilnSkinFallbacks).toBe(0);
+    expect(stats.kilnSkinsBySlug['cave-anchor']).toMatchObject({ loaded: 1, pending: 0, fallback: 0 });
+    expect(stats.kilnSkinFits['cave-anchor']).toMatchObject({
+      item: 'caveAnchor',
+      socketRole: 'route-marker',
+      glbPolicy: 'decorative-skin-after-normalization',
+    });
   });
 
   it('skins modular house-kit sockets with Kiln GLBs while preserving functional shelter overlays', async () => {

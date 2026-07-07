@@ -258,7 +258,7 @@ async function runViewport(browser, targetUrl, name, viewport) {
   await page.waitForFunction(() => {
     const text = JSON.parse(window.render_game_to_text());
     const renderer = text.structures?.renderer;
-    return (renderer?.kilnSkinsLoaded ?? 0) + (renderer?.kilnSkinFallbacks ?? 0) > 0;
+    return (renderer?.kilnSkinsLoaded ?? 0) + (renderer?.kilnSkinFallbacks ?? 0) >= 8;
   }, null, { timeout: 12000 });
   await page.waitForTimeout(300);
   const textAfterSkin = await page.evaluate(() => JSON.parse(window.render_game_to_text()));
@@ -273,15 +273,21 @@ async function runViewport(browser, targetUrl, name, viewport) {
   const routeReadabilityRoles = renderer?.routeReadabilityRoles ?? 0;
   const kilnSkinsLoaded = renderer?.kilnSkinsLoaded ?? 0;
   const kilnSkinFallbacks = renderer?.kilnSkinFallbacks ?? 0;
+  const waystoneSkins = renderer?.kilnSkinsBySlug?.waystone ?? { loaded: 0, pending: 0, fallback: 0 };
+  const caveAnchorSkins = renderer?.kilnSkinsBySlug?.['cave-anchor'] ?? { loaded: 0, pending: 0, fallback: 0 };
   const waystoneModelResponses = kilnAssetResponses.filter((asset) => asset.url.includes('/assets/kiln/models/waystone.glb'));
+  const caveAnchorModelResponses = kilnAssetResponses.filter((asset) => asset.url.includes('/assets/kiln/models/cave-anchor.glb'));
   const generatedRequests = kilnAssetRequests.filter((url) => url.includes('/assets/kiln/generated/'));
   const waystones = seeded.navigation?.waystones?.length ?? 0;
   const caveAnchors = seeded.navigation?.caveAnchors?.length ?? 0;
   if (routeSilhouettes < 2) throw new Error(`${name}: expected at least 2 route marker silhouettes, got ${routeSilhouettes}`);
   if (routeReadabilityRoles < 18) throw new Error(`${name}: expected at least 18 marker roles, got ${routeReadabilityRoles}`);
-  if (kilnSkinsLoaded < 1) throw new Error(`${name}: expected at least one loaded Kiln waystone skin, got ${kilnSkinsLoaded}`);
+  if (kilnSkinsLoaded < 8) throw new Error(`${name}: expected 8 loaded Kiln route-marker skins, got ${kilnSkinsLoaded}`);
   if (kilnSkinFallbacks > 0) throw new Error(`${name}: Kiln skin fallback triggered ${kilnSkinFallbacks} time(s)`);
+  if (waystoneSkins.loaded < 5) throw new Error(`${name}: expected 5 loaded waystone skins, got ${JSON.stringify(waystoneSkins)}`);
+  if (caveAnchorSkins.loaded < 3) throw new Error(`${name}: expected 3 loaded cave-anchor skins, got ${JSON.stringify(caveAnchorSkins)}`);
   if (!waystoneModelResponses.some((asset) => asset.status >= 200 && asset.status < 300)) throw new Error(`${name}: missing successful models/waystone.glb response`);
+  if (!caveAnchorModelResponses.some((asset) => asset.status >= 200 && asset.status < 300)) throw new Error(`${name}: missing successful models/cave-anchor.glb response`);
   if (generatedRequests.length > 0) throw new Error(`${name}: runtime requested raw generated Kiln assets ${JSON.stringify(generatedRequests)}`);
   if (waystones < 1 || caveAnchors < 1) throw new Error(`${name}: missing route readback waystones/caveAnchors`);
   if (!canvasProbe.ok && !screenshotProbe.ok) throw new Error(`${name}: pixel probe failed ${JSON.stringify({ canvasProbe, screenshotProbe })}`);
@@ -296,6 +302,7 @@ async function runViewport(browser, targetUrl, name, viewport) {
       requests: kilnAssetRequests,
       responses: kilnAssetResponses,
       waystoneModelResponses,
+      caveAnchorModelResponses,
       generatedRequests,
     },
     waystones,

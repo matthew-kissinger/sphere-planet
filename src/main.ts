@@ -591,7 +591,7 @@ async function boot(): Promise<void> {
   const wardedNativeCreatures = new Set(normalizeNativeCreatureWards(loadedSave?.progression?.nativeCreatureWards));
   const landmarkRenderer = new LandmarkRenderer(scene, pentagonTiles);
   const domainResourceRenderer = new DomainResourceRenderer(scene, kilnAssets);
-  const skyfallRenderer = new SkyfallRenderer(scene);
+  const skyfallRenderer = new SkyfallRenderer(scene, kilnAssets);
   const caveMouthRenderer = new CaveMouthRenderer(scene);
   const routeRenderer = new RouteRenderer(scene);
   const murmurRenderer = new MurmurRenderer(scene);

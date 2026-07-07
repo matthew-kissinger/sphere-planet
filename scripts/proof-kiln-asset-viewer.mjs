@@ -36,6 +36,7 @@ const baseFamilySlugs = {
     'compost-bin',
     'rain-cistern',
     'root-cellar',
+    'cave-anchor',
     'dock-segment',
     'fish-trap',
     'shore-net',
@@ -82,6 +83,11 @@ const baseFamilySlugs = {
     'bird-shore-gull',
     'bird-forest-flutter',
     'bird-storm-finch',
+  ],
+  wonders: [
+    'crater-emberfall',
+    'crater-glassrain',
+    'crater-starbloom',
   ],
 };
 

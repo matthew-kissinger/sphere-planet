@@ -4,10 +4,12 @@ import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js
 import type { DomainResourceKind } from '../sim/domainResources';
 import type { FishSchoolKind } from '../sim/fishing';
 import type { NativeCreatureKind } from '../sim/nativeLife';
+import type { SkyfallKind } from '../sim/skyfall';
 import type { TreeVisualKind } from '../world/trees';
 
 export type KilnStructureSkinSlug =
   | 'waystone'
+  | 'cave-anchor'
   | 'door-kit'
   | 'window-frame'
   | 'roof-bundle'
@@ -62,6 +64,7 @@ export type KilnBirdSkinSlug =
   | 'bird-forest-flutter'
   | 'bird-storm-finch';
 export type KilnBirdKind = 'sky' | 'shore' | 'forest' | 'storm';
+export type KilnSkyfallSkinSlug = 'crater-emberfall' | 'crater-glassrain' | 'crater-starbloom';
 
 type KilnAssetStatus = 'ready' | 'unused' | 'missing';
 
@@ -179,6 +182,10 @@ export interface KilnAssetSnapshot {
   birdSkins?: {
     enabled: readonly KilnBirdSkinSlug[];
     loaded: readonly KilnBirdSkinSlug[];
+  };
+  skyfallSkins?: {
+    enabled: readonly KilnSkyfallSkinSlug[];
+    loaded: readonly KilnSkyfallSkinSlug[];
   };
 }
 
@@ -407,6 +414,38 @@ export interface BirdSkinProvider {
   snapshot?(): KilnAssetSnapshot;
 }
 
+export interface KilnSkyfallSkinFitSnapshot {
+  slug: KilnSkyfallSkinSlug;
+  kind: SkyfallKind;
+  socketRole: 'skyfall-crater-shell';
+  sourceBboxSize: readonly number[];
+  runtimeSourceBboxSize: readonly number[];
+  normalizedBboxSize: readonly number[];
+  normalizePolicy: 'center-xz-bottom-y-fit-footprint-height';
+  orientation: KilnInstancedOrientationSnapshot;
+  animationPolicy: 'static-shell-with-procedural-omen-overlays';
+  sourceUrl: string;
+  sourceMeshCount: number;
+  materialCount?: number;
+  targetFootprint: number;
+  targetHeight: number;
+  acceptanceNote: string;
+}
+
+export interface KilnSkyfallSkinTemplate {
+  slug: KilnSkyfallSkinSlug;
+  kind: SkyfallKind;
+  manifest: KilnManifestAsset;
+  sourceUrl: string;
+  template: THREE.Object3D;
+  fit: KilnSkyfallSkinFitSnapshot;
+}
+
+export interface SkyfallSkinProvider {
+  createSkyfallSkinTemplate(slug: KilnSkyfallSkinSlug): Promise<KilnSkyfallSkinTemplate | null>;
+  snapshot?(): KilnAssetSnapshot;
+}
+
 const RUNTIME_STRUCTURE_SKINS: Record<KilnStructureSkinSlug, KilnSkinTransform> = {
   waystone: {
     scale: 1.45,
@@ -423,6 +462,23 @@ const RUNTIME_STRUCTURE_SKINS: Record<KilnStructureSkinSlug, KilnSkinTransform> 
       glbPolicy: 'decorative-skin-after-normalization',
     },
     acceptanceNote: 'accepted as decorative route-marker shell; procedural glyph overlays remain authoritative',
+  },
+  'cave-anchor': {
+    scale: [1, 1, 1],
+    fitSourceSize: [1.2, 1.12, 1.2],
+    position: [0, 0.02, 0],
+    rotation: [0, 0, 0],
+    hideProceduralNames: ['caveAnchorStoneBase', 'caveAnchorCairnStone', 'caveAnchorPost', 'caveAnchorRopeRail'],
+    socket: {
+      item: 'caveAnchor',
+      role: 'route-marker',
+      gridWidth: 1.2,
+      gridDepth: 1.2,
+      height: 1.12,
+      loadBearing: 'code-socket',
+      glbPolicy: 'decorative-skin-after-normalization',
+    },
+    acceptanceNote: 'accepted as decorative cave-route marker shell; glyph, rope-pulse, flood, spring, and active glow overlays remain procedural',
   },
   'door-kit': {
     scale: [1, 1, 1],
@@ -934,6 +990,32 @@ const RUNTIME_BIRD_SKINS: Record<KilnBirdSkinSlug, {
   },
 };
 
+const RUNTIME_SKYFALL_SKINS: Record<KilnSkyfallSkinSlug, {
+  kind: SkyfallKind;
+  targetFootprint: number;
+  targetHeight: number;
+  acceptanceNote: string;
+}> = {
+  'crater-emberfall': {
+    kind: 'emberFall',
+    targetFootprint: 5.25 / 2.8,
+    targetHeight: 1.15 / 2.8,
+    acceptanceNote: 'accepted as skyfall crater shell; omen beams, harvest glow, sparks, and reward timing remain code-authored',
+  },
+  'crater-glassrain': {
+    kind: 'glassRain',
+    targetFootprint: 5.25 / 2.8,
+    targetHeight: 1.15 / 2.8,
+    acceptanceNote: 'accepted as skyfall glass-rain crater shell; cyan beams, harvest glow, sparks, and reward timing remain code-authored',
+  },
+  'crater-starbloom': {
+    kind: 'starBloom',
+    targetFootprint: 5.25 / 2.8,
+    targetHeight: 1.15 / 2.8,
+    acceptanceNote: 'accepted as skyfall starbloom crater shell; bloom omen, glow core, sparks, and reward timing remain code-authored',
+  },
+};
+
 function publicAssetUrl(relativePath: string, base = import.meta.env.BASE_URL || '/'): string {
   const cleanBase = base.endsWith('/') ? base : `${base}/`;
   return `${cleanBase}${relativePath.replace(/^\/+/, '')}`;
@@ -1407,9 +1489,64 @@ function normalizeBirdTemplate(source: THREE.Object3D, slug: string, targetSpan:
   };
 }
 
-export class KilnRuntimeAssets implements StructureSkinProvider, ResourceDropSkinProvider, DomainResourceSkinProvider, TreeSkinProvider, CreatureSkinProvider, FishSkinProvider, BirdSkinProvider {
+function normalizeSkyfallTemplate(source: THREE.Object3D, slug: string, targetFootprint: number, targetHeight: number): {
+  template: THREE.Object3D;
+  runtimeSourceBboxSize: number[];
+  normalizedBboxSize: number[];
+  sourceMeshCount: number;
+  orientation: KilnInstancedOrientationSnapshot;
+} {
+  source.updateMatrixWorld(true);
+  const sourceBox = new THREE.Box3().setFromObject(source);
+  const runtimeSourceBboxSize = bboxSizeOfBox(sourceBox);
+  const size = new THREE.Vector3();
+  sourceBox.getSize(size);
+  const center = new THREE.Vector3();
+  sourceBox.getCenter(center);
+  const footprint = Math.max(size.x, size.z);
+  const footprintScale = footprint > 0 ? targetFootprint / footprint : 1;
+  const heightScale = size.y > 0 ? targetHeight / size.y : 1;
+  const scale = Math.max(0.01, Math.min(footprintScale, heightScale));
+  const root = new THREE.Group();
+  root.name = `kiln-skyfall-template-${slug}`;
+  const scaled = new THREE.Group();
+  scaled.name = `kiln-skyfall-scale-${slug}`;
+  scaled.scale.setScalar(scale);
+  const body = source.clone(true);
+  body.name = `kiln-skyfall-body-${slug}`;
+  body.position.set(-center.x, -sourceBox.min.y, -center.z);
+  let sourceMeshCount = 0;
+  body.traverse((child) => {
+    child.userData.kilnAssetSlug = slug;
+    if ((child as THREE.Mesh).isMesh) {
+      const mesh = child as THREE.Mesh;
+      sourceMeshCount += 1;
+      mesh.castShadow = false;
+      mesh.receiveShadow = true;
+      mesh.frustumCulled = false;
+    }
+  });
+  scaled.add(body);
+  root.add(scaled);
+  root.updateMatrixWorld(true);
+  const normalizedBboxSize = fittedSize(root);
+  return {
+    template: root,
+    runtimeSourceBboxSize,
+    normalizedBboxSize,
+    sourceMeshCount,
+    orientation: {
+      policy: 'preserve-y-up',
+      sourceUpAxis: 'y',
+      axisCorrection: [0, 0, 0],
+    },
+  };
+}
+
+export class KilnRuntimeAssets implements StructureSkinProvider, ResourceDropSkinProvider, DomainResourceSkinProvider, TreeSkinProvider, CreatureSkinProvider, FishSkinProvider, BirdSkinProvider, SkyfallSkinProvider {
   private readonly enabled = new Set<KilnStructureSkinSlug>([
     'waystone',
+    'cave-anchor',
     'door-kit',
     'window-frame',
     'roof-bundle',
@@ -1468,6 +1605,11 @@ export class KilnRuntimeAssets implements StructureSkinProvider, ResourceDropSki
     'bird-forest-flutter',
     'bird-storm-finch',
   ]);
+  private readonly enabledSkyfallSkins = new Set<KilnSkyfallSkinSlug>([
+    'crater-emberfall',
+    'crater-glassrain',
+    'crater-starbloom',
+  ]);
   private readonly loader = new GLTFLoader();
   private readonly loaded = new Set<KilnStructureSkinSlug>();
   private readonly loadedResourceDrops = new Set<KilnResourceDropSkinSlug>();
@@ -1476,6 +1618,7 @@ export class KilnRuntimeAssets implements StructureSkinProvider, ResourceDropSki
   private readonly loadedCreatureSkins = new Set<KilnCreatureSkinSlug>();
   private readonly loadedFishSkins = new Set<KilnFishSkinSlug>();
   private readonly loadedBirdSkins = new Set<KilnBirdSkinSlug>();
+  private readonly loadedSkyfallSkins = new Set<KilnSkyfallSkinSlug>();
   private readonly failed: string[] = [];
   private readonly modelRequests: string[] = [];
   private manifestPromise: Promise<KilnManifest | null> | null = null;
@@ -1487,6 +1630,7 @@ export class KilnRuntimeAssets implements StructureSkinProvider, ResourceDropSki
   private readonly creatureTemplates = new Map<KilnCreatureSkinSlug, Promise<KilnCreatureSkinTemplate | null>>();
   private readonly fishTemplates = new Map<KilnFishSkinSlug, Promise<KilnFishSkinTemplate | null>>();
   private readonly birdTemplates = new Map<KilnBirdSkinSlug, Promise<KilnBirdSkinTemplate | null>>();
+  private readonly skyfallTemplates = new Map<KilnSkyfallSkinSlug, Promise<KilnSkyfallSkinTemplate | null>>();
   private readonly baseUrl: string;
 
   readonly manifestUrl: string;
@@ -1542,6 +1686,10 @@ export class KilnRuntimeAssets implements StructureSkinProvider, ResourceDropSki
     return this.loadBirdTemplate(slug);
   }
 
+  async createSkyfallSkinTemplate(slug: KilnSkyfallSkinSlug): Promise<KilnSkyfallSkinTemplate | null> {
+    return this.loadSkyfallTemplate(slug);
+  }
+
   snapshot(): KilnAssetSnapshot {
     return {
       enabled: [...this.enabled],
@@ -1579,6 +1727,10 @@ export class KilnRuntimeAssets implements StructureSkinProvider, ResourceDropSki
       birdSkins: {
         enabled: [...this.enabledBirdSkins],
         loaded: [...this.loadedBirdSkins],
+      },
+      skyfallSkins: {
+        enabled: [...this.enabledSkyfallSkins],
+        loaded: [...this.loadedSkyfallSkins],
       },
     };
   }
@@ -2032,6 +2184,60 @@ export class KilnRuntimeAssets implements StructureSkinProvider, ResourceDropSki
       });
 
     this.birdTemplates.set(slug, promise);
+    return promise;
+  }
+
+  private loadSkyfallTemplate(slug: KilnSkyfallSkinSlug): Promise<KilnSkyfallSkinTemplate | null> {
+    if (!this.enabledSkyfallSkins.has(slug)) return Promise.resolve(null);
+    const existing = this.skyfallTemplates.get(slug);
+    if (existing) return existing;
+
+    const promise = this.loadManifest()
+      .then(async (manifest) => {
+        const asset = manifest?.assets?.find((entry) => entry.slug === slug);
+        if (!asset || asset.status !== 'ready' || !asset.file) {
+          this.failed.push(`${slug}: missing ready manifest record`);
+          return null;
+        }
+        const sourceUrl = publicAssetUrl(`assets/kiln/${asset.file}`, this.baseUrl);
+        this.modelRequests.push(sourceUrl);
+        const gltf = await this.loader.loadAsync(sourceUrl);
+        const skyfall = RUNTIME_SKYFALL_SKINS[slug];
+        const { template, runtimeSourceBboxSize, normalizedBboxSize, sourceMeshCount, orientation } =
+          normalizeSkyfallTemplate(gltf.scene as unknown as THREE.Object3D, slug, skyfall.targetFootprint, skyfall.targetHeight);
+        this.loadedSkyfallSkins.add(slug);
+        const fit: KilnSkyfallSkinFitSnapshot = {
+          slug,
+          kind: skyfall.kind,
+          socketRole: 'skyfall-crater-shell',
+          sourceBboxSize: sourceBboxSize(asset),
+          runtimeSourceBboxSize,
+          normalizedBboxSize,
+          normalizePolicy: 'center-xz-bottom-y-fit-footprint-height',
+          orientation,
+          animationPolicy: 'static-shell-with-procedural-omen-overlays',
+          sourceUrl,
+          sourceMeshCount,
+          materialCount: asset.geometry?.materialCount,
+          targetFootprint: skyfall.targetFootprint,
+          targetHeight: skyfall.targetHeight,
+          acceptanceNote: skyfall.acceptanceNote,
+        };
+        return {
+          slug,
+          kind: skyfall.kind,
+          manifest: asset,
+          sourceUrl,
+          template,
+          fit,
+        };
+      })
+      .catch((err: unknown) => {
+        this.failed.push(`${slug}: ${err instanceof Error ? err.message : String(err)}`);
+        return null;
+      });
+
+    this.skyfallTemplates.set(slug, promise);
     return promise;
   }
 }

@@ -644,8 +644,9 @@ const STRUCTURE_SOCKET_SPEC_OVERRIDES: Partial<Record<PlaceableItemId, Partial<O
     gridWidth: 0.55,
     gridDepth: 0.55,
     height: 1.15,
-    snap: ['centered near a real cave mouth'],
-    visualScale: 'fit as marker, not a fake cave entrance',
+    snap: ['centered near a real cave mouth', 'decorative GLB marker keeps glyph, rope pulse, flood, spring, and active glow overlays visible'],
+    visualScale: 'fit approved GLB as marker skin, not a fake cave entrance',
+    glbPolicy: 'decorative-skin-after-normalization',
   },
   waystone: {
     role: 'route-marker',

@@ -3,6 +3,24 @@ Current operating goal: Hearth and Horizon full crafting-survival cycle under th
 
 ## 2026-07-07
 
+- Closed the first H5/K7 wonder and route-marker GLB adoption slice. `cave-anchor`
+  now loads the approved Kiln GLB through the structure skin path while preserving
+  cave glyphs, rope pulses, flood/spring markers, route readback, and active glow as
+  code-owned overlays. `crater-emberfall`, `crater-glassrain`, and
+  `crater-starbloom` now load through `SkyfallRenderer` as normalized crater shells
+  under the existing skyfall scale; beams, omen trails, core glows, sparks, harvest
+  state, and rewards remain procedural/sim-owned. `npm run proof:route-markers`
+  passes on desktop and phone with five waystone skins plus three cave-anchor skins,
+  zero fallback, and committed model requests. `npm run proof:k7-wonders` passes for
+  all three crater GLBs with zero fallback, zero generated-path runtime requests, and
+  screenshots under `output/playwright/k7-wonder-skins/`.
+- Expanded the Kiln alignment viewer for the accepted K7 subset. The `structures`
+  family now includes `cave-anchor`, a new `wonders` family covers the three crater
+  shells, and `adopted` now proves 58 of 70 ready GLBs. `npm run
+  proof:kiln-asset-viewer` passes with 10 overview screenshots, all 70 ready
+  single-asset screenshots, zero page/console errors, and zero generated-path runtime
+  requests. The 12 remaining ready GLBs are the shrine landmark shells, which need a
+  dedicated landmark-skin provider and per-shrine fit/overlay proof before wiring.
 - Closed the H5/K4 utility and waterline GLB adoption slice. `compost-bin`,
   `rain-cistern`, `root-cellar`, `dock-segment`, `fish-trap`, `shore-net`, and
   `lantern-post` now load approved Kiln GLBs as decorative skins over code-owned center

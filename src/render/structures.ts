@@ -855,6 +855,7 @@ const KILN_SKIN_BY_STRUCTURE_ITEM: Partial<Record<StructureSave['item'], KilnStr
   compostBin: 'compost-bin',
   rainCistern: 'rain-cistern',
   rootCellar: 'root-cellar',
+  caveAnchor: 'cave-anchor',
   dockSegment: 'dock-segment',
   fishTrap: 'fish-trap',
   shoreNet: 'shore-net',
