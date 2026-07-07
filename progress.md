@@ -3,6 +3,17 @@ Current operating goal: Hearth and Horizon full crafting-survival cycle under th
 
 ## 2026-07-07
 
+- Closed the K3 camp/home prop skin slice. `workbench`, `campfire`, `chest`, `bedroll`,
+  `crop-plot`, `drying-rack`, and `weather-vane` now load approved GLBs as decorative
+  skins over code-owned structure sockets. The renderer hides only duplicated procedural
+  bodies while keeping state overlays authoritative: flame/smoke/warmth, storage latch,
+  home marker, crop growth, drying food, and weather-vane needle/ribbons/storm glow.
+  `structureSocketSpec()` now reports these as `decorative-skin-after-normalization`
+  targets instead of procedural-only sockets, and the Kiln asset viewer includes them in
+  the adopted structure family. `npm run proof:k3-home-props` passes with bundled
+  Playwright resolution, proving desktop and phone model requests from
+  `assets/kiln/models/`, seven loaded K3 skins, zero fallbacks, zero generated-path
+  runtime requests, and screenshots under `output/playwright/k3-home-prop-skins/`.
 - Closed the first true C6 edge-addressed socket slice. Wall-like pieces now derive
   `tile:edge` occupancy from yaw, so a center foundation and multiple wall edges can share
   one hex when their sockets do not overlap. Duplicate edge placement, relocation, and

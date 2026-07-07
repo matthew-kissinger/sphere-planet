@@ -43,6 +43,50 @@ async function flushAsyncSkinLoads(): Promise<void> {
   await new Promise((resolve) => setTimeout(resolve, 0));
 }
 
+const FAKE_KILN_SKIN_ITEMS: Record<KilnStructureSkinSlug, StructureSave['item']> = {
+  waystone: 'waystone',
+  'door-kit': 'doorKit',
+  'window-frame': 'windowFrame',
+  'roof-bundle': 'roofBundle',
+  workbench: 'workbench',
+  campfire: 'campfire',
+  chest: 'chest',
+  bedroll: 'bedroll',
+  'crop-plot': 'cropPlot',
+  'drying-rack': 'dryingRack',
+  'weather-vane': 'weatherVane',
+};
+
+const FAKE_KILN_SOCKET_ROLES: Record<KilnStructureSkinSlug, string> = {
+  waystone: 'route-marker',
+  'door-kit': 'wall-opening',
+  'window-frame': 'wall-light',
+  'roof-bundle': 'roof-cap',
+  workbench: 'crafting-station',
+  campfire: 'warmth-station',
+  chest: 'storage-station',
+  bedroll: 'home-rest',
+  'crop-plot': 'food-plot',
+  'drying-rack': 'food-preserve',
+  'weather-vane': 'weather-readback',
+};
+
+const FAKE_KILN_HIDE_NAMES: Record<KilnStructureSkinSlug, string[]> = {
+  waystone: ['waystoneBase', 'waystoneCore', 'waystoneBand'],
+  'door-kit': ['leftJamb', 'rightJamb', 'lintel', 'doorSlab', 'knob'],
+  'window-frame': ['topRail', 'bottomRail', 'leftRail', 'rightRail', 'glassPane'],
+  'roof-bundle': ['leftRoofPlane', 'rightRoofPlane', 'ridgeBeam'],
+  workbench: ['benchTop', 'toolBlock', 'metalVise', 'benchLeg'],
+  campfire: ['fireRingStone', 'crossedLog'],
+  chest: ['chestBox', 'chestLid', 'leftBand', 'rightBand'],
+  bedroll: ['sleepMat', 'rolledBlanket', 'strap'],
+  'crop-plot': ['woodFrame', 'tilledSoil'],
+  'drying-rack': ['dryingRackLeg', 'dryingRackRail', 'dryingRackBrace'],
+  'weather-vane': ['weatherVaneStoneBase', 'weatherVanePost', 'weatherVaneCompassDisk', 'weatherVaneCompassTick'],
+};
+
+const ALL_FAKE_KILN_STRUCTURE_SKINS = Object.keys(FAKE_KILN_SKIN_ITEMS) as KilnStructureSkinSlug[];
+
 class FakeKilnAssets implements StructureSkinProvider {
   async createStructureSkin(slug: KilnStructureSkinSlug) {
     const object = new THREE.Group();
@@ -51,8 +95,8 @@ class FakeKilnAssets implements StructureSkinProvider {
     object.add(new THREE.Mesh(new THREE.BoxGeometry(1, 1, 1), new THREE.MeshBasicMaterial()));
     const fit = {
       slug,
-      item: slug === 'door-kit' ? 'doorKit' : slug === 'window-frame' ? 'windowFrame' : slug === 'roof-bundle' ? 'roofBundle' : 'waystone',
-      socketRole: slug === 'door-kit' ? 'wall-opening' : slug === 'window-frame' ? 'wall-light' : slug === 'roof-bundle' ? 'roof-cap' : 'route-marker',
+      item: FAKE_KILN_SKIN_ITEMS[slug],
+      socketRole: FAKE_KILN_SOCKET_ROLES[slug],
       sourceBboxSize: [1, 1, 1],
       fittedBboxSize: [1, 1, 1],
       scale: 1,
@@ -66,29 +110,23 @@ class FakeKilnAssets implements StructureSkinProvider {
       sourceUrl: `/assets/kiln/models/${slug}.glb`,
     };
     object.userData.kilnSkinFit = fit;
-    const hideProceduralNames: Record<KilnStructureSkinSlug, string[]> = {
-      waystone: ['waystoneBase', 'waystoneCore', 'waystoneBand'],
-      'door-kit': ['leftJamb', 'rightJamb', 'lintel', 'doorSlab', 'knob'],
-      'window-frame': ['topRail', 'bottomRail', 'leftRail', 'rightRail', 'glassPane'],
-      'roof-bundle': ['leftRoofPlane', 'rightRoofPlane', 'ridgeBeam'],
-    };
     return {
       slug,
       object,
       manifest: { slug, status: 'ready' as const, file: `models/${slug}.glb` },
       sourceUrl: `/assets/kiln/models/${slug}.glb`,
-      hideProceduralNames: hideProceduralNames[slug],
+      hideProceduralNames: FAKE_KILN_HIDE_NAMES[slug],
       fit,
     };
   }
 
   snapshot() {
     return {
-      enabled: ['waystone', 'door-kit', 'window-frame', 'roof-bundle'] as KilnStructureSkinSlug[],
+      enabled: ALL_FAKE_KILN_STRUCTURE_SKINS,
       manifestUrl: '/assets/kiln/ASSET_MANIFEST.json',
       modelRequests: [],
       manifestLoaded: true,
-      loaded: ['waystone', 'door-kit', 'window-frame', 'roof-bundle'] as KilnStructureSkinSlug[],
+      loaded: ALL_FAKE_KILN_STRUCTURE_SKINS,
       failed: [],
       structureSkins: {},
     };
@@ -260,8 +298,12 @@ describe('structure renderer asset readability', () => {
     expect(namedObject(renderer, 'leftRoofPlane')?.visible).toBe(false);
     expect(namedObject(renderer, 'windowWarmLight')?.visible).toBe(true);
     expect(namedObject(renderer, 'roofShelterGlow')?.visible).toBe(true);
-    expect(stats.kilnSkinsLoaded).toBe(4);
+    expect(stats.kilnSkinsLoaded).toBe(8);
     expect(stats.kilnSkinFallbacks).toBe(0);
+    expect(stats.kilnSkinsBySlug.bedroll).toMatchObject({ loaded: 1, pending: 0, fallback: 0 });
+    expect(stats.kilnSkinsBySlug.campfire).toMatchObject({ loaded: 1, pending: 0, fallback: 0 });
+    expect(stats.kilnSkinsBySlug.workbench).toMatchObject({ loaded: 1, pending: 0, fallback: 0 });
+    expect(stats.kilnSkinsBySlug.chest).toMatchObject({ loaded: 1, pending: 0, fallback: 0 });
     expect(stats.kilnSkinsBySlug['door-kit']).toMatchObject({ loaded: 1, pending: 0, fallback: 0 });
     expect(stats.kilnSkinsBySlug['window-frame']).toMatchObject({ loaded: 1, pending: 0, fallback: 0 });
     expect(stats.kilnSkinsBySlug['roof-bundle']).toMatchObject({ loaded: 2, pending: 0, fallback: 0 });
@@ -271,6 +313,90 @@ describe('structure renderer asset readability', () => {
       glbPolicy: 'decorative-skin-after-normalization',
       instanceability: 'C',
     });
+  });
+
+  it('skins K3 home and camp props while preserving procedural state overlays', async () => {
+    const scene = new THREE.Scene();
+    const geo = new Goldberg(8);
+    const layers = buildLayers();
+    const renderer = new StructureRenderer(scene, new FakeKilnAssets());
+    const structures: StructureSave[] = [
+      { id: 1, item: 'workbench', tile: 1, layer: 100, yaw: 0 },
+      { id: 2, item: 'campfire', tile: 2, layer: 100, yaw: 0, state: { lit: true } },
+      { id: 3, item: 'chest', tile: 3, layer: 100, yaw: 0, state: { storage: { wood: 2 } } },
+      { id: 4, item: 'bedroll', tile: 4, layer: 100, yaw: 0, state: { home: true } },
+      { id: 5, item: 'cropPlot', tile: 5, layer: 100, yaw: 0, state: { crop: 'berries', growth: 3, fertility: 2 } },
+      { id: 6, item: 'dryingRack', tile: 6, layer: 100, yaw: 0, state: { preserves: 1 } },
+      { id: 7, item: 'weatherVane', tile: 7, layer: 100, yaw: 0, state: { forecastReads: 1, forecastKind: 'storm' } },
+    ];
+
+    renderer.setStructures(structures);
+    await flushAsyncSkinLoads();
+    renderer.update(structures, geo, layers, { x: 0, y: 0, z: 0 }, 0.5);
+    const stats = renderer.stats();
+
+    for (const slug of ['workbench', 'campfire', 'chest', 'bedroll', 'crop-plot', 'drying-rack', 'weather-vane'] as const) {
+      expect(namedObject(renderer, `kiln-skin-${slug}`)).toBeTruthy();
+      expect(stats.kilnSkinsBySlug[slug]).toMatchObject({ loaded: 1, pending: 0, fallback: 0 });
+    }
+    expect(namedObject(renderer, 'benchTop')?.visible).toBe(false);
+    expect(namedObject(renderer, 'fireRingStone')?.visible).toBe(false);
+    expect(namedObject(renderer, 'chestBox')?.visible).toBe(false);
+    expect(namedObject(renderer, 'sleepMat')?.visible).toBe(false);
+    expect(namedObject(renderer, 'woodFrame')?.visible).toBe(false);
+    expect(namedObject(renderer, 'dryingRackLeg')?.visible).toBe(false);
+    expect(namedObject(renderer, 'weatherVanePost')?.visible).toBe(false);
+    expect(namedObject(renderer, 'flameCore')?.visible).toBe(true);
+    expect(namedObject(renderer, 'smokePuff0')?.visible).toBe(true);
+    expect(namedObject(renderer, 'frontLatch')?.visible).toBe(true);
+    expect(namedObject(renderer, 'homeMarker')?.visible).toBe(true);
+    expect(namedObject(renderer, 'sprout')?.visible).toBe(true);
+    expect(namedObject(renderer, 'berryCluster')?.visible).toBe(true);
+    expect(namedObject(renderer, 'dryingFood')?.visible).toBe(true);
+    expect(namedObject(renderer, 'weatherVaneNeedle')?.visible).toBe(true);
+    expect(namedObject(renderer, 'weatherVaneRibbon0')?.visible).toBe(true);
+    expect(namedObject(renderer, 'weatherVaneStormGlow')?.visible).toBe(true);
+    expect(stats.kilnSkinsLoaded).toBe(7);
+    expect(stats.kilnSkinFallbacks).toBe(0);
+    expect(stats.kilnSkinFits['crop-plot']).toMatchObject({
+      item: 'cropPlot',
+      socketRole: 'food-plot',
+      glbPolicy: 'decorative-skin-after-normalization',
+    });
+  });
+
+  it('keeps procedural K3 home and camp props visible when GLB skins fall back', async () => {
+    const scene = new THREE.Scene();
+    const geo = new Goldberg(8);
+    const layers = buildLayers();
+    const renderer = new StructureRenderer(scene, new FailingKilnAssets());
+    const structures: StructureSave[] = [
+      { id: 1, item: 'workbench', tile: 1, layer: 100, yaw: 0 },
+      { id: 2, item: 'campfire', tile: 2, layer: 100, yaw: 0, state: { lit: true } },
+      { id: 3, item: 'chest', tile: 3, layer: 100, yaw: 0, state: { storage: { wood: 2 } } },
+      { id: 4, item: 'bedroll', tile: 4, layer: 100, yaw: 0, state: { home: true } },
+      { id: 5, item: 'cropPlot', tile: 5, layer: 100, yaw: 0, state: { crop: 'berries', growth: 3, fertility: 2 } },
+      { id: 6, item: 'dryingRack', tile: 6, layer: 100, yaw: 0, state: { preserves: 1 } },
+      { id: 7, item: 'weatherVane', tile: 7, layer: 100, yaw: 0, state: { forecastReads: 1, forecastKind: 'storm' } },
+    ];
+
+    renderer.setStructures(structures);
+    await flushAsyncSkinLoads();
+    renderer.update(structures, geo, layers, { x: 0, y: 0, z: 0 }, 0.5);
+    const stats = renderer.stats();
+
+    expect(namedObject(renderer, 'kiln-skin-workbench')).toBeNull();
+    for (const name of ['benchTop', 'fireRingStone', 'chestBox', 'sleepMat', 'woodFrame', 'dryingRackLeg', 'weatherVanePost']) {
+      expect(namedObject(renderer, name)?.visible).toBe(true);
+    }
+    for (const name of ['flameCore', 'homeMarker', 'sprout', 'dryingFood', 'weatherVaneNeedle', 'weatherVaneStormGlow']) {
+      expect(namedObject(renderer, name)?.visible).toBe(true);
+    }
+    expect(stats.kilnSkinsLoaded).toBe(0);
+    expect(stats.kilnSkinFallbacks).toBe(7);
+    for (const slug of ['workbench', 'campfire', 'chest', 'bedroll', 'crop-plot', 'drying-rack', 'weather-vane'] as const) {
+      expect(stats.kilnSkinsBySlug[slug]).toMatchObject({ loaded: 0, pending: 0, fallback: 1 });
+    }
   });
 
   it('keeps procedural house-kit silhouettes visible when Kiln skin loading falls back', async () => {

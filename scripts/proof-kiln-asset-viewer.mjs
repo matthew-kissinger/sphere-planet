@@ -23,7 +23,19 @@ const outDir = path.join(root, 'output', 'playwright', 'kiln-asset-viewer');
 const requestedPort = Number(process.env.PROOF_PORT || 0);
 
 const baseFamilySlugs = {
-  structures: ['waystone', 'door-kit', 'window-frame', 'roof-bundle'],
+  structures: [
+    'waystone',
+    'door-kit',
+    'window-frame',
+    'roof-bundle',
+    'workbench',
+    'campfire',
+    'chest',
+    'bedroll',
+    'crop-plot',
+    'drying-rack',
+    'weather-vane',
+  ],
   drops: ['drop-wood-logs', 'drop-ore-chunk'],
   nodes: [
     'node-hearth-coal',

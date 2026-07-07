@@ -847,6 +847,13 @@ const FACTORIES: Record<StructureSave['item'], PropFactory> = {
 };
 
 const KILN_SKIN_BY_STRUCTURE_ITEM: Partial<Record<StructureSave['item'], KilnStructureSkinSlug>> = {
+  workbench: 'workbench',
+  campfire: 'campfire',
+  chest: 'chest',
+  bedroll: 'bedroll',
+  cropPlot: 'crop-plot',
+  dryingRack: 'drying-rack',
+  weatherVane: 'weather-vane',
   waystone: 'waystone',
   doorKit: 'door-kit',
   windowFrame: 'window-frame',

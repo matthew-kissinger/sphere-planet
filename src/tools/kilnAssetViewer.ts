@@ -80,7 +80,19 @@ const HEX_FLAT_TO_FLAT_WORLD_UNITS = 5.6;
 const HEX_RADIUS_WORLD_UNITS = HEX_FLAT_TO_FLAT_WORLD_UNITS / Math.sqrt(3);
 
 const FAMILY_SLUGS: Record<KilnViewerFamily, readonly string[]> = {
-  structures: ['waystone', 'door-kit', 'window-frame', 'roof-bundle'],
+  structures: [
+    'waystone',
+    'door-kit',
+    'window-frame',
+    'roof-bundle',
+    'workbench',
+    'campfire',
+    'chest',
+    'bedroll',
+    'crop-plot',
+    'drying-rack',
+    'weather-vane',
+  ],
   drops: ['drop-wood-logs', 'drop-ore-chunk'],
   nodes: [
     'node-hearth-coal',
@@ -196,6 +208,13 @@ function socketProfileFor(slug: string, family: KilnViewerFamily, asset?: KilnMa
   if (slug === 'shore-net') return { role: 'shoreline utility', grid: 'edge-aligned shore socket', footprint: 3.6, height: 2.4, ringColor: 0x87d9e8 };
   if (slug === 'dock-segment') return { role: 'waterline build socket', grid: 'edge-aligned shore socket', footprint: 4.7, height: 1.8, ringColor: 0x87d9e8 };
   if (slug === 'fish-trap') return { role: 'waterline trap', grid: 'edge-aligned shore socket', footprint: 2.2, height: 1.4, ringColor: 0x87d9e8 };
+  if (slug === 'workbench') return { role: 'crafting-station decorative skin', grid: 'code-authored center prop socket', footprint: 2.7, height: 1.6, ringColor: 0xc9d7a1 };
+  if (slug === 'campfire') return { role: 'warmth-station decorative skin', grid: 'code-authored center prop socket', footprint: 2.25, height: 0.8, ringColor: 0xffb578 };
+  if (slug === 'chest') return { role: 'storage-station decorative skin', grid: 'code-authored center prop socket', footprint: 2.1, height: 1.4, ringColor: 0xc9d7a1 };
+  if (slug === 'bedroll') return { role: 'home-rest decorative skin', grid: 'code-authored center prop socket', footprint: 2.45, height: 0.65, ringColor: 0xc9d7a1 };
+  if (slug === 'crop-plot') return { role: 'food-plot decorative skin', grid: 'code-authored center prop socket', footprint: 2.75, height: 0.9, ringColor: 0x9bd77b };
+  if (slug === 'drying-rack') return { role: 'food-preserve decorative skin', grid: 'code-authored center prop socket', footprint: 2.55, height: 2.2, ringColor: 0xc9d7a1 };
+  if (slug === 'weather-vane') return { role: 'weather-readback decorative skin', grid: 'code-authored center prop socket', footprint: 1.4, height: 2.4, ringColor: 0xaad7ff };
   if (slug === 'door-kit') return { role: 'wall opening decorative skin', grid: 'code-authored wall socket', footprint: 2.25, height: 3.25, ringColor: 0xf2c27b };
   if (slug === 'window-frame') return { role: 'wall light decorative skin', grid: 'code-authored wall socket', footprint: 2.1, height: 2.45, ringColor: 0xf2c27b };
   if (slug === 'roof-bundle') return { role: 'roof cap decorative skin', grid: 'code-authored roof socket', footprint: 4.6, height: 1.85, ringColor: 0xf2c27b };

@@ -233,6 +233,47 @@ describe('Hearth and Horizon structures', () => {
     });
   });
 
+  it('defines K3 functional prop sockets as code-owned decorative GLB targets', () => {
+    expect(structureSocketSpec('workbench')).toMatchObject({
+      role: 'crafting-station',
+      gridWidth: 1.34,
+      gridDepth: 0.74,
+      loadBearing: 'code-socket',
+      glbPolicy: 'decorative-skin-after-normalization',
+    });
+    expect(structureSocketSpec('campfire')).toMatchObject({
+      role: 'warmth-station',
+      height: 0.22,
+      glbPolicy: 'decorative-skin-after-normalization',
+    });
+    expect(structureSocketSpec('chest')).toMatchObject({
+      role: 'storage-station',
+      gridDepth: 0.72,
+      glbPolicy: 'decorative-skin-after-normalization',
+    });
+    expect(structureSocketSpec('bedroll')).toMatchObject({
+      role: 'home-rest',
+      gridWidth: 1.18,
+      glbPolicy: 'decorative-skin-after-normalization',
+    });
+    expect(structureSocketSpec('cropPlot')).toMatchObject({
+      role: 'food-plot',
+      gridWidth: 1.32,
+      glbPolicy: 'decorative-skin-after-normalization',
+    });
+    expect(structureSocketSpec('dryingRack')).toMatchObject({
+      role: 'food-preserve',
+      height: 1.05,
+      glbPolicy: 'decorative-skin-after-normalization',
+    });
+    expect(structureSocketSpec('weatherVane')).toMatchObject({
+      role: 'weather-readback',
+      gridWidth: 0.5,
+      height: 1.25,
+      glbPolicy: 'decorative-skin-after-normalization',
+    });
+  });
+
   it('defines code-owned wall-shell sockets separately from decorative house-kit inserts', () => {
     const catalog = wallShellSocketCatalog();
     expect(catalog.map((entry) => entry.item)).toEqual(['floorFoundation', 'wallPanel', 'wallDoorPanel', 'wallWindowPanel', 'wallCorner', 'wallHalfRail', 'roofJoin']);

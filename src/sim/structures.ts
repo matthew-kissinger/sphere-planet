@@ -293,7 +293,25 @@ export interface StructureRelocationResult {
   blockers?: string[];
 }
 
-export type StructureSocketRole = 'floor' | 'foundation' | 'wall-panel' | 'half-rail' | 'wall-opening' | 'wall-light' | 'wall-corner' | 'roof-cap' | 'roof-join' | 'shore-edge' | 'route-marker';
+export type StructureSocketRole =
+  | 'floor'
+  | 'foundation'
+  | 'wall-panel'
+  | 'half-rail'
+  | 'wall-opening'
+  | 'wall-light'
+  | 'wall-corner'
+  | 'roof-cap'
+  | 'roof-join'
+  | 'shore-edge'
+  | 'route-marker'
+  | 'crafting-station'
+  | 'warmth-station'
+  | 'storage-station'
+  | 'home-rest'
+  | 'food-plot'
+  | 'food-preserve'
+  | 'weather-readback';
 
 export interface StructureSocketSpec {
   item: PlaceableItemId;
@@ -364,6 +382,69 @@ const DEFAULT_SOCKET_SPEC = {
 };
 
 const STRUCTURE_SOCKET_SPEC_OVERRIDES: Partial<Record<PlaceableItemId, Partial<Omit<StructureSocketSpec, 'item' | 'name'>>>> = {
+  workbench: {
+    role: 'crafting-station',
+    gridWidth: 1.34,
+    gridDepth: 0.74,
+    height: 0.78,
+    snap: ['center of one hex', 'crafting reach stays code-owned', 'decorative GLB does not alter recipe gating'],
+    visualScale: 'normalize approved GLB to one crafting-station hex',
+    glbPolicy: 'decorative-skin-after-normalization',
+  },
+  campfire: {
+    role: 'warmth-station',
+    gridWidth: 1.08,
+    gridDepth: 1.08,
+    height: 0.22,
+    snap: ['center of one hex', 'warmth and lit state stay code-owned', 'decorative GLB keeps flame and smoke overlays visible'],
+    visualScale: 'normalize approved GLB to one hearth body socket',
+    glbPolicy: 'decorative-skin-after-normalization',
+  },
+  chest: {
+    role: 'storage-station',
+    gridWidth: 0.88,
+    gridDepth: 0.72,
+    height: 0.64,
+    snap: ['center of one hex', 'storage contents stay code-owned', 'decorative GLB keeps latch/readiness cues visible'],
+    visualScale: 'normalize approved GLB to one storage chest socket',
+    glbPolicy: 'decorative-skin-after-normalization',
+  },
+  bedroll: {
+    role: 'home-rest',
+    gridWidth: 1.18,
+    gridDepth: 0.62,
+    height: 0.18,
+    snap: ['center of one hex', 'home claim and rest state stay code-owned', 'decorative GLB keeps home marker visible'],
+    visualScale: 'normalize approved GLB to one rest/home socket',
+    glbPolicy: 'decorative-skin-after-normalization',
+  },
+  cropPlot: {
+    role: 'food-plot',
+    gridWidth: 1.32,
+    gridDepth: 0.9,
+    height: 0.3,
+    snap: ['center of one hex', 'crop growth and fertility stay code-owned', 'decorative GLB keeps plant overlays visible'],
+    visualScale: 'normalize approved GLB to one planted food-bed socket',
+    glbPolicy: 'decorative-skin-after-normalization',
+  },
+  dryingRack: {
+    role: 'food-preserve',
+    gridWidth: 1.2,
+    gridDepth: 0.56,
+    height: 1.05,
+    snap: ['center of one hex', 'preservation state stays code-owned', 'decorative GLB keeps hanging food overlays visible'],
+    visualScale: 'normalize approved GLB to one preservation rack socket',
+    glbPolicy: 'decorative-skin-after-normalization',
+  },
+  weatherVane: {
+    role: 'weather-readback',
+    gridWidth: 0.5,
+    gridDepth: 0.5,
+    height: 1.25,
+    snap: ['center of one hex', 'forecast state stays code-owned', 'decorative GLB keeps needle, ribbon, and storm overlays visible'],
+    visualScale: 'normalize approved GLB to one weather instrument socket',
+    glbPolicy: 'decorative-skin-after-normalization',
+  },
   floorFoundation: {
     role: 'foundation',
     modularKit: true,

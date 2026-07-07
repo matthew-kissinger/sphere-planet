@@ -6,7 +6,18 @@ import type { FishSchoolKind } from '../sim/fishing';
 import type { NativeCreatureKind } from '../sim/nativeLife';
 import type { TreeVisualKind } from '../world/trees';
 
-export type KilnStructureSkinSlug = 'waystone' | 'door-kit' | 'window-frame' | 'roof-bundle';
+export type KilnStructureSkinSlug =
+  | 'waystone'
+  | 'door-kit'
+  | 'window-frame'
+  | 'roof-bundle'
+  | 'workbench'
+  | 'campfire'
+  | 'chest'
+  | 'bedroll'
+  | 'crop-plot'
+  | 'drying-rack'
+  | 'weather-vane';
 export type KilnResourceDropSkinSlug = 'drop-wood-logs' | 'drop-ore-chunk';
 export type KilnDomainResourceSkinSlug =
   | 'node-hearth-coal'
@@ -455,6 +466,125 @@ const RUNTIME_STRUCTURE_SKINS: Record<KilnStructureSkinSlug, KilnSkinTransform> 
       glbPolicy: 'decorative-skin-after-normalization',
     },
     acceptanceNote: 'conditionally accepted as roof-cap decoration only; shelter coverage and glow remain procedural proof surfaces',
+  },
+  workbench: {
+    scale: [1, 1, 1],
+    fitSourceSize: [0.74, 0.78, 1.34],
+    position: [0, 0.02, 0],
+    rotation: [0, Math.PI / 2, 0],
+    hideProceduralNames: ['benchTop', 'toolBlock', 'metalVise', 'benchLeg'],
+    socket: {
+      item: 'workbench',
+      role: 'crafting-station',
+      gridWidth: 1.34,
+      gridDepth: 0.74,
+      height: 0.78,
+      loadBearing: 'code-socket',
+      glbPolicy: 'decorative-skin-after-normalization',
+    },
+    acceptanceNote: 'accepted as decorative workbench body; crafting station rules and HUD readback remain code-authored',
+  },
+  campfire: {
+    scale: [1, 1, 1],
+    fitSourceSize: [1.08, 0.22, 1.08],
+    position: [0, 0.02, 0],
+    rotation: [0, 0, 0],
+    hideProceduralNames: ['fireRingStone', 'crossedLog'],
+    socket: {
+      item: 'campfire',
+      role: 'warmth-station',
+      gridWidth: 1.08,
+      gridDepth: 1.08,
+      height: 0.22,
+      loadBearing: 'code-socket',
+      glbPolicy: 'decorative-skin-after-normalization',
+    },
+    acceptanceNote: 'accepted as decorative unlit hearth body; flame, smoke, warmth halo, and lit state remain procedural',
+  },
+  chest: {
+    scale: [1, 1, 1],
+    fitSourceSize: [0.88, 0.64, 0.72],
+    position: [0, 0.02, 0],
+    rotation: [0, 0, 0],
+    hideProceduralNames: ['chestBox', 'chestLid', 'leftBand', 'rightBand'],
+    socket: {
+      item: 'chest',
+      role: 'storage-station',
+      gridWidth: 0.88,
+      gridDepth: 0.72,
+      height: 0.64,
+      loadBearing: 'code-socket',
+      glbPolicy: 'decorative-skin-after-normalization',
+    },
+    acceptanceNote: 'accepted as decorative chest body; storage inventory and latch readiness overlay remain code-authored',
+  },
+  bedroll: {
+    scale: [1, 1, 1],
+    fitSourceSize: [1.18, 0.18, 0.62],
+    position: [0, 0.02, 0],
+    rotation: [0, 0, 0],
+    hideProceduralNames: ['sleepMat', 'rolledBlanket', 'strap'],
+    socket: {
+      item: 'bedroll',
+      role: 'home-rest',
+      gridWidth: 1.18,
+      gridDepth: 0.62,
+      height: 0.18,
+      loadBearing: 'code-socket',
+      glbPolicy: 'decorative-skin-after-normalization',
+    },
+    acceptanceNote: 'accepted as decorative bedroll body; home marker, comfort ring, and rest state remain procedural',
+  },
+  'crop-plot': {
+    scale: [1, 1, 1],
+    fitSourceSize: [1.32, 0.3, 0.9],
+    position: [0, 0.02, 0],
+    rotation: [0, 0, 0],
+    hideProceduralNames: ['woodFrame', 'tilledSoil'],
+    socket: {
+      item: 'cropPlot',
+      role: 'food-plot',
+      gridWidth: 1.32,
+      gridDepth: 0.9,
+      height: 0.3,
+      loadBearing: 'code-socket',
+      glbPolicy: 'decorative-skin-after-normalization',
+    },
+    acceptanceNote: 'accepted as decorative crop-plot bed; crop growth plants, fertility, and harvest state remain procedural',
+  },
+  'drying-rack': {
+    scale: [1, 1, 1],
+    fitSourceSize: [0.56, 1.05, 1.2],
+    position: [0, 0.04, 0],
+    rotation: [0, Math.PI / 2, 0],
+    hideProceduralNames: ['dryingRackLeg', 'dryingRackRail', 'dryingRackBrace'],
+    socket: {
+      item: 'dryingRack',
+      role: 'food-preserve',
+      gridWidth: 1.2,
+      gridDepth: 0.56,
+      height: 1.05,
+      loadBearing: 'code-socket',
+      glbPolicy: 'decorative-skin-after-normalization',
+    },
+    acceptanceNote: 'accepted as decorative drying-rack frame; hanging food and preservation readiness remain procedural',
+  },
+  'weather-vane': {
+    scale: [1, 1, 1],
+    fitSourceSize: [0.5, 1.25, 0.5],
+    position: [0, 0.02, 0],
+    rotation: [0, 0, 0],
+    hideProceduralNames: ['weatherVaneStoneBase', 'weatherVanePost', 'weatherVaneCompassDisk', 'weatherVaneCompassTick'],
+    socket: {
+      item: 'weatherVane',
+      role: 'weather-readback',
+      gridWidth: 0.5,
+      gridDepth: 0.5,
+      height: 1.25,
+      loadBearing: 'code-socket',
+      glbPolicy: 'decorative-skin-after-normalization',
+    },
+    acceptanceNote: 'accepted as decorative weather-vane body; spinning needle, ribbons, storm glow, and forecast state remain procedural',
   },
 };
 
@@ -1146,7 +1276,19 @@ function normalizeBirdTemplate(source: THREE.Object3D, slug: string, targetSpan:
 }
 
 export class KilnRuntimeAssets implements StructureSkinProvider, ResourceDropSkinProvider, DomainResourceSkinProvider, TreeSkinProvider, CreatureSkinProvider, FishSkinProvider, BirdSkinProvider {
-  private readonly enabled = new Set<KilnStructureSkinSlug>(['waystone', 'door-kit', 'window-frame', 'roof-bundle']);
+  private readonly enabled = new Set<KilnStructureSkinSlug>([
+    'waystone',
+    'door-kit',
+    'window-frame',
+    'roof-bundle',
+    'workbench',
+    'campfire',
+    'chest',
+    'bedroll',
+    'crop-plot',
+    'drying-rack',
+    'weather-vane',
+  ]);
   private readonly enabledResourceDrops = new Set<KilnResourceDropSkinSlug>(['drop-wood-logs', 'drop-ore-chunk']);
   private readonly enabledDomainResourceSkins = new Set<KilnDomainResourceSkinSlug>([
     'node-hearth-coal',
