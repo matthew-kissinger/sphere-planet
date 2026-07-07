@@ -342,6 +342,7 @@ async function seedEcologyRoute(page) {
       const nav = world.navigation();
       const journal = world.journal();
       const structures = world.structures();
+      const crafting = world.crafting?.();
       const text = JSON.parse(window.render_game_to_text());
       return {
         label,
@@ -354,16 +355,155 @@ async function seedEcologyRoute(page) {
         slate: nav.slate,
         journal: journal.state,
         structures,
+        crafted: crafting?.crafted ?? {},
         text,
       };
     };
 
-    const findOffRouteTiles = () => {
+    const organicBaseSave = () => {
+      const save = saveFor({ ready: false, routeGear: false });
+      save.craftedItems = {
+        ...save.craftedItems,
+        bait: 4,
+        fishTrap: 2,
+        shoreNet: 2,
+      };
+      return save;
+    };
+
+    const tryOrganicWaterlineGear = (trapTile, netTile, offTrapTile, offNetTile) => {
+      const save = organicBaseSave();
+      if (!world.save.import(JSON.stringify(save))) return null;
+      const baseIds = new Set(world.structures().items.map((item) => item.id));
+
+      const placeFresh = (item, tile) => {
+        if (!world.placeStructure(item, tile)) return null;
+        const structures = world.structures();
+        const list = item === 'fishTrap' ? structures.fishTraps : structures.shoreNets;
+        const placed = list.find((entry) => !baseIds.has(entry.id));
+        if (placed) baseIds.add(placed.id);
+        return placed ?? null;
+      };
+
+      const trap = placeFresh('fishTrap', trapTile);
+      if (!trap?.context?.nearWater || (trap.context.school?.catchCount ?? 0) <= 0) return null;
+      const net = placeFresh('shoreNet', netTile);
+      if (!net?.context?.nearWater || (net.context.school?.catchCount ?? 0) <= 0) return null;
+      const offTrap = placeFresh('fishTrap', offTrapTile);
+      if (!offTrap?.context?.nearWater || (offTrap.context.school?.catchCount ?? 0) <= 0) return null;
+      const offNet = placeFresh('shoreNet', offNetTile);
+      if (!offNet?.context?.nearWater || (offNet.context.school?.catchCount ?? 0) <= 0) return null;
+
+      if (!world.useStructure(trap.id)) return null;
+      if (!world.useStructure(net.id)) return null;
+      if (!world.useStructure(offTrap.id)) return null;
+      if (!world.useStructure(offNet.id)) return null;
+      const set = sample('organic-set');
+      const setTrap = set.structures.fishTraps.find((entry) => entry.id === trap.id);
+      const setNet = set.structures.shoreNets.find((entry) => entry.id === net.id);
+      const setOffTrap = set.structures.fishTraps.find((entry) => entry.id === offTrap.id);
+      const setOffNet = set.structures.shoreNets.find((entry) => entry.id === offNet.id);
+      if (
+        setTrap?.state?.trapSetDay === undefined
+        || setNet?.state?.netSetDay === undefined
+        || setOffTrap?.state?.trapSetDay === undefined
+        || setOffNet?.state?.netSetDay === undefined
+      ) return null;
+      world.setTime({ day: 6, minute: 1110 });
+      const ready = sample('organic-ready');
+      const readyTrap = ready.structures.fishTraps.find((entry) => entry.id === trap.id);
+      const readyNet = ready.structures.shoreNets.find((entry) => entry.id === net.id);
+      const readyOffTrap = ready.structures.fishTraps.find((entry) => entry.id === offTrap.id);
+      const readyOffNet = ready.structures.shoreNets.find((entry) => entry.id === offNet.id);
+      const readyFood = ready.plan?.checks?.find((check) => check.id === 'food');
+      const readyFoodDetail = String(readyFood?.detail ?? '');
+      if (
+        !readyTrap?.ready
+        || !readyNet?.ready
+        || !readyOffTrap?.ready
+        || !readyOffNet?.ready
+        || !readyFood?.ready
+        || !readyFoodDetail.includes('waterline')
+        || !readyFoodDetail.includes('off-route')
+      ) return null;
+      const readySave = JSON.parse(world.save.export());
+
+      if (!world.useStructure(trap.id)) return null;
+      if (!world.useStructure(net.id)) return null;
+      const hauled = sample('organic-hauled');
+      const hauledTrap = hauled.structures.fishTraps.find((entry) => entry.id === trap.id);
+      const hauledNet = hauled.structures.shoreNets.find((entry) => entry.id === net.id);
+      const hauledOffTrap = hauled.structures.fishTraps.find((entry) => entry.id === offTrap.id);
+      const hauledOffNet = hauled.structures.shoreNets.find((entry) => entry.id === offNet.id);
+      if (hauledTrap?.state?.trapSetDay !== undefined || hauledNet?.state?.netSetDay !== undefined) return null;
+      if ((hauledTrap?.state?.trapChecks ?? 0) < 1 || (hauledNet?.state?.netChecks ?? 0) < 1) return null;
+      if (!hauledOffTrap?.ready || !hauledOffNet?.ready) return null;
+      if ((hauledOffTrap?.state?.trapChecks ?? 0) !== 0 || (hauledOffNet?.state?.netChecks ?? 0) !== 0) return null;
+      if ((hauled.crafted.rawFish ?? 0) <= 0) return null;
+
+      const arrivalSave = JSON.parse(JSON.stringify(readySave));
+      arrivalSave.player = targetPlayer;
+      arrivalSave.progression = {
+        ...(arrivalSave.progression ?? {}),
+        routePlan: { ...routeLeg, legs: [{ ...routeLeg }] },
+      };
+      if (!world.save.import(JSON.stringify(arrivalSave))) return null;
+      return afterFrames().then(() => ({
+        trapTile,
+        netTile,
+        offTrapTile,
+        offNetTile,
+        trapId: trap.id,
+        netId: net.id,
+        offTrapId: offTrap.id,
+        offNetId: offNet.id,
+        set,
+        ready,
+        hauled,
+        arrived: sample('organic-arrived'),
+      }));
+    };
+
+    const buildOrganicRouteGear = async () => {
+      const base = organicBaseSave();
+      if (!world.save.import(JSON.stringify(base))) throw new Error('failed to import organic base save');
+      const occupied = new Set(baseStructures.map((entry) => Math.trunc(entry.tile)));
+      occupied.add(homeTile);
+      const candidateTiles = world.nearbyTiles(5)
+        .map((tile) => Math.trunc(tile))
+        .filter((tile, index, list) => Number.isFinite(tile) && !occupied.has(tile) && list.indexOf(tile) === index);
+      const offRouteCandidates = findOffRouteTiles(48).filter((tile) => !occupied.has(tile));
+      const pairsFor = (tiles, limit) => {
+        const pairs = [];
+        for (const a of tiles) {
+          for (const b of tiles) {
+            if (a === b) continue;
+            pairs.push([a, b]);
+            if (pairs.length >= limit) return pairs;
+          }
+        }
+        return pairs;
+      };
+      const routePairs = pairsFor(candidateTiles, 96);
+      const offRoutePairs = pairsFor(offRouteCandidates, 160);
+      for (const [trapTile, netTile] of routePairs) {
+        for (const [offTrapTile, offNetTile] of offRoutePairs) {
+          if (trapTile === offTrapTile || trapTile === offNetTile || netTile === offTrapTile || netTile === offNetTile) continue;
+          const result = await tryOrganicWaterlineGear(trapTile, netTile, offTrapTile, offNetTile);
+          if (result) return result;
+        }
+      }
+      throw new Error(`could not organically place ready route and off-route waterline gear near home ${homeTile}`);
+    };
+
+    const findOffRouteTiles = (limit = 2) => {
       const totalTiles = Math.max(0, Math.trunc(world.geo?.count ?? 0));
-      const stride = Math.max(1, Math.floor(totalTiles / 180));
+      const sampleCount = Math.min(900, Math.max(1, totalTiles));
+      const stride = Math.max(1, Math.floor(totalTiles / sampleCount));
       const candidates = [
         ...pentagons,
-        ...Array.from({ length: Math.min(220, totalTiles) }, (_, index) => (index * stride) % Math.max(1, totalTiles)),
+        ...Array.from({ length: sampleCount }, (_, index) => (index * stride) % Math.max(1, totalTiles)),
+        ...Array.from({ length: Math.min(300, totalTiles) }, (_, index) => (index * stride + Math.floor(stride / 2)) % Math.max(1, totalTiles)),
       ];
       const seen = new Set();
       const found = [];
@@ -377,7 +517,7 @@ async function seedEcologyRoute(page) {
         const food = nav.plan?.checks?.find((check) => check.id === 'food')?.detail ?? '';
         if (nav.plan?.missing?.includes('packed food') && food.includes('off-route')) {
           found.push(t);
-          if (found.length >= 2) return found;
+          if (found.length >= limit) return found;
         }
       }
       return found;
@@ -403,9 +543,10 @@ async function seedEcologyRoute(page) {
     if (!world.save.import(JSON.stringify(arrivalSave))) throw new Error('failed to import arrival waterline save');
     await afterFrames();
     const arrived = sample('arrived');
+    const organic = await buildOrganicRouteGear();
     if (!world.save.import(JSON.stringify(readySave))) throw new Error('failed to restore ready waterline save');
 
-    return { targetIndex, targetName: targetSignal.target.name, offRouteTile, offRouteNetTile, offRoute, unready, ready, arrived };
+    return { targetIndex, targetName: targetSignal.target.name, offRouteTile, offRouteNetTile, offRoute, unready, ready, arrived, organic };
   });
 }
 
@@ -445,6 +586,54 @@ function assertEcologyRoute(result, name) {
   }
   if (!offRouteNet?.ready || offRouteNet.state?.netSetDay === undefined || (offRouteNet.state?.netChecks ?? 0) !== 0) {
     throw new Error(`${name}: off-route net was disturbed by arrival: ${JSON.stringify(offRouteNet)}`);
+  }
+  const organicTrap = result.organic?.ready?.structures?.fishTraps?.find((trap) => trap.id === result.organic.trapId);
+  const organicNet = result.organic?.ready?.structures?.shoreNets?.find((net) => net.id === result.organic.netId);
+  const organicOffTrap = result.organic?.ready?.structures?.fishTraps?.find((trap) => trap.id === result.organic.offTrapId);
+  const organicOffNet = result.organic?.ready?.structures?.shoreNets?.find((net) => net.id === result.organic.offNetId);
+  if (!organicTrap?.ready || !organicNet?.ready || !organicOffTrap?.ready || !organicOffNet?.ready) {
+    throw new Error(`${name}: organic placement/wait did not produce ready route/off-route trap/net: ${JSON.stringify(result.organic)}`);
+  }
+  if (!foodCheck(result.organic.ready.plan).ready || !foodCheck(result.organic.ready.plan).detail.includes('waterline') || !foodCheck(result.organic.ready.plan).detail.includes('off-route')) {
+    throw new Error(`${name}: organic ready gear did not satisfy route food: ${foodCheck(result.organic.ready.plan).detail}`);
+  }
+  const hauledTrap = result.organic.hauled.structures.fishTraps.find((trap) => trap.id === result.organic.trapId);
+  const hauledNet = result.organic.hauled.structures.shoreNets.find((net) => net.id === result.organic.netId);
+  const hauledOffTrap = result.organic.hauled.structures.fishTraps.find((trap) => trap.id === result.organic.offTrapId);
+  const hauledOffNet = result.organic.hauled.structures.shoreNets.find((net) => net.id === result.organic.offNetId);
+  if (hauledTrap?.state?.trapSetDay !== undefined || (hauledTrap?.state?.trapChecks ?? 0) < 1) {
+    throw new Error(`${name}: organic trap haul did not clear/check: ${JSON.stringify(hauledTrap)}`);
+  }
+  if (hauledNet?.state?.netSetDay !== undefined || (hauledNet?.state?.netChecks ?? 0) < 1) {
+    throw new Error(`${name}: organic net haul did not clear/check: ${JSON.stringify(hauledNet)}`);
+  }
+  if (!hauledOffTrap?.ready || (hauledOffTrap?.state?.trapChecks ?? 0) !== 0) {
+    throw new Error(`${name}: organic off-route trap was disturbed by haul control: ${JSON.stringify(hauledOffTrap)}`);
+  }
+  if (!hauledOffNet?.ready || (hauledOffNet?.state?.netChecks ?? 0) !== 0) {
+    throw new Error(`${name}: organic off-route net was disturbed by haul control: ${JSON.stringify(hauledOffNet)}`);
+  }
+  if ((result.organic.hauled.crafted?.rawFish ?? 0) <= 0) {
+    throw new Error(`${name}: organic haul did not move raw fish: ${JSON.stringify(result.organic.hauled.crafted)}`);
+  }
+  const organicArrivalTrap = result.organic.arrived.structures.fishTraps.find((trap) => trap.id === result.organic.trapId);
+  const organicArrivalNet = result.organic.arrived.structures.shoreNets.find((net) => net.id === result.organic.netId);
+  const organicArrivalOffTrap = result.organic.arrived.structures.fishTraps.find((trap) => trap.id === result.organic.offTrapId);
+  const organicArrivalOffNet = result.organic.arrived.structures.shoreNets.find((net) => net.id === result.organic.offNetId);
+  if (!result.organic.arrived.routePlan?.complete || !String(result.organic.arrived.lastAction || '').includes('waterline resupply spent')) {
+    throw new Error(`${name}: organic route arrival did not spend staged sources: ${result.organic.arrived.lastAction}`);
+  }
+  if (organicArrivalTrap?.state?.trapSetDay !== undefined || (organicArrivalTrap?.state?.trapChecks ?? 0) !== 1) {
+    throw new Error(`${name}: organic route trap was not consumed on arrival: ${JSON.stringify(organicArrivalTrap)}`);
+  }
+  if (organicArrivalNet?.state?.netSetDay !== undefined || (organicArrivalNet?.state?.netChecks ?? 0) !== 1) {
+    throw new Error(`${name}: organic route net was not consumed on arrival: ${JSON.stringify(organicArrivalNet)}`);
+  }
+  if (!organicArrivalOffTrap?.ready || organicArrivalOffTrap.state?.trapSetDay === undefined || (organicArrivalOffTrap.state?.trapChecks ?? 0) !== 0) {
+    throw new Error(`${name}: organic off-route trap was disturbed on arrival: ${JSON.stringify(organicArrivalOffTrap)}`);
+  }
+  if (!organicArrivalOffNet?.ready || organicArrivalOffNet.state?.netSetDay === undefined || (organicArrivalOffNet.state?.netChecks ?? 0) !== 0) {
+    throw new Error(`${name}: organic off-route net was disturbed on arrival: ${JSON.stringify(organicArrivalOffNet)}`);
   }
 }
 
@@ -555,6 +744,21 @@ async function runViewport(browser, url, name, viewport, options = {}) {
       offRouteTrapReady: result.arrived.structures.fishTraps.find((trap) => trap.id === 10)?.ready === true,
       offRouteNetReady: result.arrived.structures.shoreNets.find((net) => net.id === 11)?.ready === true,
     },
+    organic: {
+      trapTile: result.organic.trapTile,
+      netTile: result.organic.netTile,
+      offTrapTile: result.organic.offTrapTile,
+      offNetTile: result.organic.offNetTile,
+      readyFood: foodCheck(result.organic.ready.plan).detail,
+      hauledRawFish: result.organic.hauled.crafted?.rawFish ?? 0,
+      arrivalLastAction: result.organic.arrived.lastAction,
+      arrivalConsumed: {
+        trapChecks: result.organic.arrived.structures.fishTraps.find((trap) => trap.id === result.organic.trapId)?.state?.trapChecks ?? 0,
+        netChecks: result.organic.arrived.structures.shoreNets.find((net) => net.id === result.organic.netId)?.state?.netChecks ?? 0,
+        offRouteTrapReady: result.organic.arrived.structures.fishTraps.find((trap) => trap.id === result.organic.offTrapId)?.ready === true,
+        offRouteNetReady: result.organic.arrived.structures.shoreNets.find((net) => net.id === result.organic.offNetId)?.ready === true,
+      },
+    },
     pixelProbe: { canvas: canvasProbe, screenshot: screenshotProbe },
     consoleErrors,
     pageErrors,
@@ -613,6 +817,7 @@ try {
       trapReady: result.trapReady,
       netReady: result.netReady,
       arrivalConsumed: result.arrivalConsumed,
+      organic: result.organic,
       consoleErrors: result.consoleErrors.length,
       pageErrors: result.pageErrors.length,
     })),

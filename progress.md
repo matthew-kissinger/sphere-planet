@@ -3,6 +3,18 @@ Current operating goal: Hearth and Horizon full crafting-survival cycle under th
 
 ## 2026-07-07
 
+- Advanced E4 route-food proof from seeded readiness into organic placement/wait/haul
+  evidence. `proof:e4-ecology-route` now searches for valid route-adjacent and off-route
+  shore tiles, places fish trap and shore net props for both source classes through the
+  existing runtime placement hook, sets all four through the real structure-use path,
+  advances time until all four are ready, verifies the route pair satisfies the route food
+  check while the off-route pair remains ignored, hauls a restored route-pair copy for raw
+  fish, then restores the ready save and proves route arrival consumes only the
+  route-adjacent source class.
+- The proof output now records an `organic` block with route and off-route trap/net tile
+  ids, ready waterline food detail, raw fish moved by the manual haul control, the
+  route-arrival readback, route check counters, and off-route-ready booleans. This closes
+  the main E4 proof weakness where previous passes seeded trap/net readiness directly.
 - Advanced E4 from staged route-adjacent waterline prep into route-arrival consumption.
   When a saved Horizon Chart route reaches its target, the game now recomputes eligible
   ready fish traps and shore nets along the completed origin/target corridor, clears those
