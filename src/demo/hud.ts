@@ -41,6 +41,7 @@ export interface HudControlLabels {
 
 export interface CraftingRecipeView {
   id: string;
+  result: string;
   name: string;
   description: string;
   count: number;
@@ -48,6 +49,8 @@ export interface CraftingRecipeView {
   canCraft: boolean;
   canPlace: boolean;
   selected: boolean;
+  focused?: boolean;
+  focusAction?: 'craft' | 'place';
   station?: string;
   requirements: { name: string; need: number; have: number }[];
 }
@@ -84,6 +87,8 @@ export interface ChestStoragePanelView {
     stored: number;
     canDeposit: boolean;
     canWithdraw: boolean;
+    focused?: boolean;
+    focusAction?: ChestStorageAction;
   }[];
 }
 
@@ -99,6 +104,8 @@ export class Hud {
   onSlotSelect: ((i: number) => void) | null = null;
   onCraftSelect: ((id: string) => void) | null = null;
   onPlaceSelect: ((id: string) => void) | null = null;
+  onRoutePin: (() => void) | null = null;
+  onRouteClear: (() => void) | null = null;
   onJournalToggle: (() => void) | null = null;
   onJournalClose: (() => void) | null = null;
   onStorageTransfer: ((chestId: number, item: string, action: ChestStorageAction) => void) | null = null;
@@ -159,6 +166,14 @@ export class Hud {
         e.preventDefault();
         this.onJournalClose?.();
       }
+    });
+    this.route.addEventListener('pointerdown', (e) => {
+      e.stopPropagation();
+      const action = (e.target as HTMLElement).closest('button[data-route-action]') as HTMLButtonElement | null;
+      if (!action || action.disabled) return;
+      e.preventDefault();
+      if (action.dataset.routeAction === 'pin') this.onRoutePin?.();
+      else if (action.dataset.routeAction === 'clear') this.onRouteClear?.();
     });
     this.journalButton.addEventListener('pointerdown', (e) => {
       e.preventDefault();
@@ -260,9 +275,12 @@ export class Hud {
         const station = r.station ? `<span class="miss">${r.station}</span>` : '';
         const needs = `${station}${req}`;
         const owned = r.owned > 0 ? `<span class="owned">x${r.owned}</span>` : '';
-        return `<div class="craft-row${r.canCraft ? ' ready' : ''}${r.selected ? ' selected' : ''}">` +
-          `<button data-recipe="${r.id}" aria-label="Craft ${r.name}" title="Craft ${r.name}" ${r.canCraft ? '' : 'disabled'}>+</button>` +
-          `<button data-place="${r.id}" aria-label="Place ${r.name}" title="Place ${r.name}" ${r.canPlace ? '' : 'disabled'}>set</button>` +
+        const rowFocus = r.focused ? ' focused' : '';
+        const craftFocus = r.focused && r.focusAction !== 'place' ? ' focus' : '';
+        const placeFocus = r.focused && r.focusAction === 'place' ? ' focus' : '';
+        return `<div class="craft-row${r.canCraft ? ' ready' : ''}${r.selected ? ' selected' : ''}${rowFocus}">` +
+          `<button class="${craftFocus}" data-recipe="${r.id}" aria-label="Craft ${r.name}" title="Craft ${r.name}" ${r.canCraft ? '' : 'disabled'}>+</button>` +
+          `<button class="${placeFocus}" data-place="${escapeHtml(r.result)}" aria-label="Place ${r.name}" title="Place ${r.name}" ${r.canPlace ? '' : 'disabled'}>set</button>` +
           `<div class="craft-copy"><div><strong>${r.name}</strong>${owned}<em>+${r.count}</em></div>` +
           `<p>${r.description}</p><div class="craft-req">${needs}</div></div></div>`;
       }),
@@ -284,7 +302,9 @@ export class Hud {
       `<span class="route-dot"></span><div><strong>${pin.label}</strong><p>${pin.detail}</p></div></div>`,
     ).join('');
     const html = `<div class="route-head"><span>${slate.title}</span><span>${escapeHtml(this.controls.route)}</span></div>` +
-      `<div class="route-summary">${slate.summary}</div>${rows}`;
+      `<div class="route-summary">${slate.summary}</div>` +
+      `<div class="route-actions"><button data-route-action="pin" aria-label="Pin current route" title="Pin current route">pin</button>` +
+      `<button data-route-action="clear" aria-label="Clear current route" title="Clear current route">clear</button></div>${rows}`;
     if (html !== this.routeCache) {
       this.route.innerHTML = html;
       this.routeCache = html;
@@ -330,15 +350,17 @@ export class Hud {
       const swatch = `<span class="storage-swatch" style="background:${escapeHtml(row.css)}"></span>`;
       const carried = row.pack > 0 ? ' ready' : '';
       const stored = row.stored > 0 ? ' ready' : '';
-      return `<div class="storage-row">` +
+      const rowFocus = row.focused ? ' focused' : '';
+      const focusClass = (action: ChestStorageAction): string => row.focused && row.focusAction === action ? ' class="focus"' : '';
+      return `<div class="storage-row${rowFocus}">` +
         `<div class="storage-item">${swatch}<span>${escapeHtml(row.name)}</span></div>` +
         `<div class="storage-count${carried}">${row.pack}</div>` +
         `<div class="storage-count${stored}">${row.stored}</div>` +
         `<div class="storage-actions">` +
-        `<button data-storage-action="depositOne" data-chest="${view.id}" data-item="${escapeHtml(row.item)}" aria-label="Stash one ${escapeHtml(row.name)}" title="Stash one" ${row.canDeposit ? '' : 'disabled'}>&gt;</button>` +
-        `<button data-storage-action="depositAll" data-chest="${view.id}" data-item="${escapeHtml(row.item)}" aria-label="Stash all ${escapeHtml(row.name)}" title="Stash all" ${row.canDeposit ? '' : 'disabled'}>&gt;&gt;</button>` +
-        `<button data-storage-action="withdrawOne" data-chest="${view.id}" data-item="${escapeHtml(row.item)}" aria-label="Take one ${escapeHtml(row.name)}" title="Take one" ${row.canWithdraw ? '' : 'disabled'}>&lt;</button>` +
-        `<button data-storage-action="withdrawAll" data-chest="${view.id}" data-item="${escapeHtml(row.item)}" aria-label="Take all ${escapeHtml(row.name)}" title="Take all" ${row.canWithdraw ? '' : 'disabled'}>&lt;&lt;</button>` +
+        `<button${focusClass('depositOne')} data-storage-action="depositOne" data-chest="${view.id}" data-item="${escapeHtml(row.item)}" aria-label="Stash one ${escapeHtml(row.name)}" title="Stash one" ${row.canDeposit ? '' : 'disabled'}>&gt;</button>` +
+        `<button${focusClass('depositAll')} data-storage-action="depositAll" data-chest="${view.id}" data-item="${escapeHtml(row.item)}" aria-label="Stash all ${escapeHtml(row.name)}" title="Stash all" ${row.canDeposit ? '' : 'disabled'}>&gt;&gt;</button>` +
+        `<button${focusClass('withdrawOne')} data-storage-action="withdrawOne" data-chest="${view.id}" data-item="${escapeHtml(row.item)}" aria-label="Take one ${escapeHtml(row.name)}" title="Take one" ${row.canWithdraw ? '' : 'disabled'}>&lt;</button>` +
+        `<button${focusClass('withdrawAll')} data-storage-action="withdrawAll" data-chest="${view.id}" data-item="${escapeHtml(row.item)}" aria-label="Take all ${escapeHtml(row.name)}" title="Take all" ${row.canWithdraw ? '' : 'disabled'}>&lt;&lt;</button>` +
         `</div></div>`;
     }).join('');
     const html = `<div class="storage-head"><div><strong>${escapeHtml(view.title)}</strong><p>${escapeHtml(view.summary)}</p></div>` +

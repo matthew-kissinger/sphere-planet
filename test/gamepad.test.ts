@@ -59,6 +59,25 @@ describe('gamepad controls', () => {
     expect(pack.use).toBe(false);
   });
 
+  it('emits menu focus edges for panel-owned gamepad navigation', () => {
+    const first = gamepadFrameFromState(pad([0, 0, 0, 0], [0, 1, 12, 15]), [], 1 / 60);
+    expect(first.confirm).toBe(true);
+    expect(first.cancel).toBe(true);
+    expect(first.menuUp).toBe(true);
+    expect(first.menuRight).toBe(true);
+    expect(first.jump).toBe(true);
+    expect(first.use).toBe(true);
+
+    const heldPrevious = buttons([0, 1, 12, 15]).map((b) => !!b.pressed || (b.value ?? 0) > 0.55);
+    const held = gamepadFrameFromState(pad([0, 0, 0, 0], [0, 1, 12, 15]), heldPrevious, 1 / 60);
+    expect(held.confirm).toBe(false);
+    expect(held.cancel).toBe(false);
+    expect(held.menuUp).toBe(false);
+    expect(held.menuRight).toBe(false);
+    expect(held.jump).toBe(true);
+    expect(held.use).toBe(false);
+  });
+
   it('cycles hotbar on unmodified D-pad left and right', () => {
     expect(gamepadFrameFromState(pad([0, 0, 0, 0], [15]), [], 1 / 60).slotDelta).toBe(1);
     expect(gamepadFrameFromState(pad([0, 0, 0, 0], [14]), [], 1 / 60).slotDelta).toBe(-1);
@@ -66,7 +85,7 @@ describe('gamepad controls', () => {
 
   it('keeps injected edge actions one-shot while continuous input persists', () => {
     const controls = new GamepadControls();
-    controls.inject({ moveX: 0.75, craft: true, slotDelta: 1, mine: true, minePressed: true }, 3);
+    controls.inject({ moveX: 0.75, craft: true, slotDelta: 1, mine: true, minePressed: true, menuDown: true, confirm: true }, 3);
     const first = controls.frame(1 / 60);
     const second = controls.frame(1 / 60);
     const third = controls.frame(1 / 60);
@@ -76,12 +95,16 @@ describe('gamepad controls', () => {
     expect(first.slotDelta).toBe(1);
     expect(first.mine).toBe(true);
     expect(first.minePressed).toBe(true);
+    expect(first.menuDown).toBe(true);
+    expect(first.confirm).toBe(true);
 
     expect(second.moveX).toBeCloseTo(0.75);
     expect(second.craft).toBe(false);
     expect(second.slotDelta).toBe(0);
     expect(second.mine).toBe(true);
     expect(second.minePressed).toBe(false);
+    expect(second.menuDown).toBe(false);
+    expect(second.confirm).toBe(false);
 
     expect(third.moveX).toBeCloseTo(0.75);
     expect(third.craft).toBe(false);

@@ -2,6 +2,18 @@ Original prompt: complete courier frontier plan
 
 ## 2026-07-06
 
+- Closed the first Cross-Device UX P0 input-accessibility slice under the Hearth and Horizon
+  DAG: three subagents audited touch route access, gamepad panel focus, and docs/test gaps;
+  the main implementation added touch Route Slate/pin/clear buttons, route-panel pin/clear
+  actions, shared route command wrappers, gamepad menu-focus edges, focused crafting/storage
+  rows, A-confirm craft/place/transfer, B-cancel, and world-input leakage guards while
+  panels own focus. The pass also fixed crafting placement to pass the crafted placeable
+  item id instead of the recipe id.
+- Verified the input-accessibility slice with `npm test -- gamepad`, `npm run typecheck`,
+  Playwright proof at `output/playwright/input-accessibility/` covering phone touch
+  route open/pin/clear plus desktop gamepad crafting and chest-storage focus/confirm, the
+  full 247-test suite, production build, and `git diff --check` with only the known
+  LF-to-CRLF checkout warnings.
 - Corrected the active Hearth and Horizon workflow back to the documented orchestrator
   model: deployed four read-only subagent lanes for goal/DAG audit, cross-device UX/input
   audit, asset-readability audit, and current season-afterglow code review, then added an

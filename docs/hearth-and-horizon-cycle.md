@@ -133,12 +133,14 @@ important HUD surfaces do not collide.
 
 Current UX audit frontier:
 
-- **P0 touch route access**: tablet and phone players need reachable Route Slate, route-pin,
-  and clear-route controls without a keyboard. Add compact touch buttons or a deliberate
-  gesture model, update labels/help, and prove Route Slate/pin/clear on phone and tablet.
-- **P0 gamepad panel focus**: crafting, storage, and future station panels need selected
-  rows, D-pad navigation, confirm/alternate actions, close behavior, and disabled feedback
-  so a gamepad-only player can craft, transfer, and place without pointer input.
+- **P0 touch route access, first slice closed**: phone/touch now has Route Slate, route-pin,
+  and clear-route buttons that feed the same chart/pin/clear route commands as keyboard and
+  gamepad. Keep the remaining tablet and landscape screenshots in R3 until the full matrix
+  proves no overlap with vitals, route slate, journal, or hotbar.
+- **P0 gamepad panel focus, first slice closed**: crafting and chest storage now render
+  selected rows/actions, consume D-pad/A/B while focused, confirm craft/place/transfer, and
+  block jump/use/hotbar/mine/build leakage behind the panel. Future station panels and
+  selectable Route Slate candidate rows still need the same focus contract.
 - **P1 panel ownership**: Route Slate, crafting, journal, and storage must share one
   no-overlap controller and close priority. Opening route or pinning should not leave
   crafting underneath; storage/crafting/journal should not steal the playfield.
@@ -148,6 +150,20 @@ Current UX audit frontier:
 - **P2 responsive proof**: add a proof harness for desktop, 1366x720 laptop, tablet
   portrait/landscape, phone portrait/landscape, and synthetic gamepad screenshots with HUD
   overlap assertions.
+
+Current input-accessibility slice proof:
+
+- Subagents ran in parallel for touch route UX, gamepad panel focus, and documentation/test
+  gaps; their findings were merged into this slice before verification.
+- Touch proof: `output/playwright/input-accessibility/phone-touch-route-controls.png` and
+  `proof.json` exercise `?touch=1` Route Slate open, route pin, and route clear through the
+  new touch buttons.
+- Gamepad proof: `desktop-gamepad-crafting-focus.png` shows focused crafting with
+  A-confirm crafting, and `desktop-gamepad-storage-focus.png` shows focused chest storage
+  with A-confirm transfer.
+- Gates passed: `npm test -- gamepad`, `npm run typecheck`, browser proof with no page
+  errors, full `npm test` at 247 tests, `npm run build`, and `git diff --check` with only
+  the known LF-to-CRLF checkout warnings.
 
 Add a recurring **Orchestrated Development Track** to Hearth and Horizon. Large slices
 should be planned as a directed acyclic graph instead of a single linear checklist: define

@@ -258,6 +258,7 @@ const SLOTS: { name: MaterialItemId; mat: MaterialId; css: string }[] = [
   { name: 'wood', mat: MAT.WOOD, css: '#a8763f' },
 ];
 const WOOD_SLOT = 4;
+const STORAGE_FOCUS_ACTIONS: ChestTransferAction[] = ['depositOne', 'depositAll', 'withdrawOne', 'withdrawAll'];
 
 const KEYBOARD_HELP = `WASD move · space jump · shift sprint · wheel zoom
 LMB mine + chop trees · RMB build · 1-5 pick block · Q eat
@@ -266,7 +267,7 @@ F free-flight · F3 stats · H help`;
 
 const TOUCH_HELP = `Touch: left stick move · drag to look · pinch zoom
 Tap terrain to mine/chop · hold terrain to build · hold use to pack prop
-Craft opens recipes/pack · plane boards/stows · log opens the Hearth Journal`;
+Craft opens recipes/pack · route/pin/clear manage itinerary · plane boards/stows · log opens the Hearth Journal`;
 
 const GAMEPAD_HELP = `Gamepad: LS move · RS look · full stick/RB sprint · LB+RS zoom
 A jump/swim · LT descend · X mine/chop · RT build · D-pad hotbar
@@ -280,7 +281,7 @@ function inputHelpText(mode: UxInputMode): string {
 
 function hudLabelsForInput(mode: UxInputMode): { craft: string; route: string; hotbar: string[] } {
   if (mode === 'gamepad' || mode === 'hybrid') return { craft: 'Y', route: 'Back', hotbar: ['1', '2', '3', '4', '5'] };
-  if (mode === 'touch') return { craft: 'tap', route: 'log', hotbar: ['1', '2', '3', '4', '5'] };
+  if (mode === 'touch') return { craft: 'craft', route: 'route', hotbar: ['1', '2', '3', '4', '5'] };
   return { craft: 'B', route: 'M', hotbar: ['1', '2', '3', '4', '5'] };
 }
 
@@ -627,8 +628,12 @@ async function boot(): Promise<void> {
     player.mode = 'fly';
   }
   let craftingOpen = false;
+  let craftingFocusIndex = 0;
+  let craftingFocusAction: 'craft' | 'place' = 'craft';
   let journalOpen = false;
   let openChestId: number | null = null;
+  let storageFocusIndex = 0;
+  let storageFocusAction: ChestTransferAction = 'depositOne';
   let selectedStructureItem: PlaceableItemId | null = null;
   let lastStructureAction = '';
   let lastFoodAction = '';
@@ -1603,30 +1608,37 @@ async function boot(): Promise<void> {
     nearestPentagonOnTiles(nearbyTiles(1), pentagonTiles) !== null;
   const refreshUseButton = (): void => touch.setUseVisible(shouldShowUseButton());
 
-  const craftingRows = (): CraftingRecipeView[] => allRecipeStatuses(counts, craftedItems, stationItems()).map((status) => {
-    const recipe = status.recipe;
-    const planeAlready = recipe.id === 'plane_frame' && planeCrafted;
-    const packFrameAlready = recipe.id === 'pack_frame' && itemCount(counts, craftedItems, 'packFrame') > 0;
-    const stormCloakAlready = recipe.id === 'storm_cloak' && itemCount(counts, craftedItems, 'stormCloak') > 0;
-    const placeable = isPlaceableItemId(recipe.result);
-    return {
-      id: recipe.id,
-      name: recipe.name,
-      description: planeAlready ? 'Plane built. Press E to board or stow it.'
-        : packFrameAlready ? `Pack frame fitted. Capacity +${packCapacityBonus()} is active.`
-          : stormCloakAlready ? 'Storm cloak fitted. Bad-weather exposure is softened.'
-          : recipe.description,
-      count: recipe.count,
-      owned: itemCount(counts, craftedItems, recipe.result),
-      canCraft: status.canCraft && !planeAlready && !packFrameAlready && !stormCloakAlready,
-      canPlace: placeable && itemCount(counts, craftedItems, recipe.result) > 0,
-      selected: placeable && selectedStructureItem === recipe.result,
-      station: status.station && status.station.have < status.station.need
-        ? `${status.station.name} ${status.station.have}/${status.station.need}`
-        : undefined,
-      requirements: status.requirements.map((req) => ({ name: req.name, need: req.need, have: req.have })),
-    };
-  });
+  const craftingRows = (): CraftingRecipeView[] => {
+    const statuses = allRecipeStatuses(counts, craftedItems, stationItems());
+    craftingFocusIndex = Math.max(0, Math.min(Math.max(0, statuses.length - 1), craftingFocusIndex));
+    return statuses.map((status, index) => {
+      const recipe = status.recipe;
+      const planeAlready = recipe.id === 'plane_frame' && planeCrafted;
+      const packFrameAlready = recipe.id === 'pack_frame' && itemCount(counts, craftedItems, 'packFrame') > 0;
+      const stormCloakAlready = recipe.id === 'storm_cloak' && itemCount(counts, craftedItems, 'stormCloak') > 0;
+      const placeable = isPlaceableItemId(recipe.result);
+      return {
+        id: recipe.id,
+        result: recipe.result,
+        name: recipe.name,
+        description: planeAlready ? 'Plane built. Press E to board or stow it.'
+          : packFrameAlready ? `Pack frame fitted. Capacity +${packCapacityBonus()} is active.`
+            : stormCloakAlready ? 'Storm cloak fitted. Bad-weather exposure is softened.'
+            : recipe.description,
+        count: recipe.count,
+        owned: itemCount(counts, craftedItems, recipe.result),
+        canCraft: status.canCraft && !planeAlready && !packFrameAlready && !stormCloakAlready,
+        canPlace: placeable && itemCount(counts, craftedItems, recipe.result) > 0,
+        selected: placeable && selectedStructureItem === recipe.result,
+        focused: craftingOpen && index === craftingFocusIndex,
+        focusAction: craftingFocusAction,
+        station: status.station && status.station.have < status.station.need
+          ? `${status.station.name} ${status.station.have}/${status.station.need}`
+          : undefined,
+        requirements: status.requirements.map((req) => ({ name: req.name, need: req.need, have: req.have })),
+      };
+    });
+  };
 
   const craftSelected = (recipeId: string): boolean => {
     if (recipeId === 'plane_frame' && planeCrafted) {
@@ -2023,6 +2035,31 @@ async function boot(): Promise<void> {
     hud.flash(`cleared planned path: ${label}`, 2.8);
     return true;
   };
+
+  const openRouteSlateCommand = (): boolean => {
+    if (journalOpen) closeJournal();
+    if (openChestId !== null) closeStorage();
+    return useHorizonChart();
+  };
+
+  const pinRouteCommand = (): boolean => {
+    if (journalOpen) closeJournal();
+    if (openChestId !== null) closeStorage();
+    return pinCurrentRoute();
+  };
+
+  const clearRouteCommand = (): boolean => {
+    if (journalOpen) closeJournal();
+    if (openChestId !== null) closeStorage();
+    if (craftingOpen) {
+      craftingOpen = false;
+      refreshCraftingHud();
+    }
+    return clearRoutePlan();
+  };
+
+  hud.onRoutePin = pinRouteCommand;
+  hud.onRouteClear = clearRouteCommand;
 
   const useLandmark = (tile?: number): boolean => {
     const target = tile !== undefined ? Math.trunc(tile) : nearbyLandmarkTile();
@@ -3401,7 +3438,17 @@ async function boot(): Promise<void> {
     if (openChestId === null) return null;
     const chest = structures.find((s) => s.id === openChestId && s.item === 'chest') ?? null;
     if (!chest) return null;
-    return chestStorageView(chest, counts);
+    const view = chestStorageView(chest, counts);
+    if (!view) return null;
+    storageFocusIndex = Math.max(0, Math.min(Math.max(0, view.rows.length - 1), storageFocusIndex));
+    return {
+      ...view,
+      rows: view.rows.map((row, index) => ({
+        ...row,
+        focused: index === storageFocusIndex,
+        focusAction: storageFocusAction,
+      })),
+    };
   };
 
   const closeStorage = (): void => {
@@ -3426,6 +3473,10 @@ async function boot(): Promise<void> {
     if (journalOpen) closeJournal();
     if (openChestId !== null) closeStorage();
     craftingOpen = !craftingOpen;
+    if (craftingOpen) {
+      craftingFocusIndex = 0;
+      craftingFocusAction = 'craft';
+    }
     refreshCraftingHud();
     if (craftingOpen) hud.setRouteSlate(null);
     playAudio(craftingOpen ? 'uiOpen' : 'uiConfirm');
@@ -3447,6 +3498,8 @@ async function boot(): Promise<void> {
       return false;
     }
     openChestId = chest.id;
+    storageFocusIndex = 0;
+    storageFocusAction = 'depositOne';
     if (journalOpen) closeJournal();
     craftingOpen = false;
     refreshCraftingHud();
@@ -3497,6 +3550,81 @@ async function boot(): Promise<void> {
     playAudio('uiConfirm');
   };
   hud.onStorageTransfer = transferChestStorage;
+
+  const storageActionEnabled = (row: ChestStoragePanelView['rows'][number], action: ChestTransferAction): boolean =>
+    action === 'depositOne' || action === 'depositAll' ? row.canDeposit : row.canWithdraw;
+
+  const handleGamepadPanelInput = (gp: GamepadFrame): boolean => {
+    const hasPanelInput = gp.menuUp || gp.menuDown || gp.menuLeft || gp.menuRight || gp.confirm || gp.cancel;
+    if (!hasPanelInput) return false;
+
+    if (openChestId !== null) {
+      const view = currentChestStorage();
+      if (!view) {
+        closeStorage();
+        return true;
+      }
+      if (gp.cancel) {
+        closeStorage();
+        playAudio('uiConfirm');
+        return true;
+      }
+      if (gp.menuUp || gp.menuDown) {
+        storageFocusIndex = Math.max(0, Math.min(view.rows.length - 1, storageFocusIndex + (gp.menuDown ? 1 : -1)));
+        refreshStorage();
+        return true;
+      }
+      if (gp.menuLeft || gp.menuRight) {
+        const index = Math.max(0, STORAGE_FOCUS_ACTIONS.indexOf(storageFocusAction));
+        const delta = gp.menuRight ? 1 : -1;
+        storageFocusAction = STORAGE_FOCUS_ACTIONS[(index + delta + STORAGE_FOCUS_ACTIONS.length) % STORAGE_FOCUS_ACTIONS.length];
+        refreshStorage();
+        return true;
+      }
+      if (gp.confirm) {
+        const row = view.rows[storageFocusIndex];
+        if (!row || !storageActionEnabled(row, storageFocusAction)) {
+          playAudio('uiDeny');
+          hud.flash('that chest move is unavailable', 1.8);
+          return true;
+        }
+        transferChestStorage(view.id, row.item, storageFocusAction);
+        return true;
+      }
+      return true;
+    }
+
+    if (craftingOpen) {
+      const rows = craftingRows();
+      if (gp.cancel) {
+        craftingOpen = false;
+        refreshCraftingHud();
+        playAudio('uiConfirm');
+        return true;
+      }
+      if (gp.menuUp || gp.menuDown) {
+        craftingFocusIndex = Math.max(0, Math.min(rows.length - 1, craftingFocusIndex + (gp.menuDown ? 1 : -1)));
+        refreshCraftingHud();
+        return true;
+      }
+      if (gp.menuLeft || gp.menuRight) {
+        craftingFocusAction = craftingFocusAction === 'craft' ? 'place' : 'craft';
+        refreshCraftingHud();
+        return true;
+      }
+      if (gp.confirm) {
+        const row = rows[craftingFocusIndex];
+        if (!row) return true;
+        if (craftingFocusAction === 'place') selectStructureForPlacement(row.result);
+        else craftSelected(row.id);
+        refreshCraftingHud();
+        return true;
+      }
+      return true;
+    }
+
+    return false;
+  };
 
   const homeBedrollStructure = (): StructureSave | null =>
     structures.find((s) => s.item === 'bedroll' && s.state?.home === true) ?? null;
@@ -4644,6 +4772,8 @@ async function boot(): Promise<void> {
     const drained = input.drain();
     const tf = touch.frame();
     const gp = gamepad.frame(dt);
+    const gpPanelConsumed = handleGamepadPanelInput(gp);
+    const gpWorldBlocked = gpPanelConsumed || craftingOpen || openChestId !== null || journalOpen;
     const gamepadAimActive = gp.active || gamepad.active();
     drained.dx += gp.lookX;
     drained.dy += gp.lookY;
@@ -4682,8 +4812,8 @@ async function boot(): Promise<void> {
     }
     if (gPressed) { autopilot.toggle(player); hud.flash(autopilot.active ? 'autopilot lap…' : 'autopilot off', 3); }
     if (oPressed) { orbitDemo.start(); hud.flash('orbit demo…', 3); }
-    if ((ePressed || tf.plane || gp.plane) && !autopilot.active) {
-      if (creativeActive && (tf.plane || gp.plane) && !ePressed) {
+    if ((ePressed || tf.plane || (gp.plane && !gpWorldBlocked)) && !autopilot.active) {
+      if (creativeActive && (tf.plane || (gp.plane && !gpWorldBlocked)) && !ePressed) {
         player.toggleFly();
         hud.flash(player.mode === 'fly' ? 'creative free-flight' : 'creative walk mode', 2);
       } else {
@@ -4702,45 +4832,41 @@ async function boot(): Promise<void> {
       refreshCraftingHud();
       playAudio('uiConfirm');
     }
-    if (gp.use && openChestId !== null) {
+    if (gp.use && !gpPanelConsumed && openChestId !== null) {
       closeStorage();
       playAudio('uiConfirm');
       gamepadUseConsumed = true;
-    } else if (gp.use && journalOpen) {
+    } else if (gp.use && !gpPanelConsumed && journalOpen) {
       closeJournal();
       playAudio('uiConfirm');
       gamepadUseConsumed = true;
-    } else if (gp.use && craftingOpen) {
+    } else if (gp.use && !gpPanelConsumed && craftingOpen) {
       craftingOpen = false;
       refreshCraftingHud();
       playAudio('uiConfirm');
       gamepadUseConsumed = true;
     }
-    if ((jPressed || gp.journal) && !autopilot.active) toggleJournal();
-    if (bPressed || gp.craft) {
+    if ((jPressed || (gp.journal && !gpPanelConsumed)) && !autopilot.active) toggleJournal();
+    if (bPressed || (gp.craft && !gpPanelConsumed)) {
       toggleCraftingPanel();
     }
-    if (((rPressed && input.down('ShiftLeft')) || tf.pack || gp.pack) && !autopilot.active) tryDismantleStructure();
-    else if ((rPressed || tf.use || (gp.use && !gamepadUseConsumed)) && !autopilot.active) useStructure();
-    if ((qPressed || gp.eat) && !autopilot.active) tryEatPackedFood();
-    if ((mPressed || gp.chart) && !autopilot.active) {
-      if (journalOpen) closeJournal();
-      if (openChestId !== null) closeStorage();
-      useHorizonChart();
+    if (((rPressed && input.down('ShiftLeft')) || tf.pack || (gp.pack && !gpWorldBlocked)) && !autopilot.active) tryDismantleStructure();
+    else if ((rPressed || tf.use || (gp.use && !gpWorldBlocked && !gamepadUseConsumed)) && !autopilot.active) useStructure();
+    if ((qPressed || (gp.eat && !gpWorldBlocked)) && !autopilot.active) tryEatPackedFood();
+    if ((mPressed || tf.chart || (gp.chart && !gpWorldBlocked)) && !autopilot.active) {
+      openRouteSlateCommand();
     }
-    if ((pPressed || gp.pin || gp.clearPin) && !autopilot.active) {
-      if (journalOpen) closeJournal();
-      if (openChestId !== null) closeStorage();
-      if (input.down('ShiftLeft') || gp.clearPin) clearRoutePlan();
-      else pinCurrentRoute();
+    if ((pPressed || tf.pin || tf.clearPin || ((gp.pin || gp.clearPin) && !gpWorldBlocked)) && !autopilot.active) {
+      if (input.down('ShiftLeft') || tf.clearPin || (gp.clearPin && !gpWorldBlocked)) clearRouteCommand();
+      else pinRouteCommand();
     }
-    if (nPressed || gp.mute) {
+    if (nPressed || (gp.mute && !gpPanelConsumed)) {
       const muted = audio.toggleMuted();
       hud.flash(muted ? 'sound muted' : 'sound on', 1.8);
       if (!muted && audio.state().unlocked) audio.startAmbience();
     }
-    if (f3Pressed || gp.diag) showDiag = !showDiag;
-    if (hPressed || gp.help) hud.toggleHelp();
+    if (f3Pressed || (gp.diag && !gpPanelConsumed)) showDiag = !showDiag;
+    if (hPressed || (gp.help && !gpPanelConsumed)) hud.toggleHelp();
     fWas = fDown; gWas = gDown; oWas = oDown; eWas = eDown; bWas = bDown; rWas = rDown; qWas = qDown; mWas = mDown; pWas = pDown; nWas = nDown; jWas = jDown; escWas = escDown; f3Was = f3Down; hWas = hDown;
     for (let i = 0; i < SLOTS.length; i++) {
       if (input.down(`Digit${i + 1}`)) {
@@ -4751,7 +4877,7 @@ async function boot(): Promise<void> {
         }
       }
     }
-    if (gp.slotDelta !== 0) {
+    if (!gpWorldBlocked && gp.slotDelta !== 0) {
       hotbarSel = (hotbarSel + gp.slotDelta + SLOTS.length * 4) % SLOTS.length;
       if (selectedStructureItem) {
         selectedStructureItem = null;
@@ -4776,8 +4902,8 @@ async function boot(): Promise<void> {
     } else {
       const fwd = Math.max(-1, Math.min(1, (input.down('KeyW') ? 1 : 0) + (input.down('KeyS') ? -1 : 0) + tf.moveY + gp.moveY));
       const strafe = Math.max(-1, Math.min(1, (input.down('KeyD') ? 1 : 0) + (input.down('KeyA') ? -1 : 0) + tf.moveX + gp.moveX));
-      const jumpIntent = input.down('Space') || tf.jump || gp.jump;
-      const downIntent = input.down('ControlLeft') || input.down('KeyC') || tf.down || gp.down;
+      const jumpIntent = input.down('Space') || tf.jump || (gp.jump && !gpWorldBlocked);
+      const downIntent = input.down('ControlLeft') || input.down('KeyC') || tf.down || (gp.down && !gpWorldBlocked);
       const upDown = (jumpIntent ? 1 : 0) + (downIntent ? -1 : 0);
       const sprintIntent = input.down('ShiftLeft') || tf.sprint || gp.sprint;
       const burden = packBurden();
@@ -5038,8 +5164,8 @@ async function boot(): Promise<void> {
     }
 
     mineTimer -= dt; placeTimer -= dt;
-    if ((drained.mine || gp.minePressed || ((input.mineHeld || gp.mine) && mineTimer <= 0)) && (lastPick || treePick)) { tryMine(); mineTimer = nextMineCooldown; }
-    if ((drained.place || gp.placePressed || ((input.placeHeld || gp.place) && placeTimer <= 0)) && lastPick) { tryPlace(); placeTimer = 0.17; }
+    if ((drained.mine || (gp.minePressed && !gpWorldBlocked) || ((input.mineHeld || (gp.mine && !gpWorldBlocked)) && mineTimer <= 0)) && (lastPick || treePick)) { tryMine(); mineTimer = nextMineCooldown; }
+    if ((drained.place || (gp.placePressed && !gpWorldBlocked) || ((input.placeHeld || (gp.place && !gpWorldBlocked)) && placeTimer <= 0)) && lastPick) { tryPlace(); placeTimer = 0.17; }
 
     saveTimer += dt;
     if (saveEnabled && (saveDirty || saveTimer >= 6) && performance.now() - lastSaveMs > 900) {

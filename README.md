@@ -66,7 +66,7 @@ muted).
 (push past the rim to sprint — in the plane it works the throttle), dragging anywhere else
 looks, **tap to mine or chop**, **hold ~0.4 s to build** (keep holding and drag to paint),
 pinch to zoom from first person to orbit, and round buttons handle jump/climb, descend,
-nearby prop use, crafting/Pack Ledger, and boarding / stowing the plane. With `?creative=1`, the plane
+nearby prop use, crafting/Pack Ledger, Route Slate open/pin/clear, and boarding / stowing the plane. With `?creative=1`, the plane
 button toggles walk/free-flight so mobile has the same Creative shortcut as desktop `F`.
 Long-press the touch `use` button to pack a nearby safe prop, matching `Shift+R` on keyboard.
 
@@ -75,7 +75,9 @@ input: left stick moves, right stick looks, full stick/RB sprints, LB+right stic
 `A` jumps/swims up, `LT` descends, `X` mines/chops, `RT` builds, D-pad left/right cycles the
 hotbar, `B` uses or closes the open panel, `LB+B` packs a safe prop, `Y` toggles crafting,
 Back opens the Route Slate, `LB+D-pad` pins or clears routes, and Start boards/stows the
-plane.
+plane. While crafting or chest storage is open, D-pad moves the focused row/action, `A`
+confirms craft/place/transfer, and `B` closes the focused panel without leaking jump, use,
+hotbar, mine, or build input into the world.
 
 ## The survival loop
 
@@ -470,7 +472,7 @@ water, or a cliff stows it; E brings it back mid-fall.
 - GitHub Pages deploys from the `main` branch workflow in `.github/workflows/deploy.yml`.
   The app is static: no server secrets, runtime API keys, or backend configuration are expected.
 
-Test suite: 246 tests — icosahedron invariants; 10m²+2 counts with exactly 12 pentagons;
+Test suite: 247 tests — icosahedron invariants; 10m²+2 counts with exactly 12 pentagons;
 neighbor symmetry; CCW winding and bit-identical shared corners; id round-trips; seam
 agreement; `tileOf` vs brute force; layer-grid inverses; terrain determinism and
 ocean/land/mountain balance; column edit semantics incl. tunnels and immutable bedrock;
@@ -485,7 +487,8 @@ availability, duplicate-tile prevention, inventory spending, hearth scoring, loc
 recognition around the home bedroll, prop utility state for campfires, bedrolls, chests, docks, compost bins, rain cisterns, root cellars, cave anchors, drying racks, weather vanes, and waystones,
 crop condition gating, compost fertility, rain-cistern irrigation, root-cellar provision caching, protected-yield bonuses, growth/harvest, campfire cooking, and drying-rack preserving.
 Gamepad and adaptive-UX tests cover standard controller deadzones, button edges, route/pack
-modifiers, hotbar cycling, and phone/tablet/laptop/desktop profile classification.
+modifiers, menu-focus confirm/cancel edges, one-shot injected actions, hotbar cycling, and
+phone/tablet/laptop/desktop profile classification.
 Survival pressure rules cover stamina, exposure, weather reports, storm-cloak mitigation,
 shelter recovery, packed food recovery including trail rations, bedroll sleep-to-dawn recovery, and save normalization. Fishing ecology rules
 cover dry-ground failure, baited shore catches, dockside fish runs, storm fish runs, and sea-cave schools.

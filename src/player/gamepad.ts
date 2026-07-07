@@ -36,6 +36,12 @@ export interface GamepadFrame {
   eat: boolean;
   pin: boolean;
   clearPin: boolean;
+  menuUp: boolean;
+  menuDown: boolean;
+  menuLeft: boolean;
+  menuRight: boolean;
+  confirm: boolean;
+  cancel: boolean;
   mute: boolean;
   help: boolean;
   diag: boolean;
@@ -75,6 +81,12 @@ const EMPTY_FRAME: GamepadFrame = {
   eat: false,
   pin: false,
   clearPin: false,
+  menuUp: false,
+  menuDown: false,
+  menuLeft: false,
+  menuRight: false,
+  confirm: false,
+  cancel: false,
   mute: false,
   help: false,
   diag: false,
@@ -87,6 +99,7 @@ const EMPTY_FRAME: GamepadFrame = {
 
 const EDGE_FIELDS: (keyof Pick<GamepadFrame,
   'plane' | 'use' | 'pack' | 'craft' | 'chart' | 'journal' | 'eat' | 'pin' | 'clearPin' |
+  'menuUp' | 'menuDown' | 'menuLeft' | 'menuRight' | 'confirm' | 'cancel' |
   'mute' | 'help' | 'diag' | 'minePressed' | 'placePressed' | 'slotDelta'
 >)[] = [
   'plane',
@@ -98,6 +111,12 @@ const EDGE_FIELDS: (keyof Pick<GamepadFrame,
   'eat',
   'pin',
   'clearPin',
+  'menuUp',
+  'menuDown',
+  'menuLeft',
+  'menuRight',
+  'confirm',
+  'cancel',
   'mute',
   'help',
   'diag',
@@ -196,6 +215,12 @@ export function gamepadFrameFromState(gamepad: GamepadLike | null, previous: rea
     eat: edge(Btn.DpadUp) && !lb,
     pin: edge(Btn.DpadRight) && lb,
     clearPin: edge(Btn.DpadLeft) && lb,
+    menuUp: edge(Btn.DpadUp),
+    menuDown: edge(Btn.DpadDown),
+    menuLeft: edge(Btn.DpadLeft),
+    menuRight: edge(Btn.DpadRight),
+    confirm: edge(Btn.A),
+    cancel: edge(Btn.B),
     mute: edge(Btn.Back) && lb,
     help: edge(Btn.R3) && !lb,
     diag: edge(Btn.R3) && lb,
@@ -227,6 +252,12 @@ function mergeFrames(a: GamepadFrame, b: GamepadFrame): GamepadFrame {
     eat: a.eat || b.eat,
     pin: a.pin || b.pin,
     clearPin: a.clearPin || b.clearPin,
+    menuUp: a.menuUp || b.menuUp,
+    menuDown: a.menuDown || b.menuDown,
+    menuLeft: a.menuLeft || b.menuLeft,
+    menuRight: a.menuRight || b.menuRight,
+    confirm: a.confirm || b.confirm,
+    cancel: a.cancel || b.cancel,
     mute: a.mute || b.mute,
     help: a.help || b.help,
     diag: a.diag || b.diag,
