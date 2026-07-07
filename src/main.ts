@@ -111,6 +111,7 @@ import {
   placeableName,
   rootCellarProvisionCount,
   spendRootCellarProvision,
+  structureDismantleBlockers,
   structureYawTurn,
   structureStationInventory,
   transferChestMaterial,
@@ -280,17 +281,17 @@ const STORAGE_FOCUS_ACTIONS: ChestTransferAction[] = ['depositOne', 'depositAll'
 
 const KEYBOARD_HELP = `WASD move · space jump · shift sprint · wheel zoom
 LMB mine + chop trees · RMB build · Z/X rotate build/prop · 1-5 pick block · Q eat
-Plane: chop 2 trees for 12 wood · B craft · R use/open chest/farm/fish/forage · Shift+R pack prop · M chart · P itinerary · Shift+P clear · J journal · E board/stow
+Plane: chop 2 trees for 12 wood · B craft · R use/open chest/farm/fish/forage · Shift+R pack prop · V/Shift+E move prop · M chart · P itinerary · Shift+P clear · J journal · E board/stow
 Route Slate: Arrow keys choose/drop/move stops · Enter pin · Esc close
 F free-flight · F3 stats · H help`;
 
 const TOUCH_HELP = `Touch: left stick move · drag to look · pinch zoom
-Tap terrain to mine/chop · hold terrain to build · hold use to pack prop
+Tap terrain to mine/chop · hold terrain to build/drop moved prop · move grabs/drops nearby prop · hold use packs prop
 Craft opens recipes/pack · route panel buttons pin/later/drop/clear itinerary stops · plane boards/stows · log opens the Hearth Journal`;
 
 const GAMEPAD_HELP = `Gamepad: LS move · RS look · full stick/RB sprint · LB+RS zoom
 A jump/swim · LT descend · X mine/chop · RT build · D-pad hotbar
-B use · LB+B pack prop · Y craft · Back route slate · D-pad edits open itinerary · LB+D-pad rotates selected build or pins/clears routes · Start board/stow`;
+B use · LB+B pack prop · LB+RT move/drop prop · Y craft · Back route slate · D-pad edits open itinerary · LB+D-pad rotates selected build/move or pins/clears routes · Start board/stow`;
 
 function inputHelpText(mode: UxInputMode): string {
   if (mode === 'gamepad' || mode === 'hybrid') return GAMEPAD_HELP;
@@ -659,6 +660,14 @@ async function boot(): Promise<void> {
   let routeFocusActive = false;
   let selectedStructureItem: PlaceableItemId | null = null;
   let placementYawTurns = 0;
+  let relocationCursor: {
+    id: number;
+    item: PlaceableItemId;
+    fromTile: number;
+    fromLayer: number;
+    originalTurn: number;
+    source: BuildCommandSource;
+  } | null = null;
   let lastStructureAction = '';
   type BuildCommandSource = 'keyboard' | 'pointer' | 'touch' | 'gamepad' | 'debug';
   type BuildCommandVerb = 'select' | 'rotate' | 'place' | 'relocate' | 'use' | 'pack';
@@ -713,6 +722,7 @@ async function boot(): Promise<void> {
   };
   let lastPick: PickResult | null = null;
   let treePick: TreePick | null = null;
+  let debugPickHoldUntil = 0;
   let mineTimer = 0;
   let nextMineCooldown = 0.17;
   let placeTimer = 0;
@@ -1213,6 +1223,7 @@ async function boot(): Promise<void> {
   };
 
   const tryPlace = (source: BuildCommandSource = 'pointer'): void => {
+    if (relocationCursor) { confirmRelocationCursor(source); return; }
     if (selectedStructureItem) { tryPlaceStructure(source); return; }
     if (!lastPick || lastPick.prevTile < 0 || lastPick.prevLayer < 0) return;
     if (lastPick.prevTile === player.tile) {
@@ -1243,7 +1254,7 @@ async function boot(): Promise<void> {
     syncHudUx(currentUxProfile);
   });
 
-  let fWas = false, gWas = false, oWas = false, eWas = false, bWas = false, rWas = false, qWas = false, mWas = false, pWas = false, nWas = false, jWas = false, zWas = false, xWas = false, escWas = false, f3Was = false, hWas = false;
+  let fWas = false, gWas = false, oWas = false, eWas = false, vWas = false, bWas = false, rWas = false, qWas = false, mWas = false, pWas = false, nWas = false, jWas = false, zWas = false, xWas = false, escWas = false, f3Was = false, hWas = false;
   let showDiag = params.get('debug') === '1';
   let prevSel = -1;
   let lockHinted = false;
@@ -1656,7 +1667,13 @@ async function boot(): Promise<void> {
     itemCount(counts, craftedItems, 'fishingRod') > 0 ||
     itemCount(counts, craftedItems, 'echoLantern') > 0 ||
     nearestPentagonOnTiles(nearbyTiles(1), pentagonTiles) !== null;
-  const refreshUseButton = (): void => touch.setUseVisible(shouldShowUseButton());
+  const nearbyMovableStructure = (): StructureSave | null =>
+    nearestStructureOnTiles(structures.filter((s) => structureDismantleBlockers(s).length === 0), nearbyStructureTiles());
+  const shouldShowMoveButton = (): boolean => relocationCursor !== null || nearbyMovableStructure() !== null;
+  const refreshUseButton = (): void => {
+    touch.setUseVisible(shouldShowUseButton());
+    touch.setMoveButton(shouldShowMoveButton(), relocationCursor !== null);
+  };
 
   const craftingRows = (): CraftingRecipeView[] => {
     const statuses = allRecipeStatuses(counts, craftedItems, stationItems());
@@ -1771,6 +1788,12 @@ async function boot(): Promise<void> {
     degrees: placementYawTurns * 60,
     offset: placementYawOffset(),
     targetTile: lastPick?.hitTile ?? null,
+    relocating: relocationCursor ? {
+      id: relocationCursor.id,
+      item: relocationCursor.item,
+      fromTile: relocationCursor.fromTile,
+      turn: placementYawTurns,
+    } : null,
   });
 
   const recordBuildCommand = (
@@ -1815,6 +1838,9 @@ async function boot(): Promise<void> {
 
   const rotateBuildFacing = (turns = 1, id?: number, source: BuildCommandSource = 'debug'): boolean => {
     const delta = Math.trunc(Number.isFinite(turns) ? turns : 1);
+    if (relocationCursor && id === undefined) {
+      return rotateRelocationCursor(delta, source);
+    }
     if (selectedStructureItem && id === undefined) {
       const result = rotateSelectedPlacementCommand(selectedStructureItem, placementYawTurns, delta);
       placementYawTurns = result.turn ?? placementYawTurns;
@@ -1914,6 +1940,168 @@ async function boot(): Promise<void> {
     return true;
   };
 
+  const relocationTargetStructure = (): StructureSave | null => {
+    if (!relocationCursor) return null;
+    return structures.find((s) => s.id === relocationCursor!.id) ?? null;
+  };
+
+  const relocationDiagnostics = () => {
+    const target = relocationTargetStructure();
+    const snap = target && lastPick ? structureSnapTarget(target.item, lastPick.hitTile, lastPick.hitLayer) : null;
+    return {
+      active: !!target,
+      cursor: relocationCursor ? {
+        id: relocationCursor.id,
+        item: relocationCursor.item,
+        fromTile: relocationCursor.fromTile,
+        fromLayer: relocationCursor.fromLayer,
+        originalTurn: relocationCursor.originalTurn,
+        source: relocationCursor.source,
+      } : null,
+      turn: placementYawTurns,
+      degrees: placementYawTurns * 60,
+      targetTile: lastPick?.hitTile ?? null,
+      targetLayer: snap?.layer ?? lastPick?.hitLayer ?? null,
+      targetBlocker: snap?.blocker ?? null,
+    };
+  };
+
+  const cancelRelocationCursor = (source: BuildCommandSource = 'keyboard'): boolean => {
+    if (!relocationCursor) return false;
+    const item = relocationCursor.item;
+    lastStructureAction = `${item}:relocate:cancel`;
+    relocationCursor = null;
+    playAudio('uiConfirm');
+    hud.slotName(selectedStructureItem ? `place ${placeableName(selectedStructureItem)}` : SLOTS[hotbarSel].name);
+    hud.flash(`move cancelled · ${placeableName(item)} left in place`, 2);
+    recordBuildCommand(source, 'relocate', 'structure', {
+      ok: false,
+      command: 'relocate',
+      item,
+      message: 'move cancelled',
+      action: `${item}:relocate:cancel`,
+    });
+    refreshUseButton();
+    return true;
+  };
+
+  const beginRelocationCursor = (id?: number, source: BuildCommandSource = 'keyboard'): boolean => {
+    const target = id !== undefined
+      ? structures.find((s) => s.id === Math.trunc(id)) ?? null
+      : nearestStructureOnTiles(structures, nearbyStructureTiles());
+    if (!target) {
+      const result = relocateStructureCommand({
+        structures,
+        target: null,
+        tile: player.tile,
+        layer: columns.groundLayerBelow(player.tile, layers.bounds[0]),
+        playerTile: player.tile,
+      });
+      lastStructureAction = result.action;
+      recordBuildCommand(source, 'relocate', 'none', result);
+      playAudio('uiDeny');
+      hud.flash(result.message, 2.2);
+      return false;
+    }
+    const blockers = structureDismantleBlockers(target);
+    if (blockers.length > 0) {
+      const result: StructureCommandResult = {
+        ok: false,
+        command: 'relocate',
+        item: target.item,
+        id: target.id,
+        fromTile: target.tile,
+        fromLayer: target.layer,
+        message: `${placeableName(target.item).toLowerCase()} cannot be moved · ${blockers[0]}`,
+        action: `${target.item}:relocate:blocked:${blockers[0]}`,
+        blockers,
+      };
+      lastStructureAction = result.action;
+      recordBuildCommand(source, 'relocate', 'structure', result, target);
+      playAudio('uiDeny');
+      hud.flash(result.message, 2.8);
+      return false;
+    }
+    if (openChestId === target.id) closeStorage();
+    selectedStructureItem = null;
+    placementYawTurns = structureYawTurn(target.yaw);
+    relocationCursor = {
+      id: target.id,
+      item: target.item,
+      fromTile: target.tile,
+      fromLayer: target.layer,
+      originalTurn: structureYawTurn(target.yaw),
+      source,
+    };
+    const result: StructureCommandResult = {
+      ok: true,
+      command: 'relocate',
+      item: target.item,
+      id: target.id,
+      fromTile: target.tile,
+      fromLayer: target.layer,
+      turn: placementYawTurns,
+      yaw: target.yaw,
+      message: `moving ${placeableName(target.item).toLowerCase()}`,
+      action: `${target.item}:relocate:grabbed`,
+    };
+    lastStructureAction = result.action;
+    recordBuildCommand(source, 'relocate', 'structure', result, target);
+    refreshCraftingHud();
+    refreshUseButton();
+    hud.slotName(`move ${placeableName(target.item)} · face ${placementYawTurns + 1}`);
+    hud.flash(touch.enabled ? 'hold terrain or tap drop to set it down' : 'aim at a snap hex · RMB/RT drops · Z/X rotates', 3);
+    triggerCharacterAction('build', target.item, 0.38);
+    playAudio('uiOpen');
+    return true;
+  };
+
+  const rotateRelocationCursor = (turns = 1, source: BuildCommandSource = 'keyboard'): boolean => {
+    const target = relocationTargetStructure();
+    if (!target) return false;
+    const result = rotateSelectedPlacementCommand(target.item, placementYawTurns, turns);
+    placementYawTurns = result.turn ?? placementYawTurns;
+    lastStructureAction = `${target.item}:relocate-facing:hex face ${placementYawTurns + 1}`;
+    recordBuildCommand(source, 'rotate', 'placement', {
+      ...result,
+      id: target.id,
+      fromTile: target.tile,
+      fromLayer: target.layer,
+      action: lastStructureAction,
+      message: `move ${placeableName(target.item).toLowerCase()} facing hex face ${placementYawTurns + 1}`,
+    }, target);
+    hud.slotName(`move ${placeableName(target.item)} · face ${placementYawTurns + 1}`);
+    hud.flash(`move facing hex face ${placementYawTurns + 1}`, 1.6);
+    triggerCharacterAction('build', target.item, 0.32);
+    refreshUseButton();
+    return result.ok;
+  };
+
+  const confirmRelocationCursor = (source: BuildCommandSource = 'keyboard'): boolean => {
+    const target = relocationTargetStructure();
+    if (!relocationCursor || !target) {
+      relocationCursor = null;
+      refreshUseButton();
+      return false;
+    }
+    if (!lastPick) {
+      playAudio('uiDeny');
+      hud.flash('aim at a snap hex to drop it', 2.2);
+      return false;
+    }
+    const ok = relocateStructureAt(target.id, lastPick.hitTile, lastPick.hitLayer, yawForTile(lastPick.hitTile) + placementYawOffset(), source);
+    if (ok) {
+      relocationCursor = null;
+      refreshUseButton();
+      hud.slotName(SLOTS[hotbarSel].name);
+    }
+    return ok;
+  };
+
+  const tryRelocationCursor = (source: BuildCommandSource = 'keyboard'): boolean => {
+    return relocationCursor ? confirmRelocationCursor(source) : beginRelocationCursor(undefined, source);
+  };
+
   const selectStructureForPlacement = (id: string, source: BuildCommandSource = 'debug'): void => {
     const result = selectStructurePlacementCommand(counts, craftedItems, id);
     lastStructureAction = result.action;
@@ -1924,9 +2112,11 @@ async function boot(): Promise<void> {
       return;
     }
     closeStorage();
+    relocationCursor = null;
     selectedStructureItem = result.selected ?? result.item;
     craftingOpen = false;
     refreshCraftingHud();
+    refreshUseButton();
     hud.slotName(result.message);
     playAudio('uiOpen');
     hud.flash(touch.enabled ? 'hold terrain to set it down' : 'RMB sets it · Z/X rotates facing', 3);
@@ -4562,6 +4752,7 @@ async function boot(): Promise<void> {
       food: { ...foodCounts(), lastAction: lastFoodAction, nearWater: nearFishingWater(), nearDock: nearDock(), school: currentFishSchool(), forage: currentForage(), crops: cropDiagnostics(), fishTraps: fishTrapDiagnostics(), shoreNets: shoreNetDiagnostics() },
       audio: audio.state(),
       controls: { ux: uxManager.snapshot(), gamepad: gamepad.snapshot(), touch: touch.enabled, inputActive: input.active(), aimActive: input.active() || gamepad.active(), panels: currentPanelOwnership() },
+      relocation: relocationDiagnostics(),
       survival: { ...survivalSnapshot(), time: { ...timeState }, state: { ...survivalState }, pack: packBurden(), lastAction: lastSurvivalAction },
       caves: { current: currentNaturalVoid(), signal: nearbyCaveSignal(), resonance: caveResonanceDiagnostics(), mouths: caveMouthDiagnostics(), pressure: currentCavePressure(), lastAction: lastCaveAction, echoLantern: itemCount(counts, craftedItems, 'echoLantern') },
       navigation: { horizonChart: horizonChartCount(), signal: visibleHorizonChartSignal(), hearthBeacon: visibleHearthBeaconSignal(), routePlan: currentRoutePlanSignal(), savedRoutePlan: activeRoutePlan, waystones: waystoneRouteSignals(), caveAnchors: caveAnchorRouteSignals(), weatherVane: weatherVaneForecast(), domain: currentPentagonDomain(), site: currentRouteSiteSignal(), thresholdChamber: currentRouteThresholdChamberSignal(), resource: currentRouteResourceSignal(), skyfall: currentRouteSkyfallSignal(), murmur: currentRouteMurmurSignal(), season: currentRouteSeasonSignal(), seasonAfterglow: currentRouteSeasonAfterglowSignal(), seasonRoute: currentSeasonRouteGuides(), guide: currentRouteGuide(), plan: horizonExpeditionPlan(), slate: currentRouteSlate(), lastAction: lastNavigationAction },
@@ -4892,7 +5083,7 @@ async function boot(): Promise<void> {
     }),
     craft: (recipeId: string) => craftSelected(recipeId),
     crafting: () => ({ open: craftingOpen, crafted: { ...craftedItems }, recipes: craftingRows(), ledger: packLedger() }),
-    structures: () => ({ items: structures.map((s) => ({ ...s, state: s.state ? { ...s.state } : undefined, turn: structureYawTurn(s.yaw) })), placement: placementDiagnostics(), commands: buildCommandDiagnostics(), sockets: { houseKit: houseKitSocketCatalog() }, crops: cropDiagnostics(), compostBins: compostBinDiagnostics(), rainCisterns: rainCisternDiagnostics(), rootCellars: rootCellarDiagnostics(), caveAnchors: caveAnchorDiagnostics(), waystones: waystoneDiagnostics(), weatherVanes: weatherVaneDiagnostics(), fishTraps: fishTrapDiagnostics(), shoreNets: shoreNetDiagnostics(), storage: { open: openChestId !== null, chestId: openChestId, state: currentChestStorage() }, home: homeScore(structures, geo), renderer: structureRenderer.stats(), lastAction: lastStructureAction }),
+    structures: () => ({ items: structures.map((s) => ({ ...s, state: s.state ? { ...s.state } : undefined, turn: structureYawTurn(s.yaw) })), placement: placementDiagnostics(), relocation: relocationDiagnostics(), commands: buildCommandDiagnostics(), sockets: { houseKit: houseKitSocketCatalog() }, crops: cropDiagnostics(), compostBins: compostBinDiagnostics(), rainCisterns: rainCisternDiagnostics(), rootCellars: rootCellarDiagnostics(), caveAnchors: caveAnchorDiagnostics(), waystones: waystoneDiagnostics(), weatherVanes: weatherVaneDiagnostics(), fishTraps: fishTrapDiagnostics(), shoreNets: shoreNetDiagnostics(), storage: { open: openChestId !== null, chestId: openChestId, state: currentChestStorage() }, home: homeScore(structures, geo), renderer: structureRenderer.stats(), lastAction: lastStructureAction }),
     buildCommands: () => buildCommandDiagnostics(),
     selectStructure: (item: string) => selectStructureForPlacement(item),
     placeStructure: (item: string, tile?: number) => {
@@ -4999,6 +5190,47 @@ async function boot(): Promise<void> {
       },
     },
     debugPick: () => ({ lastPick, treePick }),
+    debugAimAtTile: (tile: number, layer?: number) => {
+      const target = Math.max(0, Math.min(geo.count - 1, Math.trunc(Number.isFinite(tile) ? tile : player.tile)));
+      const targetLayer = Math.max(0, Math.min(layers.L - 1, Math.trunc(Number.isFinite(layer) ? layer! : columns.groundLayerBelow(target, layers.bounds[0]))));
+      facePlayerTowardTile(target);
+      const c = geo.centers;
+      const radius = layers.topRadius(targetLayer) + 0.08;
+      const tx = c[target * 3] * radius;
+      const ty = c[target * 3 + 1] * radius;
+      const tz = c[target * 3 + 2] * radius;
+      const dx = tx - camWorld.x;
+      const dy = ty - camWorld.y;
+      const dz = tz - camWorld.z;
+      const len = Math.hypot(dx, dy, dz) || 1;
+      updatePicks(dx / len, dy / len, dz / len);
+      if (!lastPick || lastPick.hitTile !== target) {
+        lastPick = { hitTile: target, hitLayer: targetLayer, prevTile: -1, prevLayer: -1, dist: len };
+        treePick = null;
+      }
+      debugPickHoldUntil = performance.now() + 1400;
+      return { targetTile: target, targetLayer, pick: lastPick, relocation: relocationDiagnostics() };
+    },
+    screenPointForTile: (tile: number, layer?: number) => {
+      const target = Math.max(0, Math.min(geo.count - 1, Math.trunc(Number.isFinite(tile) ? tile : player.tile)));
+      const targetLayer = Math.max(0, Math.min(layers.L - 1, Math.trunc(Number.isFinite(layer) ? layer! : columns.groundLayerBelow(target, layers.bounds[0]))));
+      const c = geo.centers;
+      const radius = layers.topRadius(targetLayer) + 0.16;
+      const point = new THREE.Vector3(
+        c[target * 3] * radius - camWorld.x,
+        c[target * 3 + 1] * radius - camWorld.y,
+        c[target * 3 + 2] * radius - camWorld.z,
+      );
+      point.project(camera);
+      return {
+        tile: target,
+        layer: targetLayer,
+        x: (point.x * 0.5 + 0.5) * window.innerWidth,
+        y: (-point.y * 0.5 + 0.5) * window.innerHeight,
+        ndc: { x: point.x, y: point.y, z: point.z },
+        visible: point.z >= -1 && point.z <= 1 && Math.abs(point.x) <= 1.1 && Math.abs(point.y) <= 1.1,
+      };
+    },
     character,
     sky,
     camInfo: () => {
@@ -5184,6 +5416,7 @@ async function boot(): Promise<void> {
         characterRenderer: character.stats(),
         mineProgress: mineProgressDiagnostics(),
         survival: { ...survivalSnapshot(), time: { ...timeState }, pack: packBurden() },
+        structures: { relocation: relocationDiagnostics(), commands: buildCommandDiagnostics() },
       };
     },
   };
@@ -5251,6 +5484,7 @@ async function boot(): Promise<void> {
       count: structures.length,
       selected: selectedStructureItem,
       placement: placementDiagnostics(),
+      relocation: relocationDiagnostics(),
       commands: buildCommandDiagnostics(),
       sockets: { houseKit: houseKitSocketCatalog() },
       yawTurns: structures.map((s) => ({ id: s.id, item: s.item, tile: s.tile, turn: structureYawTurn(s.yaw), yaw: s.yaw })),
@@ -5349,12 +5583,13 @@ async function boot(): Promise<void> {
     if (gamepadNotice) hud.flash(gamepadNotice === 'gamepad disconnected' ? gamepadNotice : 'gamepad ready', 2.4);
 
     // key edges
-    const fDown = input.down('KeyF'), gDown = input.down('KeyG'), oDown = input.down('KeyO'), eDown = input.down('KeyE'), bDown = input.down('KeyB'), rDown = input.down('KeyR'), qDown = input.down('KeyQ'), mDown = input.down('KeyM'), pDown = input.down('KeyP'), nDown = input.down('KeyN'), jDown = input.down('KeyJ'), zDown = input.down('KeyZ'), xDown = input.down('KeyX'), escDown = input.down('Escape');
+    const fDown = input.down('KeyF'), gDown = input.down('KeyG'), oDown = input.down('KeyO'), eDown = input.down('KeyE'), vDown = input.down('KeyV'), bDown = input.down('KeyB'), rDown = input.down('KeyR'), qDown = input.down('KeyQ'), mDown = input.down('KeyM'), pDown = input.down('KeyP'), nDown = input.down('KeyN'), jDown = input.down('KeyJ'), zDown = input.down('KeyZ'), xDown = input.down('KeyX'), escDown = input.down('Escape');
     const f3Down = input.down('F3'), hDown = input.down('KeyH');
     const fPressed = input.pressed('KeyF') || (fDown && !fWas);
     const gPressed = input.pressed('KeyG') || (gDown && !gWas);
     const oPressed = input.pressed('KeyO') || (oDown && !oWas);
     const ePressed = input.pressed('KeyE') || (eDown && !eWas);
+    const vPressed = input.pressed('KeyV') || (vDown && !vWas);
     const bPressed = input.pressed('KeyB') || (bDown && !bWas);
     const rPressed = input.pressed('KeyR') || (rDown && !rWas);
     const qPressed = input.pressed('KeyQ') || (qDown && !qWas);
@@ -5381,7 +5616,12 @@ async function boot(): Promise<void> {
     }
     if (gPressed && !worldBlocked()) { autopilot.toggle(player); hud.flash(autopilot.active ? 'autopilot lap…' : 'autopilot off', 3); }
     if (oPressed && !worldBlocked()) { orbitDemo.start(); hud.flash('orbit demo…', 3); }
-    if ((ePressed || (tf.plane && !worldBlocked()) || (gp.plane && !worldBlocked())) && !worldBlocked() && !autopilot.active) {
+    const keyboardRelocate = vPressed || (ePressed && input.down('ShiftLeft'));
+    const touchRelocate = tf.relocate && !worldBlocked();
+    const gamepadRelocate = gp.relocate && !worldBlocked();
+    if ((keyboardRelocate || touchRelocate || gamepadRelocate) && !worldBlocked() && !autopilot.active) {
+      tryRelocationCursor(gamepadRelocate ? 'gamepad' : touchRelocate ? 'touch' : 'keyboard');
+    } else if ((ePressed || (tf.plane && !worldBlocked()) || (gp.plane && !worldBlocked())) && !worldBlocked() && !autopilot.active) {
       if (creativeActive && ((tf.plane && !worldBlocked()) || (gp.plane && !worldBlocked())) && !ePressed) {
         player.toggleFly();
         hud.flash(player.mode === 'fly' ? 'creative free-flight' : 'creative walk mode', 2);
@@ -5390,7 +5630,9 @@ async function boot(): Promise<void> {
       }
     }
     let gamepadUseConsumed = false;
-    if (!routeKeyboardConsumed && escPressed && openChestId !== null) {
+    if (!routeKeyboardConsumed && escPressed && relocationCursor) {
+      cancelRelocationCursor('keyboard');
+    } else if (!routeKeyboardConsumed && escPressed && openChestId !== null) {
       closeStorage();
       playAudio('uiConfirm');
     } else if (!routeKeyboardConsumed && escPressed && journalOpen) {
@@ -5401,7 +5643,10 @@ async function boot(): Promise<void> {
       refreshCraftingHud();
       playAudio('uiConfirm');
     }
-    if (gp.use && !gpPanelConsumed && openChestId !== null) {
+    if (gp.cancel && !gpPanelConsumed && relocationCursor && !worldBlocked()) {
+      cancelRelocationCursor('gamepad');
+      gamepadUseConsumed = true;
+    } else if (gp.use && !gpPanelConsumed && openChestId !== null) {
       closeStorage();
       playAudio('uiConfirm');
       gamepadUseConsumed = true;
@@ -5429,7 +5674,7 @@ async function boot(): Promise<void> {
     if ((mPressed || tf.chart || (gp.chart && !worldBlocked())) && !autopilot.active) {
       openRouteSlateCommand();
     }
-    const gamepadBuildRotate = selectedStructureItem !== null && !routeSlateOpen() && !worldBlocked() && (gp.pin || gp.clearPin);
+    const gamepadBuildRotate = (selectedStructureItem !== null || relocationCursor !== null) && !routeSlateOpen() && !worldBlocked() && (gp.pin || gp.clearPin);
     if ((zPressed || xPressed || gamepadBuildRotate) && !worldBlocked() && !autopilot.active) {
       rotateBuildFacing((zPressed || gp.clearPin) && !xPressed ? -1 : 1, undefined, gamepadBuildRotate ? 'gamepad' : 'keyboard');
     }
@@ -5444,7 +5689,7 @@ async function boot(): Promise<void> {
     }
     if (f3Pressed || (gp.diag && !gpPanelConsumed)) showDiag = !showDiag;
     if (hPressed || (gp.help && !gpPanelConsumed)) hud.toggleHelp();
-    fWas = fDown; gWas = gDown; oWas = oDown; eWas = eDown; bWas = bDown; rWas = rDown; qWas = qDown; mWas = mDown; pWas = pDown; nWas = nDown; jWas = jDown; zWas = zDown; xWas = xDown; escWas = escDown; f3Was = f3Down; hWas = hDown;
+    fWas = fDown; gWas = gDown; oWas = oDown; eWas = eDown; vWas = vDown; bWas = bDown; rWas = rDown; qWas = qDown; mWas = mDown; pWas = pDown; nWas = nDown; jWas = jDown; zWas = zDown; xWas = xDown; escWas = escDown; f3Was = f3Down; hWas = hDown;
     worldInputBlocked = worldBlocked();
     if (worldInputBlocked) {
       input.cancelWorldInput();
@@ -5460,6 +5705,10 @@ async function boot(): Promise<void> {
     for (let i = 0; i < SLOTS.length; i++) {
       if (!worldBlocked() && input.down(`Digit${i + 1}`)) {
         hotbarSel = i;
+        if (relocationCursor) {
+          relocationCursor = null;
+          refreshUseButton();
+        }
         if (selectedStructureItem) {
           selectedStructureItem = null;
           refreshCraftingHud();
@@ -5468,6 +5717,10 @@ async function boot(): Promise<void> {
     }
     if (!worldBlocked() && gp.slotDelta !== 0) {
       hotbarSel = (hotbarSel + gp.slotDelta + SLOTS.length * 4) % SLOTS.length;
+      if (relocationCursor) {
+        relocationCursor = null;
+        refreshUseButton();
+      }
       if (selectedStructureItem) {
         selectedStructureItem = null;
         refreshCraftingHud();
@@ -5711,12 +5964,13 @@ async function boot(): Promise<void> {
     routeRenderer.update(currentRouteGuide(), player.tile, geo, layers, columns, camWorld, camDist, now / 1000);
 
     // --- picking + edits ---
-    if (aimActive && !touch.enabled && camDist < 120 && frameIdx % 2 === 0) {
+    const debugPickHeld = performance.now() < debugPickHoldUntil;
+    if (!debugPickHeld && aimActive && !touch.enabled && camDist < 120 && frameIdx % 2 === 0) {
       const dirx = tx - cwx, diry = ty - cwy, dirz = tz - cwz;
       const dl = Math.hypot(dirx, diry, dirz) || 1;
       updatePicks(dirx / dl, diry / dl, dirz / dl);
     }
-    if (!aimActive || camDist >= 120) { lastPick = null; treePick = null; }
+    if (!debugPickHeld && (!aimActive || camDist >= 120)) { lastPick = null; treePick = null; }
     // touch: a tap mines at the tapped ray, a long-press builds there
     if (!worldBlocked() && touch.enabled && camDist < 120 && (tf.mines.length > 0 || tf.places.length > 0)) {
       for (const m of tf.mines) {
@@ -5725,12 +5979,16 @@ async function boot(): Promise<void> {
         tryMine();
       }
       for (const b of tf.places) {
-        rayV.set((b.x / window.innerWidth) * 2 - 1, -(b.y / window.innerHeight) * 2 + 1, 0.5).unproject(camera).normalize();
-        updatePicks(rayV.x, rayV.y, rayV.z);
+        if (performance.now() >= debugPickHoldUntil) {
+          rayV.set((b.x / window.innerWidth) * 2 - 1, -(b.y / window.innerHeight) * 2 + 1, 0.5).unproject(camera).normalize();
+          updatePicks(rayV.x, rayV.y, rayV.z);
+        }
         tryPlace('touch');
       }
-      lastPick = null;
-      treePick = null;
+      if (performance.now() >= debugPickHoldUntil) {
+        lastPick = null;
+        treePick = null;
+      }
     }
 
     const hlTree = treePick && (!lastPick || treePick.dist < lastPick.dist);

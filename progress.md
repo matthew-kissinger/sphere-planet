@@ -18,7 +18,8 @@ Current operating goal: Hearth and Horizon full crafting-survival cycle under th
   harness. The proof builds a real functional shelter, asserts enclosure and service
   readiness, asserts comfort-tier/readability diagnostics, moves a roof out so the room
   weakens, snaps it back so the room and renderer comfort signals recover, and still
-  records that relocation is debug-hook proven rather than a touch/gamepad player UI claim.
+  shares the C2/C3 relocation gate where deterministic target aiming uses a proof hook but
+  player-facing keyboard, touch, and synthetic-gamepad move/drop controls are exercised.
 - Closed the first C2/C3 building relocation and snap-grid contract slice under the
   DAG/subagent workflow. Inactive placed props can now relocate across the same terrain
   snap rules as placement while preserving id, item, state, yaw turn, and save shape;
@@ -35,9 +36,10 @@ Current operating goal: Hearth and Horizon full crafting-survival cycle under th
   shelter, relocates a roof out of the shelter ring so shelter quality drops, rejects
   occupied and player-tile relocation, snaps the roof back so shelter returns, checks
   `fromTile`/`toTile` command diagnostics and house-kit sockets, captures screenshots, and
-  records the deliberate input limitation: relocation is debug-hook proven across
-  desktop/laptop/tablet/phone/gamepad-sized profiles, while touch relocation UI and real
-  hardware gamepad support remain unclaimed.
+  now exercises the player-facing relocation path through keyboard `V`, the touch move/drop
+  button, and injected synthetic gamepad `LB+RT` across desktop/laptop/tablet/phone profiles.
+  The proof still does not claim real hardware gamepad validation, and target selection uses
+  a deterministic debug aim hook so the browser gate stays repeatable.
 - Closed the first B1 build-command boundary slice under the DAG/subagent workflow. The new
   `src/sim/buildCommands.ts` facade owns structured command results for selecting build
   props, rotating selected placement, rotating placed props, placing, using, and packing

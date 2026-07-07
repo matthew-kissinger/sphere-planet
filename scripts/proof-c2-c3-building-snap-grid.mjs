@@ -184,6 +184,7 @@ async function waitForWorld(page) {
       && !!world?.relocateStructure
       && !!world?.useStructure
       && !!world?.buildCommands
+      && !!world?.debugAimAtTile
       && Array.isArray(world?.structures?.().sockets?.houseKit);
   }, null, { timeout: 45000 });
   await page.waitForTimeout(350);
@@ -198,6 +199,215 @@ function assertCommand(record, expected, label) {
       throw new Error(`${label}: command ${key} mismatch ${JSON.stringify(record)} expected ${JSON.stringify(value)}`);
     }
   }
+}
+
+function controlSource(profile) {
+  if (profile.gamepad) return 'gamepad';
+  if (profile.touch) return 'touch';
+  return 'keyboard';
+}
+
+async function triggerRelocationControl(page, profile) {
+  if (profile.touch) {
+    await page.waitForSelector('#btn-move.show', { state: 'visible', timeout: 5000 });
+    await page.tap('#btn-move');
+  } else if (profile.gamepad) {
+    await page.evaluate(() => window.__world.injectGamepad({ relocate: true }, 3));
+  } else {
+    await page.keyboard.press('KeyV');
+  }
+  await page.waitForTimeout(220);
+}
+
+async function triggerRelocationDrop(page, profile, tile) {
+  await page.evaluate((targetTile) => window.__world.debugAimAtTile(targetTile), tile);
+  await page.waitForTimeout(80);
+  if (profile.touch) {
+    await page.waitForSelector('#btn-move.show', { state: 'visible', timeout: 5000 });
+    await page.tap('#btn-move');
+    await page.waitForTimeout(220);
+  } else if (profile.gamepad) {
+    await page.evaluate(() => window.__world.injectGamepad({ place: true, placePressed: true }, 3));
+    await page.waitForTimeout(220);
+  } else {
+    await page.keyboard.press('KeyV');
+    await page.waitForTimeout(220);
+  }
+}
+
+async function setupPlayerRelocationFixture(page) {
+  return page.evaluate(() => {
+    const world = window.__world;
+    world.giveItem('windowFrame', 4);
+    const existing = () => world.structures().items;
+    const occupiedTiles = () => new Set(existing().map((entry) => entry.tile));
+    const rawNeighborsOf = (tile, rings = 1) => {
+      const seen = new Set([tile]);
+      const queue = [{ tile, ring: 0 }];
+      for (let i = 0; i < queue.length; i += 1) {
+        const entry = queue[i];
+        if (entry.ring >= rings) continue;
+        const degree = world.geo.degreeOf(entry.tile);
+        for (let k = 0; k < degree; k += 1) {
+          const next = world.geo.neighbor(entry.tile, k);
+          if (seen.has(next)) continue;
+          seen.add(next);
+          queue.push({ tile: next, ring: entry.ring + 1 });
+        }
+      }
+      return [...seen];
+    };
+    const used = occupiedTiles();
+    used.add(world.player.tile);
+    const candidates = world.nearbyTiles(7)
+      .filter((tile) => tile !== world.player.tile && !used.has(tile))
+      .filter((tile) => rawNeighborsOf(tile, 1).every((near) => !used.has(near)));
+    if (candidates.length < 2) throw new Error('not enough isolated relocation candidates');
+    const sourceTile = candidates[0];
+    const targetTile = candidates.find((tile) => tile !== sourceTile && !rawNeighborsOf(sourceTile, 1).includes(tile));
+    if (targetTile === undefined) throw new Error('missing relocation target tile');
+    const beforeIds = new Set(existing().map((entry) => entry.id));
+    if (!world.placeStructure('windowFrame', sourceTile)) throw new Error(`failed to place relocation fixture at ${sourceTile}`);
+    const prop = existing().find((entry) => !beforeIds.has(entry.id));
+    if (!prop) throw new Error('missing placed relocation fixture');
+    const occupied = existing().find((entry) => entry.id !== prop.id);
+    if (!occupied) throw new Error('missing occupied blocker target');
+    const standTile = rawNeighborsOf(sourceTile, 1).find((tile) => tile !== sourceTile && !occupiedTiles().has(tile)) ?? sourceTile;
+    world.player.spawnAt(standTile);
+    world.debugAimAtTile(prop.tile);
+    return { prop, sourceTile, targetTile, occupiedTile: occupied.tile, standTile };
+  });
+}
+
+async function standNearStructure(page, id) {
+  return page.evaluate((structureId) => {
+    const world = window.__world;
+    const structures = world.structures().items;
+    const prop = structures.find((entry) => entry.id === structureId);
+    if (!prop) throw new Error(`structure ${structureId} missing for relocation stance`);
+    const occupied = new Set(structures.map((entry) => entry.tile));
+    const degree = world.geo.degreeOf(prop.tile);
+    let stand = prop.tile;
+    for (let edge = 0; edge < degree; edge += 1) {
+      const neighbor = world.geo.neighbor(prop.tile, edge);
+      if (!occupied.has(neighbor)) {
+        stand = neighbor;
+        break;
+      }
+    }
+    world.player.spawnAt(stand);
+    world.debugAimAtTile(prop.tile);
+    return { standTile: stand, prop };
+  }, id);
+}
+
+async function runPlayerRelocationControls(page, profile, name) {
+  const source = controlSource(profile);
+  const fixture = await setupPlayerRelocationFixture(page);
+  await page.waitForTimeout(220);
+
+  await triggerRelocationControl(page, profile);
+  const grabbed = await page.evaluate(() => ({
+    relocation: window.__world.structures().relocation,
+    command: window.__world.buildCommands().last,
+  }));
+  assertCommand(grabbed.command, {
+    source,
+    verb: 'relocate',
+    target: 'structure',
+    ok: true,
+    item: 'windowFrame',
+    id: fixture.prop.id,
+    action: 'windowFrame:relocate:grabbed',
+  }, `${name}: ${source} relocation grab`);
+  if (!grabbed.relocation.active || grabbed.relocation.cursor?.id !== fixture.prop.id) {
+    throw new Error(`${name}: relocation cursor not active after ${source} grab ${JSON.stringify(grabbed)}`);
+  }
+
+  await triggerRelocationDrop(page, profile, fixture.targetTile);
+  const movedOut = await page.evaluate((id) => {
+    const structures = window.__world.structures();
+    return {
+      structure: structures.items.find((entry) => entry.id === id),
+      relocation: structures.relocation,
+      command: window.__world.buildCommands().last,
+      text: JSON.parse(window.render_game_to_text()).structures.relocation,
+    };
+  }, fixture.prop.id);
+  assertCommand(movedOut.command, {
+    source,
+    verb: 'relocate',
+    target: 'structure',
+    ok: true,
+    item: 'windowFrame',
+    id: fixture.prop.id,
+    fromTile: fixture.sourceTile,
+    toTile: fixture.targetTile,
+  }, `${name}: ${source} relocation drop`);
+  if (movedOut.structure?.tile !== fixture.targetTile) throw new Error(`${name}: ${source} move did not reach target ${JSON.stringify(movedOut)}`);
+  if (movedOut.relocation.active || movedOut.text.active) throw new Error(`${name}: relocation cursor stayed active after successful drop ${JSON.stringify(movedOut)}`);
+
+  await standNearStructure(page, fixture.prop.id);
+  await triggerRelocationControl(page, profile);
+  await triggerRelocationDrop(page, profile, fixture.occupiedTile);
+  const blocked = await page.evaluate((id) => {
+    const structures = window.__world.structures();
+    return {
+      structure: structures.items.find((entry) => entry.id === id),
+      relocation: structures.relocation,
+      command: window.__world.buildCommands().last,
+    };
+  }, fixture.prop.id);
+  assertCommand(blocked.command, {
+    source,
+    verb: 'relocate',
+    target: 'structure',
+    ok: false,
+    item: 'windowFrame',
+    id: fixture.prop.id,
+    toTile: fixture.occupiedTile,
+    message: 'that hex already has a prop',
+  }, `${name}: ${source} occupied relocation block`);
+  if (!blocked.relocation.active || blocked.structure?.tile !== fixture.targetTile) {
+    throw new Error(`${name}: blocked ${source} move should keep cursor and current tile ${JSON.stringify(blocked)}`);
+  }
+
+  await triggerRelocationDrop(page, profile, fixture.sourceTile);
+  const movedBack = await page.evaluate((id) => {
+    const structures = window.__world.structures();
+    return {
+      structure: structures.items.find((entry) => entry.id === id),
+      relocation: structures.relocation,
+      command: window.__world.buildCommands().last,
+      text: JSON.parse(window.render_game_to_text()).structures,
+    };
+  }, fixture.prop.id);
+  assertCommand(movedBack.command, {
+    source,
+    verb: 'relocate',
+    target: 'structure',
+    ok: true,
+    item: 'windowFrame',
+    id: fixture.prop.id,
+    fromTile: fixture.targetTile,
+    toTile: fixture.sourceTile,
+  }, `${name}: ${source} relocation snap-back`);
+  if (movedBack.structure?.tile !== fixture.sourceTile || movedBack.relocation.active) {
+    throw new Error(`${name}: ${source} snap-back did not close cursor ${JSON.stringify(movedBack)}`);
+  }
+  if (!movedBack.text.commands?.last || movedBack.text.relocation.active) {
+    throw new Error(`${name}: render_game_to_text relocation diagnostics missing or stale ${JSON.stringify(movedBack.text)}`);
+  }
+
+  return {
+    source,
+    fixture,
+    grabbed: grabbed.command,
+    movedOut: movedOut.command,
+    blocked: blocked.command,
+    movedBack: movedBack.command,
+    finalTile: movedBack.structure.tile,
+  };
 }
 
 async function runSnapGridContract(page, name) {
@@ -409,13 +619,16 @@ async function runProfile(browser, url, profile) {
   try {
     await page.goto(url, { waitUntil: 'domcontentloaded' });
     const result = await runSnapGridContract(page, profile.name);
+    const playerRelocation = await runPlayerRelocationControls(page, profile, profile.name);
     if (consoleErrors.length || pageErrors.length) throw new Error(`${profile.name}: browser errors ${JSON.stringify({ consoleErrors, pageErrors })}`);
     return {
       ...result,
+      playerRelocation,
       url,
       viewport: profile.viewport,
       touch: !!profile.touch,
-      inputClaim: 'debug runtime hook; no touch relocation UI or hardware gamepad claim',
+      gamepad: !!profile.gamepad,
+      inputClaim: `${playerRelocation.source} player-facing relocation path; deterministic proof target uses debug aim only`,
       consoleErrors,
       pageErrors,
     };
@@ -432,11 +645,11 @@ async function main() {
   const desktopUrl = proofUrl(port, false);
   const touchUrl = proofUrl(port, true);
   const profiles = [
-    { name: 'desktop-debug', url: desktopUrl, viewport: { width: 1440, height: 900 } },
-    { name: 'laptop-debug', url: desktopUrl, viewport: { width: 1366, height: 720 } },
-    { name: 'tablet-touch-debug', url: touchUrl, viewport: { width: 820, height: 1180 }, touch: true },
-    { name: 'phone-touch-debug', url: touchUrl, viewport: { width: 390, height: 844 }, touch: true },
-    { name: 'desktop-gamepad-sized-debug', url: desktopUrl, viewport: { width: 1440, height: 900 } },
+    { name: 'desktop-keyboard-relocate', url: desktopUrl, viewport: { width: 1440, height: 900 } },
+    { name: 'laptop-keyboard-relocate', url: desktopUrl, viewport: { width: 1366, height: 720 } },
+    { name: 'tablet-touch-relocate', url: touchUrl, viewport: { width: 820, height: 1180 }, touch: true },
+    { name: 'phone-touch-relocate', url: touchUrl, viewport: { width: 390, height: 844 }, touch: true },
+    { name: 'desktop-synthetic-gamepad-relocate', url: desktopUrl, viewport: { width: 1440, height: 900 }, gamepad: true },
   ].filter((profile) => !profileFilter || profile.name.toLowerCase().includes(profileFilter));
   if (profiles.length === 0) throw new Error(`No proof profiles matched PROOF_PROFILE=${profileFilter}`);
 
@@ -455,7 +668,8 @@ async function main() {
       ok: true,
       generatedAt: new Date().toISOString(),
       claim: proofClaim,
-      inputClaim: 'relocation is proven through runtime/debug hooks across device-sized profiles; touch relocation UI and real hardware gamepad support remain unclaimed',
+      inputClaim: 'C2/C3 relocation is proven through player-facing keyboard, touch, and injected synthetic gamepad paths across desktop/laptop/tablet/phone profiles; deterministic target aiming uses debug proof hooks; real hardware gamepad validation remains unclaimed',
+      realHardwareGamepad: false,
       desktopUrl,
       touchUrl,
       profiles: results,

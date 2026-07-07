@@ -36,6 +36,7 @@ export interface GamepadFrame {
   eat: boolean;
   pin: boolean;
   clearPin: boolean;
+  relocate: boolean;
   menuUp: boolean;
   menuDown: boolean;
   menuLeft: boolean;
@@ -81,6 +82,7 @@ const EMPTY_FRAME: GamepadFrame = {
   eat: false,
   pin: false,
   clearPin: false,
+  relocate: false,
   menuUp: false,
   menuDown: false,
   menuLeft: false,
@@ -99,7 +101,7 @@ const EMPTY_FRAME: GamepadFrame = {
 
 const EDGE_FIELDS: (keyof Pick<GamepadFrame,
   'plane' | 'use' | 'pack' | 'craft' | 'chart' | 'journal' | 'eat' | 'pin' | 'clearPin' |
-  'menuUp' | 'menuDown' | 'menuLeft' | 'menuRight' | 'confirm' | 'cancel' |
+  'relocate' | 'menuUp' | 'menuDown' | 'menuLeft' | 'menuRight' | 'confirm' | 'cancel' |
   'mute' | 'help' | 'diag' | 'minePressed' | 'placePressed' | 'slotDelta'
 >)[] = [
   'plane',
@@ -111,6 +113,7 @@ const EDGE_FIELDS: (keyof Pick<GamepadFrame,
   'eat',
   'pin',
   'clearPin',
+  'relocate',
   'menuUp',
   'menuDown',
   'menuLeft',
@@ -215,6 +218,7 @@ export function gamepadFrameFromState(gamepad: GamepadLike | null, previous: rea
     eat: edge(Btn.DpadUp) && !lb,
     pin: edge(Btn.DpadRight) && lb,
     clearPin: edge(Btn.DpadLeft) && lb,
+    relocate: edge(Btn.RT) && lb,
     menuUp: edge(Btn.DpadUp),
     menuDown: edge(Btn.DpadDown),
     menuLeft: edge(Btn.DpadLeft),
@@ -226,8 +230,8 @@ export function gamepadFrameFromState(gamepad: GamepadLike | null, previous: rea
     diag: edge(Btn.R3) && lb,
     mine: down(Btn.X),
     minePressed: edge(Btn.X),
-    place: rt,
-    placePressed: edge(Btn.RT),
+    place: rt && !lb,
+    placePressed: edge(Btn.RT) && !lb,
     slotDelta: lb ? 0 : (edge(Btn.DpadRight) ? 1 : 0) + (edge(Btn.DpadLeft) ? -1 : 0),
   };
 }
@@ -252,6 +256,7 @@ function mergeFrames(a: GamepadFrame, b: GamepadFrame): GamepadFrame {
     eat: a.eat || b.eat,
     pin: a.pin || b.pin,
     clearPin: a.clearPin || b.clearPin,
+    relocate: a.relocate || b.relocate,
     menuUp: a.menuUp || b.menuUp,
     menuDown: a.menuDown || b.menuDown,
     menuLeft: a.menuLeft || b.menuLeft,

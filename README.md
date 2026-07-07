@@ -51,6 +51,7 @@ muted).
 | **Z / X** | rotate the selected crafted prop before placing it, or rotate a nearby placed prop by one hex face |
 | **R** | use a nearby placed prop: open chest storage, tend/harvest/fertilize/irrigate crop plots, turn scraps into compost at compost bins, catch rain at rain cisterns, cache or pull provisions at root cellars, cook at lit campfires, set/check/collect fish traps, set/check/comb shore nets, preserve food at drying racks, read weather vanes, light campfires/lanterns, set bedroll home/rest, cast from dock segments, or attune waystones; with no nearby prop, discover pentagon landmarks, gather active Skyfall craters, listen to active World Murmurs, read completed season afterglows, cast from shore with a fishing rod, or forage the current terrain |
 | **Shift+R** | pack a nearby empty/inactive placed prop back into inventory; stocked, lit, planted, home, attuned, anchored, or set trap props must be cleared first |
+| **V** / **Shift+E** | grab a nearby inactive placed prop into the relocation cursor, rotate it with `Z/X`, then drop it on a valid snap hex |
 | **M** | open the Route Slate: Hearth Beacon home signal, active Skyfall events, active World Murmurs, completed season afterglows, nearby cave/ecology pins, and after the first pentagon awakens, Horizon Chart target distance, turn direction, and expedition prep |
 | **P** / **Shift+P** | pin the current Route Slate candidates as a saved route itinerary, or append a new distinct stop / clear the itinerary; while the Route Slate is open, Arrow Right moves the active stop later and Arrow Left drops the active stop |
 | **J** | open the Hearth Journal: home state, route prep, discoveries, cave/food/ecology notes, and current next goals |
@@ -67,7 +68,7 @@ muted).
 (push past the rim to sprint — in the plane it works the throttle), dragging anywhere else
 looks, **tap to mine or chop**, **hold ~0.4 s to build** (keep holding and drag to paint),
 pinch to zoom from first person to orbit, and round buttons handle jump/climb, descend,
-nearby prop use, crafting/Pack Ledger, Route Slate open plus panel buttons for pin/later/drop/clear, and boarding / stowing the plane. With `?creative=1`, the plane
+nearby prop use, nearby prop move/drop, crafting/Pack Ledger, Route Slate open plus panel buttons for pin/later/drop/clear, and boarding / stowing the plane. With `?creative=1`, the plane
 button toggles walk/free-flight so mobile has the same Creative shortcut as desktop `F`.
 Long-press the touch `use` button to pack a nearby safe prop, matching `Shift+R` on keyboard.
 
@@ -75,7 +76,7 @@ Long-press the touch `use` button to pack a nearby safe prop, matching `Shift+R`
 input: left stick moves, right stick looks, full stick/RB sprints, LB+right stick zooms,
 `A` jumps/swims up, `LT` descends, `X` mines/chops, `RT` builds, D-pad left/right cycles the
 hotbar, `B` uses or closes the open panel, `LB+B` packs a safe prop, `Y` toggles crafting,
-Back opens the Route Slate, D-pad left/right inside the slate drops or moves the active itinerary stop later, `LB+D-pad` rotates selected build pieces before placement or pins/clears routes, and Start boards/stows the
+`LB+RT` grabs or drops a movable prop, Back opens the Route Slate, D-pad left/right inside the slate drops or moves the active itinerary stop later, `LB+D-pad` rotates selected build pieces or the active move cursor before placement, and Start boards/stows the
 plane. `LB+Back` toggles mute. While crafting or chest storage is open, D-pad moves the focused row/action, `A`
 confirms craft/place/transfer, and `B` closes the focused panel without leaking jump, use,
 hotbar, mine, or build input into the world.
@@ -113,9 +114,11 @@ Hatchet, a Stone Blade, a Reed Bow with whistling arrows, and a visible plane-fr
 can be selected with their `set` button and placed on the spherical hex world; placed
 workbenches count as crafting stations even after they leave inventory. Build placement now
 has an explicit facing contract: `Z/X` rotate the selected prop or nearby placed prop one
-hex face at a time, gamepad `LB+D-pad` rotates selected build pieces, and the C1 browser
-proof verifies rotated placement, safe pack-back, and lit-prop pack refusal across desktop,
-laptop, tablet, phone, and gamepad profiles. Stone axe, pick,
+hex face at a time, gamepad `LB+D-pad` rotates selected build pieces, and inactive placed
+props can now be moved through the relocation cursor with `V`/`Shift+E`, the touch move
+button, or gamepad `LB+RT`. The C1 and C2/C3 browser proofs verify rotated placement, safe
+pack-back, lit-prop pack refusal, snap-grid relocation blockers, and state-preserving
+snap-back across desktop, laptop, tablet, phone, and synthetic gamepad profiles. Stone axe, pick,
 shovel, and hatchet now matter in play: matching tools reach a little farther, repeat
 faster while held, and track saved wear. The Stone Hatchet is a short-reach, quick,
 fragile one-handed chopping and brambleback-warding sidearm that sits below the full stone

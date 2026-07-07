@@ -59,6 +59,13 @@ describe('gamepad controls', () => {
     expect(pack.use).toBe(false);
   });
 
+  it('uses LB plus RT as a relocation edge instead of normal placement', () => {
+    const relocate = gamepadFrameFromState(pad([0, 0, 0, 0], [4], { 7: 1 }), [], 1 / 60);
+    expect(relocate.relocate).toBe(true);
+    expect(relocate.place).toBe(false);
+    expect(relocate.placePressed).toBe(false);
+  });
+
   it('emits menu focus edges for panel-owned gamepad navigation', () => {
     const first = gamepadFrameFromState(pad([0, 0, 0, 0], [0, 1, 12, 15]), [], 1 / 60);
     expect(first.confirm).toBe(true);
