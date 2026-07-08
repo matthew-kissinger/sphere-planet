@@ -3,6 +3,17 @@ Current operating goal: Hearth and Horizon full crafting-survival cycle under th
 
 ## 2026-07-08
 
+- Night closeout is now documented as a cycle-completion handoff instead of a new feature
+  expansion. Two parallel read-only lanes converged on the same K9 conclusion: fish bodies,
+  live route reachability, near-only school flow, and provenance are proven, but the next
+  honest runtime slice is player-facing fishing cues and readback, not more beauty claims or
+  new asset generation. The next K9.2 implementation should add a compact `R cast` cue from
+  the existing `currentFishSchool()` result, expose it through HUD/readback and
+  `__world`/`render_game_to_text`, and add a focused `proof:k9-fishing-cues` lane that uses
+  real input and HUD toast/text evidence. Existing live-route screenshots remain
+  state/provenance proof, not final art-review shots. C6, G5/K6R, and H5 stay active with
+  their current remaining gates; the goal is not complete, but tonight's in-flight insight
+  work is closed and ready for compaction.
 - Closed the night with a first G0/G5 native-life reaction-readability slice on top of the
   sparse K6R roaming actors. `NativeLifeRenderer` now maps existing transient states into
   explicit pose roles (`curious-focus`, `flee-retreat`, `telegraph-windup`,
