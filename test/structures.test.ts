@@ -1465,6 +1465,28 @@ describe('Hearth and Horizon structures', () => {
         label: 'lived-in shelter room',
       },
     });
+    expect(shelter.enclosure.boundaryEdges).toEqual([
+      '100:edge:0',
+      '100:edge:1',
+      '100:edge:2',
+      '100:edge:3',
+      '100:edge:4',
+      '100:edge:5',
+    ]);
+    expect(shelter.enclosure.coveredBoundaryEdges).toEqual([
+      '100:edge:2',
+      '100:edge:3',
+      '100:edge:4',
+    ]);
+    expect(shelter.enclosure.wallBoundaryEdges).toEqual([
+      '100:edge:2',
+      '100:edge:3',
+      '100:edge:4',
+    ]);
+    expect(shelter.enclosure.doorBoundaryEdges).toEqual(['100:edge:2']);
+    expect(shelter.enclosure.windowBoundaryEdges).toEqual(['100:edge:3']);
+    expect(shelter.enclosure.boundaryEdgeCount).toBe(6);
+    expect(shelter.enclosure.perimeterCoverage).toBe(0.5);
     expect(shelter.missing).toEqual([]);
     expect(homeScore(structures, hubTopology)).toMatchObject({ functional: true, label: 'shelter alive' });
   });

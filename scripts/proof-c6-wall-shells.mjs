@@ -161,7 +161,7 @@ function pngPixelProbe(buffer) {
 }
 
 async function assertSnapPreview(page, item, expected) {
-  await page.evaluate((targetItem) => {
+  const target = await page.evaluate((targetItem) => {
     const world = window.__world;
     world.giveItem(targetItem, 1);
     world.selectStructure(targetItem);
@@ -169,18 +169,27 @@ async function assertSnapPreview(page, item, expected) {
     const target = world.nearbyTiles(2).find((tile) => tile !== world.player.tile && !occupied.has(tile));
     if (target === undefined) throw new Error(`no snap target for ${targetItem}`);
     world.debugAimAtTile(target);
+    return target;
   }, item);
   await page.waitForFunction((args) => {
     const stats = window.__world?.structures?.().renderer?.snapPreview;
     return stats?.active === true
+      && stats.ok === true
+      && stats.blocker === null
+      && stats.mode === 'place'
       && stats.item === args.item
+      && stats.tile === args.target
       && stats.socketRole === args.socketRole
       && stats.socketCollider === args.socketCollider
       && stats.silhouette === args.silhouette
       && args.meshNames.every((name) => stats.meshNames.includes(name))
       && args.roles.every((role) => stats.visibleReadabilityRoles.includes(role));
-  }, { item, ...expected }, { timeout: 10000 });
-  return page.evaluate(() => window.__world.structures().renderer.snapPreview);
+  }, { item, target, ...expected }, { timeout: 10000 });
+  const preview = await page.evaluate(() => window.__world.structures().renderer.snapPreview);
+  if (!preview?.ok || preview.blocker !== null || preview.mode !== 'place' || preview.tile !== target) {
+    throw new Error(`snap preview was not a valid placement: ${JSON.stringify({ item, target, preview })}`);
+  }
+  return preview;
 }
 
 async function main() {
@@ -524,32 +533,47 @@ async function main() {
     if (!collisions.wallWalk?.blocked || collisions.wallWalk?.collision?.last?.item !== 'wallPanel') {
       throw new Error(`real player walk did not hit wall-shell blocker: ${JSON.stringify(collisions.wallWalk)}`);
     }
+    if (collisions.wallWalk?.crossed || collisions.wallWalk?.endTile !== setup.stacked.tile) {
+      throw new Error(`wall blocker did not keep player on the source tile: ${JSON.stringify(collisions.wallWalk)}`);
+    }
     if (collisions.doorWalk?.blocked) {
       throw new Error(`real player walk was structure-blocked by door edge: ${JSON.stringify(collisions.doorWalk)}`);
+    }
+    if (!collisions.doorWalk?.crossed || collisions.doorWalk?.endTile !== collisions.targets.door) {
+      throw new Error(`real player walk did not cross the passable door edge: ${JSON.stringify(collisions.doorWalk)}`);
     }
 
     const cornerBefore = await page.evaluate((cornerId) => {
       const world = window.__world;
       const corner = world.structures().items.find((entry) => entry.id === cornerId);
       if (!corner) return { ok: false, reason: 'corner missing' };
-      const targets = {
-        edge0: world.geo.neighbor(corner.tile, 0),
-        edge1: world.geo.neighbor(corner.tile, 1),
-        edge2: world.geo.neighbor(corner.tile, 2),
-      };
+      const ownedEdges = (corner.socket?.occupancyKeys ?? [])
+        .map((key) => /:edge:(\d+)$/.exec(key)?.[1])
+        .filter((edge) => edge !== undefined)
+        .map((edge) => Number(edge));
+      const openEdge = Array.from({ length: world.geo.degreeOf(corner.tile) }, (_, edge) => edge)
+        .find((edge) => !ownedEdges.includes(edge));
+      const owned = ownedEdges.map((edge) => {
+        const target = world.geo.neighbor(corner.tile, edge);
+        return { edge, target, collision: world.structureCollision(corner.tile, target) };
+      });
+      const openTarget = openEdge === undefined ? -1 : world.geo.neighbor(corner.tile, openEdge);
       return {
         ok: true,
         corner,
-        targets,
-        edge0: world.structureCollision(corner.tile, targets.edge0),
-        edge1: world.structureCollision(corner.tile, targets.edge1),
-        edge2: world.structureCollision(corner.tile, targets.edge2),
+        ownedEdges,
+        owned,
+        open: {
+          edge: openEdge,
+          target: openTarget,
+          collision: openEdge === undefined ? null : world.structureCollision(corner.tile, openTarget),
+        },
       };
     }, setup.placed.find((entry) => entry.item === 'wallCorner')?.id);
-    if (!cornerBefore.ok || cornerBefore.edge0?.blocker?.item !== 'wallCorner' || cornerBefore.edge1?.blocker?.item !== 'wallCorner') {
+    if (!cornerBefore.ok || cornerBefore.owned?.length !== 2 || cornerBefore.owned.some((entry) => entry.collision?.blocker?.item !== 'wallCorner')) {
       throw new Error(`corner did not block both owned edges before relocation: ${JSON.stringify(cornerBefore)}`);
     }
-    if (cornerBefore.edge2?.blocker) {
+    if (cornerBefore.open?.collision?.blocker) {
       throw new Error(`corner blocked an unowned edge before relocation: ${JSON.stringify(cornerBefore)}`);
     }
 
@@ -571,7 +595,12 @@ async function main() {
         text: JSON.parse(window.render_game_to_text()),
       };
     }, setup.bedroll.id);
-    if (!readyRest.used || !readyRest.structures.lastAction.includes('shelter rest')) {
+    const restCommand = readyRest.structures.commands?.last ?? null;
+    if (
+      !readyRest.used
+      || restCommand?.action?.includes('shelter rest') !== true
+      || restCommand?.message?.includes('shelter rest') !== true
+    ) {
       throw new Error(`functional wall shell bedroll did not rest as a shelter: ${JSON.stringify(readyRest)}`);
     }
     if (!readyRest.after.lastAction.includes('shelter sleep')) {
@@ -603,11 +632,14 @@ async function main() {
     const cornerAfter = await page.evaluate((corner) => {
       const world = window.__world;
       return {
-        oldEdge0: world.structureCollision(corner.corner.tile, corner.targets.edge0),
-        oldEdge1: world.structureCollision(corner.corner.tile, corner.targets.edge1),
+        oldOwned: corner.owned.map((entry) => ({
+          edge: entry.edge,
+          target: entry.target,
+          collision: world.structureCollision(corner.corner.tile, entry.target),
+        })),
       };
     }, cornerBefore);
-    if (cornerAfter.oldEdge0?.blocker || cornerAfter.oldEdge1?.blocker) {
+    if (cornerAfter.oldOwned.some((entry) => entry.collision?.blocker)) {
       throw new Error(`corner relocation left stale collision on old edges: ${JSON.stringify({ cornerBefore, cornerAfter, weakened })}`);
     }
 
@@ -670,11 +702,11 @@ async function main() {
         window: collisions.window.blocker?.item,
         doorBlocked: !!collisions.door.blocker,
         playerBlocked: collisions.wallWalk.blocked,
-        cornerEdges: [
-          cornerBefore.edge0.blocker?.item,
-          cornerBefore.edge1.blocker?.item,
-        ],
-        cornerCleared: !cornerAfter.oldEdge0.blocker && !cornerAfter.oldEdge1.blocker,
+        cornerEdges: cornerBefore.owned.map((entry) => ({
+          edge: entry.edge,
+          blocker: entry.collision?.blocker?.item ?? null,
+        })),
+        cornerCleared: cornerAfter.oldOwned.every((entry) => !entry.collision?.blocker),
       },
     }, null, 2));
   } finally {
