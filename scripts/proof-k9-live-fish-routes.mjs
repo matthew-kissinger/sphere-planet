@@ -28,6 +28,10 @@ const fishScenarios = [
   { slug: 'fish-reed-fry', labelIncludes: 'reed', setup: 'live-current-fish-school' },
 ];
 
+function clamp(n, min, max) {
+  return Math.max(min, Math.min(max, n));
+}
+
 async function getFreePort() {
   if (requestedPort > 0) return requestedPort;
   return new Promise((resolve, reject) => {
@@ -149,7 +153,7 @@ async function main() {
       if (setup.mappedSlug !== scenario.slug) throw new Error(`${scenario.slug}: live school mapped to ${setup.mappedSlug}`);
       await page.waitForTimeout(250);
       await page.evaluate((tile) => {
-        window.__world.setZoom?.(0.32);
+        window.__world.setZoom?.(0.48);
         window.__world.debugAimAtTile?.(tile);
       }, setup.visualTile ?? setup.site?.tile ?? setup.tile);
       await page.waitForFunction(({ slug, labelIncludes }) => {
@@ -167,6 +171,11 @@ async function main() {
           && (row?.visibleAnchors ?? 0) > 0
           && (renderer?.glbAnchorsVisible ?? 0) > 0
           && (renderer?.pointSchoolSprites ?? 0) > 0
+          && (renderer?.nearBoidSprites ?? 0) > 0
+          && (renderer?.swimPathVisible ?? 0) === 1
+          && (renderer?.swimPathBeads ?? 0) > 0
+          && renderer?.motionBand === 'nearBoids'
+          && renderer?.motionPolicy === 'two-glb-anchors-plus-near-only-analytic-boids-freeze-far'
           && (renderer?.kilnFishSkinsPending ?? 0) === 0
           && (renderer?.kilnFishSkinFallbacks ?? 0) === 0;
       }, scenario, { timeout: 70000 });
@@ -178,6 +187,27 @@ async function main() {
       }));
       const screenshot = path.join(outDir, `${scenario.slug}.png`);
       await page.screenshot({ path: screenshot, fullPage: false });
+      const screenPoint = await page.evaluate(() => {
+        const site = window.__world.fishVisuals()?.site;
+        return site ? window.__world.screenPointForTile?.(site.tile) ?? null : null;
+      });
+      const focusScreenshot = path.join(outDir, `${scenario.slug}-focus.png`);
+      const viewport = page.viewportSize() ?? { width: 1280, height: 820 };
+      if (screenPoint?.visible && Number.isFinite(screenPoint.x) && Number.isFinite(screenPoint.y)) {
+        const width = Math.min(420, viewport.width);
+        const height = Math.min(300, viewport.height);
+        await page.screenshot({
+          path: focusScreenshot,
+          clip: {
+            x: clamp(screenPoint.x - width / 2, 0, Math.max(0, viewport.width - width)),
+            y: clamp(screenPoint.y - height / 2, 0, Math.max(0, viewport.height - height)),
+            width,
+            height,
+          },
+        });
+      } else {
+        await page.screenshot({ path: focusScreenshot, fullPage: false });
+      }
       const row = proof.fishVisuals.renderer.kilnFishSkinsBySlug[scenario.slug];
       const scenarioRequests = kilnRequests.filter((url) => url.includes(`${scenario.slug}.glb`));
       if (scenarioRequests.length < 1) throw new Error(`${scenario.slug}: no committed model request recorded`);
@@ -194,6 +224,13 @@ async function main() {
           slug: proof.fishVisuals.renderer.slug,
           anchors: proof.fishVisuals.renderer.glbAnchorsVisible,
           points: proof.fishVisuals.renderer.pointSchoolSprites,
+          nearBoids: proof.fishVisuals.renderer.nearBoidSprites,
+          swimPathVisible: proof.fishVisuals.renderer.swimPathVisible,
+          swimPathBeads: proof.fishVisuals.renderer.swimPathBeads,
+          motionBand: proof.fishVisuals.renderer.motionBand,
+          motionPolicy: proof.fishVisuals.renderer.motionPolicy,
+          swimPathLength: proof.fishVisuals.renderer.swimPathLength,
+          schoolSpread: proof.fishVisuals.renderer.schoolSpread,
           loaded: row?.loaded ?? 0,
           clips: row?.clips ?? [],
           activeMixers: row?.activeMixers ?? 0,
@@ -201,6 +238,8 @@ async function main() {
           fallback: row?.fallback ?? 0,
         },
         screenshot,
+        focusScreenshot,
+        screenPoint,
         requests: scenarioRequests,
       });
     }
@@ -228,8 +267,11 @@ async function main() {
       slugs: results.map((result) => result.slug),
       setups: Object.fromEntries(results.map((result) => [result.slug, result.setup.setup])),
       screenshots: results.map((result) => result.screenshot),
+      focusScreenshots: results.map((result) => result.focusScreenshot),
       anchors: Object.fromEntries(results.map((result) => [result.slug, result.renderer.anchors])),
       points: Object.fromEntries(results.map((result) => [result.slug, result.renderer.points])),
+      nearBoids: Object.fromEntries(results.map((result) => [result.slug, result.renderer.nearBoids])),
+      swimPathBeads: Object.fromEntries(results.map((result) => [result.slug, result.renderer.swimPathBeads])),
     }, null, 2));
   } finally {
     if (browser) await browser.close();

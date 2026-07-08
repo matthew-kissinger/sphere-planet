@@ -147,8 +147,15 @@ describe('fish school renderer', () => {
       glbAnchorsVisible: 2,
       fallbackVisible: 0,
       activeMixers: 2,
+      motionPolicy: 'two-glb-anchors-plus-near-only-analytic-boids-freeze-far',
+      motionBand: 'nearBoids',
     });
     expect(near.pointSchoolSprites).toBeGreaterThanOrEqual(20);
+    expect(near.nearBoidSprites).toBe(near.pointSchoolSprites);
+    expect(near.swimPathVisible).toBe(1);
+    expect(near.swimPathBeads).toBeGreaterThanOrEqual(12);
+    expect(near.swimPathLength).toBeGreaterThan(0.75);
+    expect(near.schoolSpread).toBeGreaterThan(0.25);
     expect(near.kilnFishSkinsBySlug['fish-storm-runner']).toMatchObject({
       loaded: 1,
       activeMixers: 2,
@@ -167,11 +174,20 @@ describe('fish school renderer', () => {
     const low = renderer.stats();
     expect(low.activeMixers).toBe(0);
     expect(low.lowRateMixers).toBe(2);
+    expect(low.motionBand).toBe('frozenCloud');
+    expect(low.nearBoidSprites).toBe(0);
+    expect(low.swimPathVisible).toBe(0);
+    expect(low.swimPathBeads).toBe(0);
+    expect(low.pointSchoolSprites).toBeGreaterThan(0);
 
     renderer.update(site, geo, layers, columns, { x: cam.x + 360, y: cam.y, z: cam.z }, 3);
     const hidden = renderer.stats();
     expect(hidden.active).toBe(0);
     expect(hidden.glbAnchorsVisible).toBe(0);
     expect(hidden.pointSchoolSprites).toBe(0);
+    expect(hidden.nearBoidSprites).toBe(0);
+    expect(hidden.swimPathVisible).toBe(0);
+    expect(hidden.swimPathBeads).toBe(0);
+    expect(hidden.motionBand).toBe('hidden');
   });
 });

@@ -3,6 +3,17 @@ Current operating goal: Hearth and Horizon full crafting-survival cycle under th
 
 ## 2026-07-08
 
+- K9.1 aquatic readability now has a first near-only swim-path pass. `FishSchoolRenderer`
+  keeps the approved two-GLB-anchor cap and point-school budget, but active-distance schools
+  now use deterministic analytic school flow, waterline swim-path bead points, near-boid
+  diagnostics, and frozen far-cloud behavior outside the active mixer band. The K9 proof
+  scripts now require `nearBoidSprites`, `swimPathBeads`, `motionBand: nearBoids`, and the
+  explicit `two-glb-anchors-plus-near-only-analytic-boids-freeze-far` policy for all five
+  accepted aquatic GLBs. `npm run proof:k9-fish-visuals` and `npm run
+  proof:k9-live-fish-routes` pass with focus screenshots and committed model requests; the
+  visual/provenance focus crops are proof-grade for waterline streaks, while live-route
+  screenshots remain state/provenance evidence rather than beauty-grade fish shots. Remaining
+  K9 work is player-facing fishing cues, richer fishing verbs, and cleaner beauty framing.
 - C6 now has its first connected foundation-backed outer-perimeter proof. `shelterReport`
   keeps the legacy home-spoke single-room path unless at least two connected
   `floorFoundation` tiles extend the home footprint, then derives boundary edges from the
@@ -38,8 +49,8 @@ Current operating goal: Hearth and Horizon full crafting-survival cycle under th
   now covers tree, creature, resource, landmark, skyfall, aquatic GLB visual/provenance,
   and asset-viewer orientation contracts, and the remaining GLB debt is specific: exact
   seed/drop art instead of the `node-root-pod` alias, shrine/crater semantic yaw review,
-  mesh/triangle warning decisions, aquatic readability/boids, broader blind gameplay
-  screenshot review, shared-scale house-shell skins, avatar/equipment authored assets,
+  mesh/triangle warning decisions, aquatic fishing cues/beauty framing, broader blind
+  gameplay screenshot review, shared-scale house-shell skins, avatar/equipment authored assets,
   future ore/resource nodes, and deeper native-life/combat behavior.
 - Closed the C6 functional serviced wall-shell room proof. `npm run proof:c6-wall-shells`
   now builds a bedroll-centered code-owned wall-shell room that reports protected shelter,

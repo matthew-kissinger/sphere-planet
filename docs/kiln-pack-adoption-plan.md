@@ -224,19 +224,23 @@ The asset-pack adoption track is done when:
   a longest-axis-forward policy, requires `idle` plus `swim` or `pulse`, and exposes fit,
   clip, and distance-band diagnostics. `FishSchoolRenderer` keeps the fishing sim
   authoritative, maps current shore/dock/run/storm/cave schools to accepted singleton
-  bodies, renders up to two animated GLB anchors, and uses point sprites for the remaining
-  school members. Fish ecology now reads tide/water landmark influence through a wider
+  bodies, renders up to two animated GLB anchors, uses point sprites for the remaining
+  school members, and now adds active-distance analytic school flow plus waterline
+  swim-path bead points while freezing richer motion outside the active mixer band. Fish
+  ecology now reads tide/water landmark influence through a wider
   fish-only domain radius, so Salt Mirror and Reed Crown can pull real waterline runs
   without widening the weather/survival domain. `npm run proof:k9-fish-visuals` proves all
   five accepted aquatic
   bodies (`fish-shore-minnow`, `fish-storm-runner`, `fish-cave-shimmer`,
   `creature-driftjelly`, and `fish-reed-fry`) load from committed `assets/kiln/models/`
-  using existing `fishSchoolAt` contexts, record per-scenario text and screenshots, show two
-  visible GLB anchors plus point-school sprites, reject `generated/` model requests, and
-  keep fallback, console errors, and page errors at zero. `npm run proof:k9-live-fish-routes`
+  using existing `fishSchoolAt` contexts, record per-scenario text, wide screenshots, and
+  focus screenshots, show two visible GLB anchors plus point-school sprites, require
+  near-boid sprites and 14 swim-path beads per slug, reject `generated/` model requests,
+  and keep fallback, console errors, and page errors at zero. `npm run proof:k9-live-fish-routes`
   then proves the same five slugs through live `currentFishSchool()` and
   `currentFishVisualSite()` state: baited shore, storm front, real sea cave, salt-tide run,
-  and reed-water run.
+  and reed-water run. The K9.1 screenshots are proof-grade for waterline streaks; richer
+  player-facing fishing cues and beauty-grade framing remain.
 - K11 sky life is runtime-wired for `bird-sky-kite`, `bird-shore-gull`,
   `bird-forest-flutter`, and `bird-storm-finch`. `KilnRuntimeAssets` preserves authored
   Y-up, normalizes each singleton body into a sky-life socket, requires `idle` plus
@@ -495,9 +499,10 @@ decisions, and the avatar/equipment authored-asset path.
 1. Run a blind gameplay-context screenshot review of the current spawn, shoreline, forest,
    creature, shrine, and build-site scenes so each visible GLB reads as its intended noun and
    verb without the asset viewer labels.
-2. Improve aquatic readability now that live reachability is proven: tune screenshot
-   framing, near-only boids/swim paths, and player-facing fishing cues so fish schools read
-   as living waterline activity instead of tiny proof markers.
+2. Improve aquatic player-facing fishing cues now that live reachability and a first
+   near-only swim-path proof are in: make casts/traps/nets point players toward visible
+   schools, then capture cleaner beauty-grade fishing shots beyond the current proof-grade
+   waterline streaks.
 3. Replace the temporary `node-root-pod` seed pickup alias with an exact seed/drop GLB or a
    clearer approved alias before native-life seed rewards become player-facing.
 4. Add the K7 semantic orientation pass: shrine upright/facing math already uses authored
@@ -516,9 +521,12 @@ decisions, and the avatar/equipment authored-asset path.
    decorative wall/foundation/roof skins over the code-owned sockets.
 7. Start the avatar/equipment authored-asset pack after socket decisions: final Wayfarer body,
    hatchet, pickaxe, fishing rod, sword, bow, arrows, chart/map, pack frame, and storm cloak.
-8. Deepen G5/K6R native-life behavior on top of the current sparse roaming actors: social
-   movement, flee/return, telegraphs, combat/ward loops, anti-farming cooldowns, and richer
-   HUD pressure-source feedback.
+8. Deepen G5/K6R native-life behavior on top of the current sparse roaming actors with a
+   state-aware reaction pass before a saved FSM rewrite: make `curious`, `flee`,
+   `telegraph`, `lunge`, and `recover` visibly affect creature pose/overlays while keeping
+   current-tile picking, distance-gated mixers, and save-light deterministic home sites.
+   Then wire alert sources such as mining noise, fishing splash, and failed wards into the
+   same diagnostics before expanding combat/ward loops and anti-farming cooldowns.
 9. Define future ore/resource taxonomy before generating new node GLBs, then add instanced
    collection proof and recipe/route reasons for each new material.
 10. Close remaining release-device gaps for this cycle: landscape tablet/phone, real hardware

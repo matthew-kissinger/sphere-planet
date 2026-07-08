@@ -3507,21 +3507,29 @@ async function boot(): Promise<void> {
   ];
 
   const debugFishVisualTile = () => {
-    const candidates = tilesAroundTile(player.tile, 8);
-    const visualTile = candidates.find((tile) => columns.heightOf(tile) <= SEA_LEVEL_HEIGHT + 0.9)
-      ?? nearestFishingWaterTile(player.tile, 8)
-      ?? player.tile;
+    let visualTile = nearestFishingWaterTile(player.tile, 8) ?? player.tile;
     let standTile = visualTile;
     let standScore = Infinity;
-    for (let edge = 0; edge < geo.degreeOf(visualTile); edge += 1) {
-      const neighbor = geo.neighbor(visualTile, edge);
-      const height = columns.heightOf(neighbor);
-      const waterPenalty = height <= SEA_LEVEL_HEIGHT + 0.35 ? 10 : 0;
-      const treePenalty = trees.hasTree(neighbor) ? 2 : 0;
-      const score = Math.abs(height - SEA_LEVEL_HEIGHT) + waterPenalty + treePenalty;
-      if (score < standScore) {
-        standScore = score;
-        standTile = neighbor;
+    let bestScore = Infinity;
+    for (const entry of tileEntriesAroundTile(player.tile, 8)) {
+      const candidate = Math.max(0, Math.min(geo.count - 1, Math.trunc(entry.tile)));
+      const waterHeight = columns.heightOf(candidate);
+      if (waterHeight > SEA_LEVEL_HEIGHT + 0.9) continue;
+      for (let edge = 0; edge < geo.degreeOf(candidate); edge += 1) {
+        const neighbor = geo.neighbor(candidate, edge);
+        const height = columns.heightOf(neighbor);
+        if (height <= SEA_LEVEL_HEIGHT + 0.45) continue;
+        const shoreHeight = Math.abs(height - (SEA_LEVEL_HEIGHT + 0.9));
+        const waterDepth = Math.abs(waterHeight - SEA_LEVEL_HEIGHT);
+        const treePenalty = trees.hasTree(neighbor) ? 2.5 : 0;
+        const wallPenalty = height > SEA_LEVEL_HEIGHT + 5 ? 5 : 0;
+        const score = entry.ring * 0.18 + shoreHeight + waterDepth * 0.35 + treePenalty + wallPenalty;
+        if (score < bestScore) {
+          bestScore = score;
+          standScore = score;
+          visualTile = candidate;
+          standTile = neighbor;
+        }
       }
     }
     if (standTile !== player.tile) {
@@ -6879,7 +6887,7 @@ async function boot(): Promise<void> {
           `audio ${audioState.muted ? 'muted' : audioState.unlocked ? 'on' : 'locked'} · loaded ${audioState.loaded.length} · music ${audioState.musicStarted ? audioState.musicPlaying ? 'playing' : audioState.musicQueued ? 'waiting' : 'paused' : 'idle'}${audioState.musicTrack ? ` ${audioState.musicTrack}` : ''} · last ${audioState.lastEvent ?? 'none'}${audioState.errors.length ? ` · errors ${audioState.errors.length}` : ''}`,
           `structures ${structures.length} · prop meshes ${propStats.meshes} · route marker roles ${propStats.routeReadabilityRoles}/${propStats.routeSilhouettes} · ${home.label}${cisternWater > 0 ? ` · cistern water ${cisternWater}` : ''}${cellarProvisions > 0 ? ` · cellar provisions ${cellarProvisions}` : ''}`,
           `food bait ${food.bait} · seeds ${food.seeds} · compost ${food.compost} · berries ${food.berries} · mushroom/herb/kelp/reeds ${food.caveMushroom}/${food.snowHerb}/${food.kelp}/${food.reeds} · raw/cooked fish ${food.rawFish}/${food.cookedFish} · traps ${trapReady}/${trapStats.length} ready · nets ${netReady}/${netStats.length} ready · meals/rations/stews ${food.campMeal}/${food.trailRation}/${food.expeditionStew} · cellar ${food.cellarProvisions}`,
-          `fish ${currentFishSchool().label} · strength ${currentFishSchool().strength.toFixed(2)} · catch ${currentFishSchool().catchCount} · visual ${fishVisualStats.slug ?? 'none'} anchors ${fishVisualStats.glbAnchorsVisible}/${fishVisualStats.glbAnchors} pts ${fishVisualStats.pointSchoolSprites}`,
+          `fish ${currentFishSchool().label} · strength ${currentFishSchool().strength.toFixed(2)} · catch ${currentFishSchool().catchCount} · visual ${fishVisualStats.slug ?? 'none'} anchors ${fishVisualStats.glbAnchorsVisible}/${fishVisualStats.glbAnchors} pts ${fishVisualStats.pointSchoolSprites} path ${fishVisualStats.swimPathBeads}`,
           `sky life ${skyLifeStats.kinds.join(',') || 'none'} · birds ${skyLifeStats.glbBirdsVisible}/${skyLifeStats.glbBirds} pts ${skyLifeStats.pointFlockSprites} · loaded ${skyLifeStats.kilnBirdSkinsLoaded} fallback ${skyLifeStats.fallbackVisible}`,
           `forage ${currentForage().label} · strength ${currentForage().strength.toFixed(2)}`,
           `cave pressure ${currentCavePressure().label} · light ${currentCavePressure().light} · exposure ${currentCavePressure().exposureRate.toFixed(2)}${currentCavePressure().focus?.active ? ` · focus ${currentCavePressure().focus?.minutes}m` : ''}`,
