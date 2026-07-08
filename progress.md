@@ -3,6 +3,22 @@ Current operating goal: Hearth and Horizon full crafting-survival cycle under th
 
 ## 2026-07-08
 
+- Closed the night with a first G0/G5 native-life reaction-readability slice on top of the
+  sparse K6R roaming actors. `NativeLifeRenderer` now maps existing transient states into
+  explicit pose roles (`curious-focus`, `flee-retreat`, `telegraph-windup`,
+  `lunge-pressure`, `recover-settle`), applies small state-specific body offset/lean/scale
+  changes, exposes `poseRoles`, `visibleTelegraph*`, and actual `currentClips` diagnostics,
+  and keeps warning-ring style overlays visible only during hazard warn/telegraph/lunge
+  states. Main now preserves short-lived non-player alert sources for mining noise, fishing
+  splashes, and failed wards instead of flattening every native-life diagnostic to
+  `player`. Focused tests and the browser proof passed:
+  `npx vitest run test\nativeLife.test.ts test\nativeLifeRenderer.test.ts`,
+  `npm run typecheck`, and `npm run proof:k6r-roaming` with shared Playwright `NODE_PATH`.
+  The proof captured `output/playwright/k6r-native-roaming/desktop-k6r-native-roaming.png`,
+  current GLB clips, pose roles, alert sources, visible telegraphs, zero creature fallback,
+  and zero generated Kiln quarantine requests. Remaining G0/G5 work is the real creature
+  brain: saved/non-saved state-machine design, social/herd behavior, flee/return timing,
+  combat telegraph consequences, anti-farming cooldowns, and broader device playtest proof.
 - K9.1 aquatic readability now has a first near-only swim-path pass. `FishSchoolRenderer`
   keeps the approved two-GLB-anchor cap and point-school budget, but active-distance schools
   now use deterministic analytic school flow, waterline swim-path bead points, near-boid

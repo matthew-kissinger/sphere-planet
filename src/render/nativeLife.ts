@@ -2,7 +2,7 @@ import * as THREE from 'three/webgpu';
 import type { Goldberg } from '../geo/goldberg';
 import type { Columns } from '../world/columns';
 import type { Layers } from '../world/layers';
-import type { NativeCreatureKind, NativeCreatureSite } from '../sim/nativeLife';
+import type { NativeCreatureKind, NativeCreatureRoamState, NativeCreatureSite } from '../sim/nativeLife';
 import {
   CREATURE_ACTIVE_MIXER_RADIUS,
   CREATURE_LOW_RATE_MIXER_RADIUS,
@@ -40,6 +40,12 @@ const KILN_CREATURE_SKIN_BY_KIND: Record<NativeCreatureKind, KilnCreatureSkinSlu
 
 type CreatureSkinStatus = 'pending' | 'loaded' | 'fallback';
 type CreatureAnimationBand = 'active' | 'lowRate' | 'frozen' | 'hidden';
+type NativeReactionPoseRole =
+  | 'curious-focus'
+  | 'flee-retreat'
+  | 'telegraph-windup'
+  | 'lunge-pressure'
+  | 'recover-settle';
 
 interface CreatureSkinRecord {
   slug: KilnCreatureSkinSlug;
@@ -145,6 +151,19 @@ function telegraph(m: THREE.Mesh, role: string): THREE.Mesh {
 function overlay(m: THREE.Mesh, role: string): THREE.Mesh {
   m.userData.nativeOverlayRole = role;
   return m;
+}
+
+function reactionPoseRole(state?: NativeCreatureRoamState): NativeReactionPoseRole | null {
+  if (state === 'curious') return 'curious-focus';
+  if (state === 'flee') return 'flee-retreat';
+  if (state === 'warn' || state === 'telegraph') return 'telegraph-windup';
+  if (state === 'lunge') return 'lunge-pressure';
+  if (state === 'recover') return 'recover-settle';
+  return null;
+}
+
+function hazardTelegraphVisible(state?: NativeCreatureRoamState, warded = false): boolean {
+  return !warded && (state === 'warn' || state === 'telegraph' || state === 'lunge');
 }
 
 function makeMossPuff(site: NativeCreatureSite): THREE.Group {
@@ -544,6 +563,7 @@ export class NativeLifeRenderer {
       obj.userData.nativeMood = site.motion?.mood ?? 'unknown';
       obj.userData.nativePlayerRings = site.motion?.playerRings;
       obj.userData.nativeAlertSource = site.motion?.alertSource;
+      obj.userData.nativePoseRole = reactionPoseRole(site.motion?.state);
       const slug = KILN_CREATURE_SKIN_BY_KIND[site.kind];
       this.ensureSkin(slug);
       const template = this.skinTemplates.get(slug);
@@ -739,6 +759,36 @@ export class NativeLifeRenderer {
         makeSurfaceBasisFromYaw(frame, yaw, m, vX, vY, vZ);
       }
       obj.setRotationFromMatrix(m);
+      const poseRole = reactionPoseRole(motion?.state);
+      const telegraphVisible = hazardTelegraphVisible(motion?.state, site.warded);
+      const posePulse = 0.5 + Math.sin(seconds * 5.4 + site.id * 0.47) * 0.5;
+      const poseForward = poseRole === 'lunge-pressure'
+        ? 0.2 + posePulse * 0.1
+        : poseRole === 'flee-retreat'
+        ? 0.14 + posePulse * 0.08
+        : poseRole === 'curious-focus'
+        ? 0.08
+        : 0;
+      const poseLift = poseRole === 'recover-settle'
+        ? -0.045
+        : poseRole === 'flee-retreat'
+        ? posePulse * 0.055
+        : poseRole === 'lunge-pressure'
+        ? posePulse * 0.035
+        : 0;
+      const poseLean = poseRole === 'lunge-pressure'
+        ? -0.13 - posePulse * 0.08
+        : poseRole === 'curious-focus'
+        ? -0.09
+        : poseRole === 'flee-retreat'
+        ? 0.08 + posePulse * 0.04
+        : poseRole === 'recover-settle'
+        ? 0.06
+        : poseRole === 'telegraph-windup'
+        ? -0.05 - posePulse * 0.05
+        : 0;
+      if (poseLean !== 0) obj.rotateX(poseLean);
+      if (poseRole === 'flee-retreat') obj.rotateZ(Math.sin(seconds * 7.1 + site.id) * 0.035);
       const ground = layers.topRadius(columns.groundLayerBelow(frameTile, layers.bounds[0]));
       const hop = site.kind === 'brambleback'
         ? Math.max(0, Math.sin(seconds * 2.05 + site.id * 0.31)) * 0.04
@@ -788,7 +838,7 @@ export class NativeLifeRenderer {
         ? Math.cos(seconds * 0.56 + site.id * 1.7) * 0.11
         : Math.cos(seconds * 0.37 + site.id * 1.7) * 0.1;
       const roamScale = motion?.moving ? 0.28 : 1;
-      const r = ground + 0.06 + hop;
+      const r = ground + 0.06 + hop + poseLift;
       if (motion?.moving && motion.fromTile !== motion.toTile) {
         const fromTile = Math.max(0, Math.min(geo.count - 1, Math.trunc(motion.fromTile)));
         const toTile = Math.max(0, Math.min(geo.count - 1, Math.trunc(motion.toTile)));
@@ -800,18 +850,18 @@ export class NativeLifeRenderer {
         ).normalize();
         const fromGround = layers.topRadius(columns.groundLayerBelow(fromTile, layers.bounds[0]));
         const toGround = layers.topRadius(columns.groundLayerBelow(toTile, layers.bounds[0]));
-        const moveR = fromGround * (1 - t) + toGround * t + 0.06 + hop;
+        const moveR = fromGround * (1 - t) + toGround * t + 0.06 + hop + poseLift;
         obj.position.set(
-          baseDir.x * moveR + vX.x * grazeA * roamScale + vZ.x * grazeB * roamScale - camWorld.x,
-          baseDir.y * moveR + vX.y * grazeA * roamScale + vZ.y * grazeB * roamScale - camWorld.y,
-          baseDir.z * moveR + vX.z * grazeA * roamScale + vZ.z * grazeB * roamScale - camWorld.z,
+          baseDir.x * moveR + vX.x * grazeA * roamScale + vZ.x * (grazeB * roamScale + poseForward) - camWorld.x,
+          baseDir.y * moveR + vX.y * grazeA * roamScale + vZ.y * (grazeB * roamScale + poseForward) - camWorld.y,
+          baseDir.z * moveR + vX.z * grazeA * roamScale + vZ.z * (grazeB * roamScale + poseForward) - camWorld.z,
         );
       } else {
-      obj.position.set(
-        c[frameTile * 3] * r + vX.x * grazeA * roamScale + vZ.x * grazeB * roamScale - camWorld.x,
-        c[frameTile * 3 + 1] * r + vX.y * grazeA * roamScale + vZ.y * grazeB * roamScale - camWorld.y,
-        c[frameTile * 3 + 2] * r + vX.z * grazeA * roamScale + vZ.z * grazeB * roamScale - camWorld.z,
-      );
+        obj.position.set(
+          c[frameTile * 3] * r + vX.x * grazeA * roamScale + vZ.x * (grazeB * roamScale + poseForward) - camWorld.x,
+          c[frameTile * 3 + 1] * r + vX.y * grazeA * roamScale + vZ.y * (grazeB * roamScale + poseForward) - camWorld.y,
+          c[frameTile * 3 + 2] * r + vX.z * grazeA * roamScale + vZ.z * (grazeB * roamScale + poseForward) - camWorld.z,
+        );
       }
       const breathe = site.kind === 'brambleback'
         ? (site.warded ? 0.9 : 1 + Math.sin(seconds * 4.8 + site.id) * 0.055)
@@ -830,7 +880,18 @@ export class NativeLifeRenderer {
         : site.kind === 'reedbackGrazer'
         ? (site.tended ? 0.88 : 1 + Math.sin(seconds * 2.6 + site.id) * 0.045)
         : (site.tended ? 0.9 : 1 + Math.sin(seconds * 3.1 + site.id) * 0.04);
-      obj.scale.setScalar((site.kind === 'brambleback' ? 2.05 : site.kind === 'caveBelljaw' ? 1.95 : site.kind === 'caveBlinker' ? 1.62 : site.kind === 'screeSnapper' ? 1.72 : site.kind === 'stormBurr' ? 1.7 : site.kind === 'tideLurker' ? 1.76 : site.kind === 'shellSkitter' ? 1.45 : site.kind === 'reedbackGrazer' ? 1.85 : 1.75) * breathe);
+      const poseScale = poseRole === 'recover-settle'
+        ? 0.84
+        : poseRole === 'lunge-pressure'
+        ? 1.08
+        : poseRole === 'telegraph-windup'
+        ? 1.02 + posePulse * 0.04
+        : poseRole === 'flee-retreat'
+        ? 0.94 + posePulse * 0.04
+        : 1;
+      obj.scale.setScalar((site.kind === 'brambleback' ? 2.05 : site.kind === 'caveBelljaw' ? 1.95 : site.kind === 'caveBlinker' ? 1.62 : site.kind === 'screeSnapper' ? 1.72 : site.kind === 'stormBurr' ? 1.7 : site.kind === 'tideLurker' ? 1.76 : site.kind === 'shellSkitter' ? 1.45 : site.kind === 'reedbackGrazer' ? 1.85 : 1.75) * breathe * poseScale);
+      if (poseRole === 'curious-focus') obj.scale.y *= 1.04;
+      if (poseRole === 'recover-settle') obj.scale.y *= 0.82;
       obj.visible = true;
       obj.traverse((child) => {
         if (child.name === 'puffSeedBurr') child.visible = !site.tended;
@@ -850,7 +911,7 @@ export class NativeLifeRenderer {
         if (child.name === 'belljawEyeStalk') child.rotation.z += Math.sin(seconds * 4.5 + site.id) * 0.004;
         if (child.name === 'belljawShellRidge') child.rotation.z += Math.sin(seconds * 4.9 + site.id) * 0.003;
         if (child.name === 'belljawWarningRing') {
-          child.visible = !site.warded;
+          child.visible = telegraphVisible;
           child.scale.setScalar(0.86 + Math.sin(seconds * 5.2 + site.id) * 0.08);
         }
         if (child.name === 'blinkerMushroomStem' || child.name === 'blinkerMushroomCap') {
@@ -885,7 +946,7 @@ export class NativeLifeRenderer {
         }
         if (child.name === 'snapperTailShard') child.rotation.z += Math.sin(seconds * 5.1 + site.id) * 0.008;
         if (child.name === 'snapperWarningRing') {
-          child.visible = !site.warded;
+          child.visible = telegraphVisible;
           child.scale.setScalar(0.78 + Math.max(0, Math.sin(seconds * 4.6 + site.id)) * 0.22);
         }
         if (child.name === 'stormBurrQuill') {
@@ -897,11 +958,11 @@ export class NativeLifeRenderer {
           child.rotation.z += Math.sin(seconds * 7.4 + site.id) * 0.01;
         }
         if (child.name === 'stormBurrWarningRing') {
-          child.visible = !site.warded;
+          child.visible = telegraphVisible;
           child.scale.setScalar(0.8 + Math.max(0, Math.sin(seconds * 6.2 + site.id)) * 0.18);
         }
         if (child.name === 'stormBurrWindArc') {
-          child.visible = !site.warded;
+          child.visible = telegraphVisible;
           child.rotation.z = seconds * 1.8 + site.id * 0.12;
           child.scale.set(0.58, 0.24 + Math.sin(seconds * 5.7 + site.id) * 0.04, 0.58);
         }
@@ -917,16 +978,16 @@ export class NativeLifeRenderer {
           child.rotation.z += Math.sin(seconds * 5.4 + site.id) * 0.004;
         }
         if (child.name === 'tideLurkerWarningRing') {
-          child.visible = !site.warded;
+          child.visible = telegraphVisible;
           child.scale.setScalar(0.78 + Math.max(0, Math.sin(seconds * 4.9 + site.id)) * 0.22);
         }
         if (child.name === 'tideLurkerSplashArc') {
-          child.visible = !site.warded;
+          child.visible = telegraphVisible;
           child.rotation.z = seconds * 1.35 + site.id * 0.08;
           child.scale.set(0.42, 0.11 + Math.sin(seconds * 5.1 + site.id) * 0.035, 0.42);
         }
         if (child.name === 'brambleWarningRing') {
-          child.visible = !site.warded;
+          child.visible = telegraphVisible;
           child.scale.setScalar(0.92 + Math.sin(seconds * 4.2 + site.id) * 0.07);
         }
         if (child.name === 'brambleQuill') child.rotation.z += Math.sin(seconds * 5.1 + site.id) * 0.0035;
@@ -944,6 +1005,8 @@ export class NativeLifeRenderer {
     hazards: number;
     telegraphRoles: number;
     telegraphMeshes: number;
+    visibleTelegraphRoles: number;
+    visibleTelegraphMeshes: number;
     kilnCreatureSkinsLoaded: number;
     kilnCreatureSkinsPending: number;
     kilnCreatureSkinFallbacks: number;
@@ -960,10 +1023,13 @@ export class NativeLifeRenderer {
     roamingActors: number;
     movingActors: number;
     playerReactiveActors: number;
+    poseRoleActors: number;
     roamingStates: Record<string, number>;
     moods: Record<string, number>;
     alertSources: Record<string, number>;
     clipHints: Record<string, number>;
+    poseRoles: Record<string, number>;
+    currentClips: Record<string, number>;
     kilnCreatureSkinsBySlug: Partial<Record<KilnCreatureSkinSlug, {
       loaded: number;
       pending: number;
@@ -981,16 +1047,21 @@ export class NativeLifeRenderer {
     let active = 0;
     let hazardCount = 0;
     let telegraphMeshes = 0;
+    let visibleTelegraphMeshes = 0;
     const kinds = new Set<string>();
     const silhouettes = new Set<string>();
     const telegraphRoles = new Set<string>();
+    const visibleTelegraphRoles = new Set<string>();
     const roamingStates: Record<string, number> = {};
     const moods: Record<string, number> = {};
     const alertSources: Record<string, number> = {};
     const clipHints: Record<string, number> = {};
+    const poseRoles: Record<string, number> = {};
+    const currentClips: Record<string, number> = {};
     let roamingActors = 0;
     let movingActors = 0;
     let playerReactiveActors = 0;
+    let poseRoleActors = 0;
     for (const obj of this.objects.values()) {
       if (obj.visible) active++;
       if (typeof obj.userData.nativeKind === 'string') kinds.add(obj.userData.nativeKind);
@@ -1011,11 +1082,19 @@ export class NativeLifeRenderer {
       if (typeof obj.userData.nativeClipHint === 'string') {
         clipHints[obj.userData.nativeClipHint] = (clipHints[obj.userData.nativeClipHint] ?? 0) + 1;
       }
+      if (typeof obj.userData.nativePoseRole === 'string') {
+        poseRoleActors++;
+        poseRoles[obj.userData.nativePoseRole] = (poseRoles[obj.userData.nativePoseRole] ?? 0) + 1;
+      }
       obj.traverse((child) => {
         if ((child as THREE.Mesh).isMesh) meshes++;
         if (typeof child.userData.nativeTelegraphRole === 'string') {
           telegraphMeshes++;
           telegraphRoles.add(child.userData.nativeTelegraphRole);
+          if (child.visible) {
+            visibleTelegraphMeshes++;
+            visibleTelegraphRoles.add(child.userData.nativeTelegraphRole);
+          }
         }
       });
     }
@@ -1056,6 +1135,9 @@ export class NativeLifeRenderer {
       const frozenForSlug = records.filter((record) => record.band === 'frozen').length;
       const hiddenForSlug = records.filter((record) => record.band === 'hidden').length;
       const glbVisibleForSlug = records.filter((record) => record.root.visible).length;
+      for (const record of records) {
+        if (record.currentClip) currentClips[record.currentClip] = (currentClips[record.currentClip] ?? 0) + 1;
+      }
       activeMixers += activeForSlug;
       lowRateMixers += lowRateForSlug;
       frozenMixers += frozenForSlug;
@@ -1083,6 +1165,8 @@ export class NativeLifeRenderer {
       hazards: hazardCount,
       telegraphRoles: telegraphRoles.size,
       telegraphMeshes,
+      visibleTelegraphRoles: visibleTelegraphRoles.size,
+      visibleTelegraphMeshes,
       kilnCreatureSkinsLoaded: this.skinRecords.size,
       kilnCreatureSkinsPending: KILN_CREATURE_SKIN_SLUGS.filter((slug) => this.skinStatus.get(slug) === 'pending').length,
       kilnCreatureSkinFallbacks: KILN_CREATURE_SKIN_SLUGS.filter((slug) => this.skinStatus.get(slug) === 'fallback').length,
@@ -1099,10 +1183,13 @@ export class NativeLifeRenderer {
       roamingActors,
       movingActors,
       playerReactiveActors,
+      poseRoleActors,
       roamingStates,
       moods,
       alertSources,
       clipHints,
+      poseRoles,
+      currentClips,
       kilnCreatureSkinsBySlug,
       kilnCreatureSkinFits,
     };

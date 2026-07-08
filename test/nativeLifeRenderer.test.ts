@@ -327,4 +327,139 @@ describe('native life renderer asset readability', () => {
       sourceForwardAxis: '+z',
     });
   });
+
+  it('reports readable pose roles, visible telegraphs, alert causes, and active GLB clips for reaction states', async () => {
+    const scene = new THREE.Scene();
+    const provider = new FakeCreatureSkins();
+    const renderer = new NativeLifeRenderer(scene, provider);
+    const { geo, layers, columns } = fixtureWorld();
+    const fleeBase = site('shellSkitter', 14, 'harmless');
+    const fleeTo = geo.neighbor(fleeBase.tile, 0);
+    const states: NativeCreatureSite[] = [
+      {
+        ...site('mossPuff', 12, 'harmless'),
+        motion: {
+          homeTile: 12,
+          fromTile: 12,
+          toTile: 12,
+          currentTile: 12,
+          targetTile: 12,
+          progress: 0,
+          moving: false,
+          state: 'curious',
+          clip: 'idle',
+          leashRings: 1,
+          mood: 'curious',
+          playerRings: 1,
+          alertSource: 'player',
+        },
+      },
+      {
+        ...fleeBase,
+        tile: fleeTo,
+        homeTile: fleeBase.tile,
+        motion: {
+          homeTile: fleeBase.tile,
+          fromTile: fleeBase.tile,
+          toTile: fleeTo,
+          currentTile: fleeTo,
+          targetTile: fleeTo,
+          progress: 0.8,
+          moving: true,
+          state: 'flee',
+          clip: 'walk',
+          leashRings: 1,
+          mood: 'startled',
+          playerRings: 0,
+          alertSource: 'fishingSplash',
+        },
+      },
+      {
+        ...site('brambleback', 18, 'territorial'),
+        motion: {
+          homeTile: 18,
+          fromTile: 18,
+          toTile: 18,
+          currentTile: 18,
+          targetTile: 18,
+          progress: 0,
+          moving: false,
+          state: 'telegraph',
+          clip: 'idle',
+          leashRings: 1,
+          mood: 'alert',
+          playerRings: 0,
+          alertSource: 'player',
+        },
+      },
+      {
+        ...site('screeSnapper', 20, 'combative'),
+        motion: {
+          homeTile: 20,
+          fromTile: 20,
+          toTile: 20,
+          currentTile: 20,
+          targetTile: 20,
+          progress: 0,
+          moving: false,
+          state: 'lunge',
+          clip: 'walk',
+          leashRings: 1,
+          mood: 'pressuring',
+          playerRings: 0,
+          alertSource: 'miningNoise',
+        },
+      },
+      {
+        ...site('stormBurr', 22, 'territorial'),
+        warded: true,
+        motion: {
+          homeTile: 22,
+          fromTile: 22,
+          toTile: 22,
+          currentTile: 22,
+          targetTile: 22,
+          progress: 0,
+          moving: false,
+          state: 'recover',
+          clip: 'idle',
+          leashRings: 1,
+          mood: 'recovering',
+          playerRings: 0,
+          alertSource: 'wardFailed',
+        },
+      },
+    ];
+
+    renderer.setSites(states);
+    await flushSkinPromises();
+    renderer.setSites(states);
+    await flushSkinPromises();
+    renderer.update(states, geo, layers, columns, cameraAtTile(geo, layers, columns, states[0].tile), 4.4);
+    const stats = renderer.stats();
+
+    expect(stats.roamingStates).toMatchObject({ curious: 1, flee: 1, telegraph: 1, lunge: 1, recover: 1 });
+    expect(stats.poseRoleActors).toBe(5);
+    expect(stats.poseRoles).toMatchObject({
+      'curious-focus': 1,
+      'flee-retreat': 1,
+      'telegraph-windup': 1,
+      'lunge-pressure': 1,
+      'recover-settle': 1,
+    });
+    expect(stats.moods).toMatchObject({ curious: 1, startled: 1, alert: 1, pressuring: 1, recovering: 1 });
+    expect(stats.alertSources).toMatchObject({ player: 2, fishingSplash: 1, miningNoise: 1, wardFailed: 1 });
+    expect(stats.clipHints).toMatchObject({ idle: 3, walk: 2 });
+    expect(stats.currentClips).toMatchObject({ idle: 3, walk: 2 });
+    expect(stats.visibleTelegraphMeshes).toBeGreaterThan(0);
+    expect(stats.visibleTelegraphRoles).toBeGreaterThan(0);
+
+    const recoverOnlyRenderer = new NativeLifeRenderer(new THREE.Scene());
+    const recoverOnly = states[4];
+    recoverOnlyRenderer.setSites([recoverOnly]);
+    recoverOnlyRenderer.update([recoverOnly], geo, layers, columns, cameraAtTile(geo, layers, columns, recoverOnly.tile), 4.8);
+    const recoverOnlyStats = recoverOnlyRenderer.stats();
+    expect(recoverOnlyStats.poseRoles).toMatchObject({ 'recover-settle': 1 });
+    expect(recoverOnlyStats.visibleTelegraphMeshes).toBe(0);
+  });
 });

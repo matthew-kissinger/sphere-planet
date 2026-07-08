@@ -258,6 +258,15 @@ async function findReactiveActor(page) {
   throw new Error(`no reactive native-life actor found after scanning ${spawnKinds.join(', ')}`);
 }
 
+function reactionPoseRole(state) {
+  if (state === 'curious') return 'curious-focus';
+  if (state === 'flee') return 'flee-retreat';
+  if (state === 'warn' || state === 'telegraph') return 'telegraph-windup';
+  if (state === 'lunge') return 'lunge-pressure';
+  if (state === 'recover') return 'recover-settle';
+  return null;
+}
+
 async function assertGlbRoaming(page, moving) {
   const slug = creatureSlugByKind[moving.kind];
   if (!slug) throw new Error(`no creature GLB slug mapped for ${moving.kind}`);
@@ -266,6 +275,7 @@ async function assertGlbRoaming(page, moving) {
     const bySlug = renderer?.kilnCreatureSkinsBySlug?.[targetSlug];
     return (renderer?.movingActors ?? 0) > 0
       && (renderer?.clipHints?.walk ?? 0) > 0
+      && (renderer?.currentClips?.walk ?? 0) > 0
       && (bySlug?.loaded ?? 0) > 0
       && (bySlug?.glbVisible ?? 0) > 0
       && (renderer?.kilnCreatureSkinFallbacks ?? 0) === 0;
@@ -325,6 +335,16 @@ try {
     if (!Object.keys(rendererMoods).some((mood) => mood !== 'unknown' && rendererMoods[mood] > 0)) {
       throw new Error(`reactive actor did not register renderer mood diagnostics ${JSON.stringify(reactive.diagnostics.renderer)}`);
     }
+    const reactivePoseRole = reactionPoseRole(reactive.reactive.motion?.state);
+    const rendererPoseRoles = reactive.diagnostics.renderer?.poseRoles ?? {};
+    if (!reactivePoseRole || (rendererPoseRoles[reactivePoseRole] ?? 0) <= 0) {
+      throw new Error(`reactive actor did not register renderer pose-role diagnostics ${JSON.stringify({ reactivePoseRole, renderer: reactive.diagnostics.renderer })}`);
+    }
+    const reactiveAlertSource = reactive.reactive.motion?.alertSource;
+    const rendererAlertSources = reactive.diagnostics.renderer?.alertSources ?? {};
+    if (reactiveAlertSource && (rendererAlertSources[reactiveAlertSource] ?? 0) <= 0) {
+      throw new Error(`reactive actor did not register renderer alert-source diagnostics ${JSON.stringify({ reactiveAlertSource, renderer: reactive.diagnostics.renderer })}`);
+    }
     const screenshot = path.join(outDir, 'desktop-k6r-native-roaming.png');
     const screenshotBuffer = await page.screenshot({ path: screenshot, fullPage: true });
     const pixelProbe = await canvasPixelProbe(page);
@@ -357,7 +377,7 @@ try {
   const proof = {
     ok: true,
     generatedAt: new Date().toISOString(),
-    targetContract: 'approved creature GLBs expose deterministic roaming state, proximity moods, walk clip hints, current-tile picking, and no generated quarantine runtime paths',
+    targetContract: 'approved creature GLBs expose deterministic roaming state, proximity moods, reaction pose roles, current GLB clips, alert sources, current-tile picking, and no generated quarantine runtime paths',
     result,
   };
   await fs.writeFile(path.join(outDir, 'proof.json'), JSON.stringify(proof, null, 2));
@@ -382,12 +402,18 @@ try {
       state: result.reactive.reactive.motion?.state,
       mood: result.reactive.reactive.motion?.mood,
       playerRings: result.reactive.reactive.motion?.playerRings,
+      alertSource: result.reactive.reactive.motion?.alertSource,
+      poseRole: reactionPoseRole(result.reactive.reactive.motion?.state),
     },
     renderer: {
       roamingActors: result.glbProof.renderer.roamingActors,
       movingActors: result.glbProof.renderer.movingActors,
       moods: result.reactive.diagnostics.renderer?.moods,
+      poseRoles: result.reactive.diagnostics.renderer?.poseRoles,
+      alertSources: result.reactive.diagnostics.renderer?.alertSources,
       clipHints: result.glbProof.renderer.clipHints,
+      currentClips: result.glbProof.renderer.currentClips,
+      visibleTelegraphMeshes: result.reactive.diagnostics.renderer?.visibleTelegraphMeshes,
       fallbacks: result.glbProof.renderer.kilnCreatureSkinFallbacks,
       generatedRequests: result.generatedRequests.length,
     },

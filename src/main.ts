@@ -78,6 +78,7 @@ import {
   tendNativeCreature,
   wardNativeCreature,
   withNativeCreatureRoaming,
+  type NativeCreatureAlertSource,
   type NativeCreatureKind,
   type NativeCreatureSite,
 } from './sim/nativeLife';
@@ -801,6 +802,8 @@ async function boot(): Promise<void> {
   let nativeHazardCooldown = loadedSave ? 0 : FRESH_SPAWN_NATIVE_HAZARD_GRACE_SECONDS;
   let nativeLifeSeconds = 0;
   let nativeLifeTimeOverride: number | null = null;
+  let nativeLifeAlertSource: NativeCreatureAlertSource = 'player';
+  let nativeLifeAlertSourceUntil = 0;
 
   const markSaveDirty = (): void => {
     if (saveEnabled) saveDirty = true;
@@ -1145,7 +1148,25 @@ async function boot(): Promise<void> {
     return { prepared: false, label: 'hands', prop: 'hands' };
   };
 
+  const nativeAlertSourceForPressure = (reason: string): NativeCreatureAlertSource =>
+    reason === 'mining noise'
+      ? 'miningNoise'
+      : reason === 'fishing splash'
+      ? 'fishingSplash'
+      : reason === 'ward failed'
+      ? 'wardFailed'
+      : 'player';
+
+  const currentNativeAlertSource = (): NativeCreatureAlertSource =>
+    nativeLifeAlertSourceUntil > nativeLifeSeconds ? nativeLifeAlertSource : 'player';
+
+  const markNativeAlertSource = (source: NativeCreatureAlertSource): void => {
+    nativeLifeAlertSource = source;
+    nativeLifeAlertSourceUntil = nativeLifeSeconds + 3.2;
+  };
+
   const applyNativeHazardPressure = (site: NativeCreatureSite, reason = 'crowded'): void => {
+    markNativeAlertSource(nativeAlertSourceForPressure(reason));
     const pressure = site.pressure;
     const staminaLoss = Math.max(1, Math.trunc(pressure?.stamina ?? 8));
     const exposureGain = Math.max(1, Math.trunc(pressure?.exposure ?? 4));
@@ -1591,7 +1612,7 @@ async function boot(): Promise<void> {
     maxSites = 7,
     kind: NativeCreatureKind | 'any' = 'any',
   ): NativeCreatureSite[] =>
-    nativeCreatureSitesAround(SEED, geo, columns, terrain, player.tile, rings, tendedNativeCreatures, wardedNativeCreatures, maxSites, kind, nativeLifeSeconds, { playerTile: player.tile, alertSource: 'player' });
+    nativeCreatureSitesAround(SEED, geo, columns, terrain, player.tile, rings, tendedNativeCreatures, wardedNativeCreatures, maxSites, kind, nativeLifeSeconds, { playerTile: player.tile, alertSource: currentNativeAlertSource() });
   const currentNativeCreatureSites = (): NativeCreatureSite[] => nativeCreatureSitesNear(7, 7);
   const nativeCreatureOnTile = (tile: number): NativeCreatureSite | null => {
     if (!Number.isFinite(tile)) return null;
@@ -3261,6 +3282,7 @@ async function boot(): Promise<void> {
       if (result.pressureApplied) {
         applyNativeHazardPressure(site, 'ward failed');
         nativeHazardCooldown = site.pressure?.interval ?? 3.2;
+        nativeLifeRenderer.setSites(currentNativeCreatureSites());
         return true;
       }
       triggerCharacterAction(nativeDefenseActionForProp(readiness.prop), readiness.prop, 0.55);

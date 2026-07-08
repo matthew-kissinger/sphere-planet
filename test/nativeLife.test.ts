@@ -81,26 +81,26 @@ describe('planet-native harmless life', () => {
     expect(site).not.toBeNull();
     const neighbor = geo.neighbor(site!.tile, 0);
 
-    const curious = withNativeCreatureRoaming(seed, geo, columns, terrain, site!, Number.NaN, { playerTile: neighbor, alertSource: 'player' });
+    const curious = withNativeCreatureRoaming(seed, geo, columns, terrain, site!, Number.NaN, { playerTile: neighbor, alertSource: 'fishingSplash' });
     expect(curious.id).toBe(site!.id);
     expect(curious.homeTile).toBe(site!.tile);
     expect(curious.motion).toMatchObject({
       state: 'curious',
       mood: 'curious',
       playerRings: 1,
-      alertSource: 'player',
+      alertSource: 'fishingSplash',
       moving: false,
       clip: 'idle',
     });
 
-    const fleeing = withNativeCreatureRoaming(seed, geo, columns, terrain, site!, Number.NaN, { playerTile: site!.tile, alertSource: 'player' });
+    const fleeing = withNativeCreatureRoaming(seed, geo, columns, terrain, site!, Number.NaN, { playerTile: site!.tile, alertSource: 'wardFailed' });
     expect(fleeing.id).toBe(site!.id);
     expect(fleeing.homeTile).toBe(site!.tile);
     expect(fleeing.motion).toMatchObject({
       state: 'flee',
       mood: 'startled',
       playerRings: 0,
-      alertSource: 'player',
+      alertSource: 'wardFailed',
     });
   });
 
@@ -129,6 +129,18 @@ describe('planet-native harmless life', () => {
       mood: 'recovering',
       moving: false,
       clip: 'idle',
+    });
+
+    const snapper = nearestNativeCreatureSite(seed, geo, columns, terrain, 0, 220, new Set(), new Set(), 'screeSnapper');
+    expect(snapper).not.toBeNull();
+    const lunge = withNativeCreatureRoaming(seed, geo, columns, terrain, snapper!, Number.NaN, { playerTile: snapper!.tile, alertSource: 'miningNoise' });
+    expect(lunge.motion).toMatchObject({
+      state: 'lunge',
+      mood: 'pressuring',
+      playerRings: 0,
+      alertSource: 'miningNoise',
+      moving: false,
+      clip: 'walk',
     });
   });
 
