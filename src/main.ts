@@ -1457,6 +1457,16 @@ async function boot(): Promise<void> {
   const pentagonInsights = () => pentagonInsightReport(pentagonTiles, discoveredPentagons);
   const pentagonDomainForTile = (tile: number, radius = 2) => pentagonDomainAt(tile, geo, pentagonTiles, discoveredPentagons, radius);
   const currentPentagonDomain = () => pentagonDomainForTile(player.tile, 2);
+  const FISHING_DOMAIN_RADIUS = 16;
+  let fishingDomainCacheTile = -1;
+  let fishingDomainCache: ReturnType<typeof pentagonDomainForTile> = null;
+  const currentFishingDomain = () => {
+    if (fishingDomainCacheTile !== player.tile) {
+      fishingDomainCacheTile = player.tile;
+      fishingDomainCache = pentagonDomainForTile(player.tile, FISHING_DOMAIN_RADIUS);
+    }
+    return fishingDomainCache;
+  };
   const pentagonSiteForTile = (tile: number, radius = 2) => pentagonExpeditionSiteAt(tile, geo, pentagonTiles, discoveredPentagons, radius);
   const currentPentagonSite = () => pentagonSiteForTile(player.tile, 2);
   const currentDomainResourceSites = () => domainResourceSites(pentagonTiles, geo, discoveredPentagons, harvestedDomainResources);
@@ -3470,20 +3480,23 @@ async function boot(): Promise<void> {
     });
   };
 
-  const currentFishSchool = () => fishSchoolAt({
-    tile: player.tile,
-    day: timeState.day,
-    minute: timeState.minute,
-    nearWater: nearFishingWater(),
-    dock: nearDock(),
-    bait: itemCount(counts, craftedItems, 'bait'),
-    weatherKind: currentWeather().kind,
-    caveKind: currentNaturalVoid()?.kind ?? null,
-    domainEffect: currentPentagonDomain()?.effect ?? null,
-    domainIntensity: currentPentagonDomain()?.intensity ?? 0,
-    thresholdFishBoost: currentPentagonSiteThresholdEffect()?.fishBoost,
-    thresholdLabel: currentPentagonSiteThresholdEffect()?.label,
-  });
+  const currentFishSchool = () => {
+    const domain = currentFishingDomain();
+    return fishSchoolAt({
+      tile: player.tile,
+      day: timeState.day,
+      minute: timeState.minute,
+      nearWater: nearFishingWater(),
+      dock: nearDock(),
+      bait: itemCount(counts, craftedItems, 'bait'),
+      weatherKind: currentWeather().kind,
+      caveKind: currentNaturalVoid()?.kind ?? null,
+      domainEffect: domain?.effect ?? null,
+      domainIntensity: domain?.intensity ?? 0,
+      thresholdFishBoost: currentPentagonSiteThresholdEffect()?.fishBoost,
+      thresholdLabel: currentPentagonSiteThresholdEffect()?.label,
+    });
+  };
 
   const fishVisualScenarioSlugs: readonly KilnFishSkinSlug[] = [
     'fish-shore-minnow',
@@ -3557,6 +3570,114 @@ async function boot(): Promise<void> {
       }
     }
     return { ok: false, reason: 'no existing fishing context maps to target fish skin', slug };
+  };
+
+  const setDebugBaitCount = (amount: number): void => {
+    const next = Math.max(0, Math.trunc(amount));
+    if (next > 0) craftedItems.bait = next;
+    else delete craftedItems.bait;
+    refreshCraftingHud();
+  };
+
+  const debugSetLiveFishScenario = (target: unknown) => {
+    const slug = fishVisualScenarioSlugs.includes(target as KilnFishSkinSlug) ? target as KilnFishSkinSlug : null;
+    if (!slug) return { ok: false, reason: 'unknown fish skin slug', target, allowed: fishVisualScenarioSlugs };
+    fishVisualOverride = null;
+    const wantedDomain = slug === 'creature-driftjelly'
+      ? 'tide'
+      : slug === 'fish-reed-fry'
+      ? 'water'
+      : null;
+    const phaseSamples = Array.from({ length: 48 }, (_, i) => i / 48);
+    const minuteSamples = [360, 480, 600, 720, 840, 960, 1080, 1260];
+    const applyCandidate = (tile: number, day: number, minute: number, phase: number, bait: number) => {
+      relocatePlayerToTile(tile);
+      Object.assign(timeState, normalizeTimeState({ day, minute }));
+      Object.assign(weatherState, normalizeWeatherState({ phase }));
+      setDebugBaitCount(bait);
+      const visualTile = nearestFishingWaterTile(player.tile, 2) ?? player.tile;
+      facePlayerTowardTile(visualTile);
+      streamer.refreshDesired(...player.up(), player.altitudeAGL());
+      const school = currentFishSchool();
+      const site = currentFishVisualSite();
+      return {
+        tile: player.tile,
+        visualTile: site?.tile ?? visualTile,
+        day: timeState.day,
+        minute: timeState.minute,
+        phase: weatherState.phase,
+        bait: itemCount(counts, craftedItems, 'bait'),
+        weather: currentWeather(),
+        domain: currentFishingDomain(),
+        naturalVoid: currentNaturalVoid(),
+        nearWater: nearFishingWater(),
+        nearDock: nearDock(),
+        school,
+        site,
+        mappedSlug: kilnFishSkinForSchool(school),
+      };
+    };
+
+    if (slug === 'fish-cave-shimmer') {
+      setDebugBaitCount(1);
+      Object.assign(timeState, normalizeTimeState({ day: 0, minute: 720 }));
+      Object.assign(weatherState, normalizeWeatherState({ phase: 0 }));
+      const feature = spawnAtNaturalFeature('seaCave');
+      if (!feature) return { ok: false, reason: 'no sea cave feature found for live fish setup', slug };
+      facePlayerTowardTile(feature.tile);
+      streamer.refreshDesired(...player.up(), player.altitudeAGL());
+      const school = currentFishSchool();
+      const site = currentFishVisualSite();
+      const mappedSlug = kilnFishSkinForSchool(school);
+      return {
+        ok: mappedSlug === slug && !!site,
+        slug,
+        setup: 'live-sea-cave',
+        feature,
+        tile: player.tile,
+        visualTile: site?.tile ?? player.tile,
+        day: timeState.day,
+        minute: timeState.minute,
+        phase: weatherState.phase,
+        bait: itemCount(counts, craftedItems, 'bait'),
+        weather: currentWeather(),
+        domain: currentFishingDomain(),
+        naturalVoid: currentNaturalVoid(),
+        nearWater: nearFishingWater(),
+        nearDock: nearDock(),
+        school,
+        site,
+        mappedSlug,
+      };
+    }
+
+    const bait = slug === 'fish-shore-minnow' ? 1 : 0;
+    for (let tile = 0; tile < geo.count; tile += 1) {
+      const height = columns.heightOf(tile);
+      if (height <= SEA_LEVEL_HEIGHT + 0.35) continue;
+      if (!waterNearTile(tile, 2)) continue;
+      const domain = pentagonDomainForTile(tile, FISHING_DOMAIN_RADIUS);
+      if (wantedDomain && domain?.effect !== wantedDomain) continue;
+      if (!wantedDomain && slug === 'fish-shore-minnow' && (domain?.effect === 'tide' || domain?.effect === 'water' || domain?.effect === 'storm')) continue;
+      for (let day = 0; day <= 3; day += 1) {
+        for (const minute of minuteSamples) {
+          for (const phase of phaseSamples) {
+            const probe = applyCandidate(tile, day, minute, phase, bait);
+            if (slug === 'fish-storm-runner' && probe.weather.kind !== 'storm') continue;
+            if (slug !== 'fish-storm-runner' && probe.weather.kind === 'storm') continue;
+            if (wantedDomain && probe.domain?.effect !== wantedDomain) continue;
+            if (probe.mappedSlug !== slug || !probe.site) continue;
+            return { ok: true, slug, setup: 'live-current-fish-school', ...probe };
+          }
+        }
+      }
+    }
+    return {
+      ok: false,
+      reason: 'no live tile/time/weather/domain context reached requested fish skin',
+      slug,
+      wantedDomain,
+    };
   };
 
   const currentFishVisualSite = (): FishSchoolVisualSite | null => {
@@ -5521,6 +5642,7 @@ async function boot(): Promise<void> {
     fishSchool: () => currentFishSchool(),
     fishVisuals: () => ({ site: currentFishVisualSite(), renderer: fishSchoolRenderer.stats() }),
     debugSetFishVisualScenario,
+    debugSetLiveFishScenario,
     debugClearFishVisualScenario: () => { fishVisualOverride = null; return { ok: true }; },
     skyLife: () => ({ sites: currentSkyLifeSites(), renderer: skyLifeRenderer.stats() }),
     debugSpawnAtSkyLifeKind,
