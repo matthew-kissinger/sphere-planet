@@ -502,9 +502,12 @@ decisions, and the avatar/equipment authored-asset path.
 5. Execute the readiness warning decisions above: seed/drop replacement, LOD/simplify passes
    for high-density assets, and explicit sparse-use acceptance notes where current proof is
    good enough.
-6. Finish C6 broader room-shape and beauty/readability proof, then generate one shared-scale
-   Kiln house-shell pack for decorative wall/foundation/roof skins over the code-owned
-   sockets.
+6. Finish C6 room-perimeter and beauty/readability proof before generating house-shell art.
+   Current C6 shelter authority is still a bedroll-centered wall-shell room whose boundary
+   edges are home-tile spokes; true connected/multi-room shelter needs an outer-perimeter
+   edge derivation for all intended interior tiles. After that contract passes, generate one
+   shared-scale Kiln house-shell pack for decorative wall/foundation/roof skins over the
+   code-owned sockets.
 7. Start the avatar/equipment authored-asset pack after socket decisions: final Wayfarer body,
    hatchet, pickaxe, fishing rod, sword, bow, arrows, chart/map, pack frame, and storm cloak.
 8. Deepen G5/K6R native-life behavior on top of the current sparse roaming actors: social

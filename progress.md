@@ -3,6 +3,15 @@ Current operating goal: Hearth and Horizon full crafting-survival cycle under th
 
 ## 2026-07-08
 
+- Night wrap insight for the next Hearth and Horizon continuation: do not claim true
+  multi-room housing yet. The current C6 proof is a functional serviced wall-shell room
+  around the home bedroll, and the current solver derives boundary edges as spokes from
+  that home tile to its one-ring boundary. The next safe C6 slice is either a full six-edge
+  wall-shell room/beauty proof using the existing `hubTopology`, or the real source change:
+  teach `shelterBoundaryEdges` to compute the outer perimeter of all intended room interior
+  tiles before treating connected foundation-backed rooms as multi-room shelter. Shared-scale
+  Kiln house-shell skins should wait until that perimeter contract and cleaner building
+  screenshots are proven.
 - Expanded the K9 aquatic GLB proof from the single cave-shimmer path to all five accepted
   singleton bodies: `fish-shore-minnow`, `fish-storm-runner`, `fish-cave-shimmer`,
   `creature-driftjelly`, and `fish-reed-fry`. `debugSetFishVisualScenario` now builds
