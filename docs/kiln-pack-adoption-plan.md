@@ -80,7 +80,7 @@ runtime dressing skins over real carved cave signals.
 | K6R native roaming and ecology state | Harmless grazing/fleeing, territorial patrol/telegraph/recover, shore/cave/fish interactions, pathing across adjacent hexes, and animation state selection | Native-life sim plus `NativeLifeRenderer` | Passing first slice: `npm run proof:k6r-roaming` proves visible creatures derive stable roaming motion from deterministic home sites, move between valid nearby hexes, expose walk/idle clip hints, keep current-tile picking, use approved GLB skins, and avoid generated runtime requests |
 | K7 landmarks and wonder | `cave-anchor`, crater shells, shrines, cave-mouth dressing skins | Structure, skyfall, landmark, cave-mouth, and route renderers | Passing for the approved pack: `cave-anchor`, `crater-emberfall`, `crater-glassrain`, `crater-starbloom`, all 12 `shrine-*` landmark shells, and the three `cave-mouth-*` shells load as committed GLB skins while glyphs, route state, threshold overlays, carved-void cues, skyfall beams, sparks, and reward timing stay code-owned. `npm run proof:cave-mouth-dressing` proves dry, sea, and arch mouths request committed cave-mouth GLBs, keep procedural route overlays, and do not leak generated runtime requests |
 | K8 remaining modular kits | door/window/roof already started; expand to any remaining build pieces | `StructureRenderer` and build sockets | Measured fit, socket-local preview, fallback, and room/shelter proof for each modular family |
-| K9 aquatic life and fish visibility | Generated Kiln single fish bodies: shore minnow, storm runner, cave shimmer, reed fry, plus a single driftjelly body over existing fishing systems | Fishing sim, waterline structures, `FishSchoolRenderer`, `KilnRuntimeAssets` | Passing first slice: corrected singleton fish are promoted to `models/`, fish-school state selects the matching body, the renderer shows up to two animated GLB anchors plus a point school, mixers are distance-gated, and `npm run proof:k9-fish-visuals` proves the cave-shimmer GLB loads from committed assets with fallback at zero |
+| K9 aquatic life and fish visibility | Generated Kiln single fish bodies: shore minnow, storm runner, cave shimmer, reed fry, plus a single driftjelly body over existing fishing systems | Fishing sim, waterline structures, `FishSchoolRenderer`, `KilnRuntimeAssets` | Passing visual/provenance slice: corrected singleton fish are promoted to `models/`, fish-school state selects the matching body, the renderer shows up to two animated GLB anchors plus a point school, mixers are distance-gated, and `npm run proof:k9-fish-visuals` now exercises all five accepted aquatic GLBs through existing `fishSchoolAt` contexts, records per-slug screenshots/text/model requests, rejects generated paths, and keeps fallback/browser errors at zero. True live route-state reachability for storm/tide/reed remains a later gameplay proof |
 | K11 sky life and biome expansion | Promoted Kiln singleton bird bodies and future new-biome tree variants | `SkyLifeRenderer`, `KilnRuntimeAssets`, weather/shore/forest site selection | Passing first slice: four bird bodies are promoted to `models/`, reviewed in the asset viewer, selected from sky/shore/forest/storm cues, rendered as a few distance-gated animated GLB anchors plus point flocks, and `npm run proof:k11-sky-life` proves all four committed bird GLBs load with fallback at zero |
 | K10 ore/resource expansion | Future ore/resource node taxonomy after item design | `DomainResourceRenderer`, resource and recipe rules | Pickup/drop skins are now wired. Remaining K10 work is new ore/resource nodes with explicit recipes, route/cave reasons, instanced proof, collection proof, and no generated runtime requests |
 
@@ -218,9 +218,13 @@ The asset-pack adoption track is done when:
   clip, and distance-band diagnostics. `FishSchoolRenderer` keeps the fishing sim
   authoritative, maps current shore/dock/run/storm/cave schools to accepted singleton
   bodies, renders up to two animated GLB anchors, and uses point sprites for the remaining
-  school members. `npm run proof:k9-fish-visuals` proves a sea-cave school loads
-  `fish-cave-shimmer` from committed `assets/kiln/models/`, shows 2 visible GLB anchors and
-  32 point sprites, and keeps fallback at zero.
+  school members. `npm run proof:k9-fish-visuals` now proves all five accepted aquatic
+  bodies (`fish-shore-minnow`, `fish-storm-runner`, `fish-cave-shimmer`,
+  `creature-driftjelly`, and `fish-reed-fry`) load from committed `assets/kiln/models/`
+  using existing `fishSchoolAt` contexts, record per-scenario text and screenshots, show two
+  visible GLB anchors plus point-school sprites, reject `generated/` model requests, and
+  keep fallback, console errors, and page errors at zero. This is a visual/provenance gate;
+  live storm/tide/reed route-state reachability still needs a separate gameplay proof.
 - K11 sky life is runtime-wired for `bird-sky-kite`, `bird-shore-gull`,
   `bird-forest-flutter`, and `bird-storm-finch`. `KilnRuntimeAssets` preserves authored
   Y-up, normalizes each singleton body into a sky-life socket, requires `idle` plus
@@ -448,6 +452,23 @@ should wait for recipes and route/cave reasons. Cave mouths and generic pickup/d
 are no longer the highest-risk asset gaps unless future playtest screenshots show the
 embedded terrain threshold or pickup readability still failing to read.
 
+## Readiness Warning Decisions
+
+The current warning posture is actionable rather than blocking. Repeated/high-density assets
+get simplification or replacement before broad rollout; sparse one-off or low-count props can
+remain accepted with explicit caps.
+
+| Asset warning | Runtime family | Decision |
+| --- | --- | --- |
+| `shore-net` high mesh count | K4 utility structure | Accept for current proof, but simplify before dense shoreline placement. |
+| `node-root-pod` triangle warning and seed alias | K2 node plus K1/K10 seed pickup alias | Keep as the correct root-domain node; replace the seed pickup alias with exact seed/drop art before native-life seed rewards become final. |
+| `node-reed-kelp` high mesh/material instanceability | K2 node | Accept current instanced proof with an exception note; simplify/regenerate before density increases. |
+| `creature-cave-blinker` triangle warning | K6 creature | Accept for sparse, distance-gated use; simplify or LOD before denser cave populations. |
+| `creature-storm-burr` high mesh count | K6 creature | Simplify/source-merge before denser animated use. |
+| `fish-shore-minnow` triangle warning | K9 fish | Accept only under the capped two-anchor runtime; simplify/LOD next. |
+| C-grade low-count props/nodes/landmarks | K3/K4/K2/K6/K7/K9 | Accept when sparse, instanced/batched, or one-off; revisit only on perf/readability regression. |
+| `fish-school-*` generated quarantine mini-scenes | Rejected generated set | Keep rejected/quarantined; singleton fish plus point schools supersede them. |
+
 ## Next Critical Slice
 
 K1, K2, K3, K4, K5, K6, K6T, K6R, K7, K9, K11, and the edge-socket K3W/C6 wall-shell slice now
@@ -462,18 +483,20 @@ decisions, and the avatar/equipment authored-asset path.
 1. Run a blind gameplay-context screenshot review of the current spawn, shoreline, forest,
    creature, shrine, and build-site scenes so each visible GLB reads as its intended noun and
    verb without the asset viewer labels.
-2. Expand K9 fish proof coverage so `fish-shore-minnow`, `fish-storm-runner`,
-   `fish-cave-shimmer`, `fish-reed-fry`, and `creature-driftjelly` are each exercised through
-   their intended water/fishing branch, not only the cave-shimmer route.
+2. Add the stricter K9 live-route reachability proof: the five accepted aquatic GLBs now
+   have visual/provenance coverage through existing `fishSchoolAt` contexts, but storm,
+   tide, reed-water, shore/dock, and cave states still need a no-override gameplay proof
+   that mutates world route/weather/domain/shore state until `currentFishSchool()` and
+   `render_game_to_text()` naturally agree with each visual branch.
 3. Replace the temporary `node-root-pod` seed pickup alias with an exact seed/drop GLB or a
    clearer approved alias before native-life seed rewards become player-facing.
-4. Add a semantic shrine/crater orientation pass: prove shrine facade/approach direction in
-   world context, not only local socket alignment, and decide whether directional crater art
-   needs stable route-facing yaw instead of deterministic decorative yaw.
-5. Resolve current asset-viewer readiness warnings with accept/regenerate/reject decisions:
-   `shore-net`, `node-root-pod`, `node-reed-kelp`, `creature-cave-blinker`,
-   `creature-storm-burr`, and `fish-shore-minnow` need LOD, mesh simplification, or explicit
-   acceptance notes.
+4. Add the K7 semantic orientation pass: shrine upright/facing math already uses authored
+   `+X` facade to socket `+Z` and neighbor-0 approach, but proof should record a
+   facade/approach dot and wider context screenshot; crater yaw still needs a design call
+   between stable route-facing yaw and explicitly decorative deterministic yaw.
+5. Execute the readiness warning decisions above: seed/drop replacement, LOD/simplify passes
+   for high-density assets, and explicit sparse-use acceptance notes where current proof is
+   good enough.
 6. Finish C6 broader room-shape proof and then generate one shared-scale Kiln house-shell
    pack for decorative wall/foundation/roof skins over the code-owned sockets.
 7. Start the avatar/equipment authored-asset pack after socket decisions: final Wayfarer body,

@@ -3,18 +3,29 @@ Current operating goal: Hearth and Horizon full crafting-survival cycle under th
 
 ## 2026-07-08
 
+- Expanded the K9 aquatic GLB proof from the single cave-shimmer path to all five accepted
+  singleton bodies: `fish-shore-minnow`, `fish-storm-runner`, `fish-cave-shimmer`,
+  `creature-driftjelly`, and `fish-reed-fry`. `debugSetFishVisualScenario` now builds
+  proof-only visual sites from existing `fishSchoolAt` contexts, frames a nearby water tile,
+  and lets the normal `FishSchoolRenderer` path load/animate the skin. `npm run
+  proof:k9-fish-visuals` now records per-scenario screenshots and text readback, asserts
+  committed `/assets/kiln/models/*.glb` requests, rejects generated paths, shows two GLB
+  anchors plus point-school sprites for every slug, and keeps fallback, console errors, and
+  page errors at zero. This closes the five-body visual/provenance gap; true no-override
+  live route-state reachability for shore/dock, storm, cave, tide, and reed-water conditions
+  remains a separate fishing gameplay proof.
 - Wrapped the current H5 GLB alignment pass for the approved 82-asset pack. The runtime
   keeps pine/shrub skins in authored Y-up, rotates only tall broadleaf/dead-snag trees
   through longest-axis-to-Y, lifts tree bases to a small surface offset, and disables
   whole-instance matrix wind sway until a height-weighted bend can move only upper foliage.
   Native creature GLB skins now preserve authored local `+Z` as runtime local `+Z`, so the
   walking direction no longer carries the old forced `-X` front correction. Focused proof
-  now covers tree, creature, resource, landmark, skyfall, and asset-viewer orientation
-  contracts, and the remaining GLB debt is specific: fish branch proof expansion, exact
+  now covers tree, creature, resource, landmark, skyfall, aquatic GLB visual/provenance,
+  and asset-viewer orientation contracts, and the remaining GLB debt is specific: exact
   seed/drop art instead of the `node-root-pod` alias, shrine/crater semantic yaw review,
-  mesh/triangle warning decisions, broader blind gameplay screenshot review, shared-scale
-  house-shell skins, avatar/equipment authored assets, future ore/resource nodes, and
-  deeper native-life/combat behavior.
+  mesh/triangle warning decisions, true K9 live-route branch reachability, broader blind
+  gameplay screenshot review, shared-scale house-shell skins, avatar/equipment authored
+  assets, future ore/resource nodes, and deeper native-life/combat behavior.
 - Closed the first C6 edge-based shelter coverage slice. Wall-shell shelter reports now
   normalize owned wall/opening sockets onto home-room boundary edge keys, so home-tile
   edge walls count, adjacent walls only count when their yaw owns the room-facing edge,

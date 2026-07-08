@@ -20,6 +20,13 @@ function loadPlaywright() {
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const outDir = path.join(root, 'output', 'playwright', 'k9-fish-visuals');
 const requestedPort = Number(process.env.PROOF_PORT || 0);
+const fishScenarios = [
+  { slug: 'fish-shore-minnow', labelIncludes: 'shore' },
+  { slug: 'fish-storm-runner', labelIncludes: 'storm' },
+  { slug: 'fish-cave-shimmer', labelIncludes: 'cave' },
+  { slug: 'creature-driftjelly', labelIncludes: 'tide' },
+  { slug: 'fish-reed-fry', labelIncludes: 'reed' },
+];
 
 async function getFreePort() {
   if (requestedPort > 0) return requestedPort;
@@ -106,49 +113,119 @@ async function main() {
     await waitForServer(target);
     browser = await chromium.launch({ headless: true });
     const page = await browser.newPage({ viewport: { width: 1280, height: 820 } });
+    const consoleErrors = [];
+    const pageErrors = [];
+    const kilnRequests = [];
     page.on('console', (msg) => {
-      if (msg.type() === 'error') console.error(`[browser:${msg.type()}] ${msg.text()}`);
+      if (msg.type() === 'error') {
+        const text = msg.text();
+        consoleErrors.push(text);
+        console.error(`[browser:${msg.type()}] ${text}`);
+      }
+    });
+    page.on('pageerror', (err) => pageErrors.push(err instanceof Error ? err.message : String(err)));
+    page.on('request', (request) => {
+      const url = request.url();
+      if (url.includes('/assets/kiln/')) kilnRequests.push(url);
     });
     await page.goto(target, { waitUntil: 'domcontentloaded' });
     await page.waitForFunction(() => {
       const world = window.__world;
       return !!world?.fishVisuals
-        && !!world?.spawnAtNaturalFeature
+        && !!world?.debugSetFishVisualScenario
+        && !!world?.debugClearFishVisualScenario
         && !!world?.giveItem
         && typeof window.render_game_to_text === 'function';
     }, null, { timeout: 45000 });
-    const setup = await page.evaluate(() => {
+    await page.evaluate(() => {
       window.__world.giveItem('fishingRod', 1);
-      window.__world.giveItem('bait', 2);
-      return window.__world.spawnAtNaturalFeature('seaCave');
+      window.__world.giveItem('bait', 5);
     });
-    if (!setup) throw new Error('Unable to spawn at a sea cave for fish visual proof');
-    await page.waitForFunction(() => {
-      const proof = window.__world?.fishVisuals?.();
-      const renderer = proof?.renderer;
-      const cave = renderer?.kilnFishSkinsBySlug?.['fish-cave-shimmer'];
-      return proof?.site?.school?.kind === 'cave'
-        && renderer?.slug === 'fish-cave-shimmer'
-        && (cave?.loaded ?? 0) > 0
-        && (cave?.visibleAnchors ?? 0) > 0
-        && (renderer?.pointSchoolSprites ?? 0) > 0
-        && (renderer?.kilnFishSkinFallbacks ?? 0) === 0;
-    }, null, { timeout: 60000 });
-    await page.waitForTimeout(500);
-    const proof = await page.evaluate(() => ({
-      fishVisuals: window.__world.fishVisuals(),
-      text: JSON.parse(window.render_game_to_text()),
-      kiln: window.__world.stats().kilnAssets,
-    }));
-    await fs.writeFile(path.join(outDir, 'proof.json'), JSON.stringify({ ok: true, setup, proof }, null, 2));
-    await page.screenshot({ path: path.join(outDir, 'fish-cave-shimmer.png'), fullPage: false });
+
+    const results = [];
+    for (const scenario of fishScenarios) {
+      const setup = await page.evaluate((slug) => {
+        window.__world.debugClearFishVisualScenario();
+        return window.__world.debugSetFishVisualScenario(slug);
+      }, scenario.slug);
+      if (!setup?.ok) throw new Error(`${scenario.slug}: unable to set fish visual scenario ${JSON.stringify(setup)}`);
+      await page.waitForTimeout(250);
+      await page.evaluate((tile) => {
+        window.__world.setZoom?.(0.32);
+        window.__world.debugAimAtTile?.(tile);
+      }, setup.site.tile);
+      await page.waitForTimeout(250);
+      await page.waitForFunction(({ slug, labelIncludes }) => {
+        const proof = window.__world?.fishVisuals?.();
+        const renderer = proof?.renderer;
+        const row = renderer?.kilnFishSkinsBySlug?.[slug];
+        const label = String(proof?.site?.school?.label ?? '').toLowerCase();
+        return renderer?.slug === slug
+          && (renderer?.active ?? 0) === 1
+          && label.includes(labelIncludes)
+          && (row?.loaded ?? 0) > 0
+          && (row?.visibleAnchors ?? 0) > 0
+          && (renderer?.glbAnchorsVisible ?? 0) > 0
+          && (renderer?.pointSchoolSprites ?? 0) > 0
+          && (renderer?.kilnFishSkinsPending ?? 0) === 0
+          && (renderer?.kilnFishSkinFallbacks ?? 0) === 0;
+      }, scenario, { timeout: 60000 });
+      await page.waitForTimeout(350);
+      const proof = await page.evaluate(() => ({
+        fishVisuals: window.__world.fishVisuals(),
+        text: JSON.parse(window.render_game_to_text()),
+      }));
+      const screenshot = path.join(outDir, `${scenario.slug}.png`);
+      await page.screenshot({ path: screenshot, fullPage: false });
+      const row = proof.fishVisuals.renderer.kilnFishSkinsBySlug[scenario.slug];
+      const scenarioRequests = kilnRequests.filter((url) => url.includes(`${scenario.slug}.glb`));
+      if (scenarioRequests.length < 1) throw new Error(`${scenario.slug}: no committed model request recorded`);
+      if (scenarioRequests.some((url) => url.includes('/generated/'))) {
+        throw new Error(`${scenario.slug}: generated asset request leaked ${JSON.stringify(scenarioRequests)}`);
+      }
+      results.push({
+        slug: scenario.slug,
+        setup,
+        school: proof.fishVisuals.site.school,
+        text: proof.text,
+        renderer: {
+          slug: proof.fishVisuals.renderer.slug,
+          anchors: proof.fishVisuals.renderer.glbAnchorsVisible,
+          points: proof.fishVisuals.renderer.pointSchoolSprites,
+          loaded: row?.loaded ?? 0,
+          clips: row?.clips ?? [],
+          activeMixers: row?.activeMixers ?? 0,
+          lowRateMixers: row?.lowRateMixers ?? 0,
+          fallback: row?.fallback ?? 0,
+        },
+        screenshot,
+        requests: scenarioRequests,
+      });
+    }
+    const generatedRequests = kilnRequests.filter((url) => url.includes('/generated/'));
+    if (generatedRequests.length > 0) {
+      throw new Error(`K9 fish proof leaked generated asset requests: ${JSON.stringify(generatedRequests)}`);
+    }
+    if (consoleErrors.length > 0 || pageErrors.length > 0) {
+      throw new Error(`K9 fish proof had browser errors: ${JSON.stringify({ consoleErrors, pageErrors })}`);
+    }
+
+    const proof = {
+      ok: true,
+      scenarios: results,
+      kilnRequests,
+      generatedRequests,
+      consoleErrors,
+      pageErrors,
+      note: 'Five-slug visual/provenance proof uses debug-set fish visual scenarios built from existing fishSchoolAt contexts; true live route reachability remains a separate gameplay proof.',
+    };
+    await fs.writeFile(path.join(outDir, 'proof.json'), JSON.stringify(proof, null, 2));
     console.log(JSON.stringify({
       ok: true,
-      slug: proof.fishVisuals.renderer.slug,
-      anchors: proof.fishVisuals.renderer.glbAnchorsVisible,
-      points: proof.fishVisuals.renderer.pointSchoolSprites,
-      loaded: proof.fishVisuals.renderer.kilnFishSkinsBySlug['fish-cave-shimmer']?.loaded ?? 0,
-      screenshot: path.join(outDir, 'fish-cave-shimmer.png'),
+      slugs: results.map((result) => result.slug),
+      screenshots: results.map((result) => result.screenshot),
+      anchors: Object.fromEntries(results.map((result) => [result.slug, result.renderer.anchors])),
+      points: Object.fromEntries(results.map((result) => [result.slug, result.renderer.points])),
     }, null, 2));
   } finally {
     if (browser) await browser.close();

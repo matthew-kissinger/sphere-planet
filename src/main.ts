@@ -13,7 +13,7 @@ import { buildGeodesic } from './render/geodesic';
 import { Sky } from './render/sky';
 import { Character } from './render/character';
 import { StructureRenderer } from './render/structures';
-import { KilnRuntimeAssets } from './render/kilnAssets';
+import { KilnRuntimeAssets, type KilnFishSkinSlug } from './render/kilnAssets';
 import { LandmarkRenderer } from './render/landmarks';
 import { DomainResourceRenderer } from './render/domainResources';
 import { SkyfallRenderer } from './render/skyfall';
@@ -24,7 +24,7 @@ import { SeasonAfterglowRenderer } from './render/seasonAfterglow';
 import { ResourceDropRenderer } from './render/resourceDrops';
 import { TreeAssetRenderer } from './render/treeAssets';
 import { NativeLifeRenderer } from './render/nativeLife';
-import { FishSchoolRenderer, type FishSchoolVisualSite } from './render/fishSchools';
+import { FishSchoolRenderer, kilnFishSkinForSchool, type FishSchoolVisualSite } from './render/fishSchools';
 import { SkyLifeRenderer } from './render/skyLife';
 import { Player } from './player/player';
 import { Input } from './player/input';
@@ -651,6 +651,7 @@ async function boot(): Promise<void> {
   const skyLifeRenderer = new SkyLifeRenderer(scene, kilnAssets);
   resourceDropRenderer.setDrops(resourceDrops);
   let treeAssetSyncNeeded = true;
+  let fishVisualOverride: FishSchoolVisualSite | null = null;
 
   // --- highlight (Line with an explicit closing vertex; LineLoop is unsupported on WebGPURenderer) ---
   const highlightGeom = new THREE.BufferGeometry();
@@ -3484,7 +3485,82 @@ async function boot(): Promise<void> {
     thresholdLabel: currentPentagonSiteThresholdEffect()?.label,
   });
 
+  const fishVisualScenarioSlugs: readonly KilnFishSkinSlug[] = [
+    'fish-shore-minnow',
+    'fish-storm-runner',
+    'fish-cave-shimmer',
+    'creature-driftjelly',
+    'fish-reed-fry',
+  ];
+
+  const debugFishVisualTile = () => {
+    const candidates = tilesAroundTile(player.tile, 8);
+    const visualTile = candidates.find((tile) => columns.heightOf(tile) <= SEA_LEVEL_HEIGHT + 0.9)
+      ?? nearestFishingWaterTile(player.tile, 8)
+      ?? player.tile;
+    let standTile = visualTile;
+    let standScore = Infinity;
+    for (let edge = 0; edge < geo.degreeOf(visualTile); edge += 1) {
+      const neighbor = geo.neighbor(visualTile, edge);
+      const height = columns.heightOf(neighbor);
+      const waterPenalty = height <= SEA_LEVEL_HEIGHT + 0.35 ? 10 : 0;
+      const treePenalty = trees.hasTree(neighbor) ? 2 : 0;
+      const score = Math.abs(height - SEA_LEVEL_HEIGHT) + waterPenalty + treePenalty;
+      if (score < standScore) {
+        standScore = score;
+        standTile = neighbor;
+      }
+    }
+    if (standTile !== player.tile) {
+      player.spawnAt(standTile);
+      player.vx = 0; player.vy = 0; player.vz = 0;
+      player.mode = 'walk';
+      player.grounded = true;
+      player.submerged = Math.max(0, WATER_SURFACE - player.radius());
+      player.planeSpeed = 0;
+      player.stepSmooth = 0;
+    }
+    facePlayerTowardTile(visualTile);
+    streamer.refreshDesired(...player.up(), player.altitudeAGL());
+    return { visualTile, standTile, standScore };
+  };
+
+  const debugSetFishVisualScenario = (target: unknown) => {
+    const slug = fishVisualScenarioSlugs.includes(target as KilnFishSkinSlug) ? target as KilnFishSkinSlug : null;
+    if (!slug) return { ok: false, reason: 'unknown fish skin slug', target, allowed: fishVisualScenarioSlugs };
+    const visual = debugFishVisualTile();
+    const contextFor = (tile: number, day: number, minute: number) => {
+      if (slug === 'fish-cave-shimmer') {
+        return fishSchoolAt({ tile, day, minute, nearWater: false, bait: 1, weatherKind: 'clear', caveKind: 'seaCave' });
+      }
+      if (slug === 'fish-storm-runner') {
+        return fishSchoolAt({ tile, day, minute, nearWater: true, bait: 0, weatherKind: 'storm', caveKind: null });
+      }
+      if (slug === 'creature-driftjelly') {
+        return fishSchoolAt({ tile, day, minute, nearWater: true, bait: 0, weatherKind: 'clear', caveKind: null, domainEffect: 'tide', domainIntensity: 1 });
+      }
+      if (slug === 'fish-reed-fry') {
+        return fishSchoolAt({ tile, day, minute, nearWater: true, bait: 0, weatherKind: 'clear', caveKind: null, domainEffect: 'water', domainIntensity: 1 });
+      }
+      return fishSchoolAt({ tile, day, minute, nearWater: true, bait: 1, weatherKind: 'clear', caveKind: null });
+    };
+    for (let day = 0; day <= 3; day += 1) {
+      for (let minute = 0; minute < 24 * 60; minute += 30) {
+        const school = contextFor(visual.visualTile, day, minute);
+        if (kilnFishSkinForSchool(school) !== slug) continue;
+        fishVisualOverride = {
+          id: 900000 + fishVisualScenarioSlugs.indexOf(slug) * 10000 + visual.visualTile,
+          tile: visual.visualTile,
+          school,
+        };
+        return { ok: true, slug, site: fishVisualOverride, context: { ...visual, day, minute } };
+      }
+    }
+    return { ok: false, reason: 'no existing fishing context maps to target fish skin', slug };
+  };
+
   const currentFishVisualSite = (): FishSchoolVisualSite | null => {
+    if (fishVisualOverride) return fishVisualOverride;
     const school = currentFishSchool();
     if (school.kind === 'none' || school.catchCount <= 0) return null;
     const waterTile = nearestFishingWaterTile(player.tile, 2)
@@ -5444,6 +5520,8 @@ async function boot(): Promise<void> {
     fish: (force = false) => tryFish(force),
     fishSchool: () => currentFishSchool(),
     fishVisuals: () => ({ site: currentFishVisualSite(), renderer: fishSchoolRenderer.stats() }),
+    debugSetFishVisualScenario,
+    debugClearFishVisualScenario: () => { fishVisualOverride = null; return { ok: true }; },
     skyLife: () => ({ sites: currentSkyLifeSites(), renderer: skyLifeRenderer.stats() }),
     debugSpawnAtSkyLifeKind,
     debugSpawnAtNaturalFeature: spawnAtNaturalFeature,
