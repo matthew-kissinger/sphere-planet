@@ -3,6 +3,15 @@ Current operating goal: Hearth and Horizon full crafting-survival cycle under th
 
 ## 2026-07-08
 
+- Closed the C6 rejection/handoff pass instead of polishing the rejected house screenshot.
+  The isolated wall-shell review confirmed the current freestanding wall-panel grammar does
+  not read as a properly built house. In-flight visual-isolation runtime/proof edits were
+  discarded before closeout, and the implementation is now documented as topology/prototype
+  scaffolding only. Added `docs/c6-house-redesign-brief.md`; revised
+  `docs/hearth-and-horizon-remaining-tasks.md` to **91** atomic tasks; updated the cycle,
+  Kiln adoption, and asset-intake docs so no future agent generates house skins from this
+  rejected shape. Existing `npm run proof:c6-wall-shells` remains useful for topology
+  regression, not house-art acceptance.
 - Closed the C6.2 irregular/broader wall-shell footprint proof and night-closeout task
   ledger. `test/structures.test.ts` now includes a six-tile depth-2 irregular connected
   foundation fixture with 26 explicit exterior boundary edges, depth seams excluded from
@@ -12,10 +21,10 @@ Current operating goal: Hearth and Horizon full crafting-survival cycle under th
   three depth-two room tiles, 24 exterior edges, full perimeter coverage, interior seams
   excluded, exterior wall weakening, interior seam door non-requirement, `kilnSkinsPending:
   0`, and a procedural-only wall-shell socket policy. It also writes
-  `output/playwright/c6-wall-shells/wall-shells-footprint-review.png`; that crop is
-  proof-grade but still cluttered, so final beauty/readability house framing remains open.
-  Added `docs/hearth-and-horizon-remaining-tasks.md` with 89 post-closeout atomic tasks
-  remaining for the full Hearth and Horizon goal.
+  `output/playwright/c6-wall-shells/wall-shells-footprint-review.png`. That crop was later
+  rejected as a house-art direction; use the proof as topology evidence only. The follow-up
+  rejection closeout added `docs/c6-house-redesign-brief.md` and revised the remaining-task
+  ledger to 91 atomic tasks for the full Hearth and Horizon goal.
 - Closed the C6.1 topology-safe wall-shell proof slice. `structurePlacementBlocker`,
   `canPlaceStructure`, `addStructure`, `rotateStructure`, `relocateStructure`, and the
   build-command facade now accept topology, so edge sockets beyond a tile's actual degree
@@ -28,9 +37,9 @@ Current operating goal: Hearth and Horizon full crafting-survival cycle under th
   interior seams are excluded from the required perimeter. `npm run proof:c6-wall-shells`
   now also includes a live `pentagonInvalidEdge` probe on a real pentagon tile while keeping
   the connected foundation-backed room proof, derived interior seams, and proof-grade
-  screenshots under `output/playwright/c6-wall-shells/`. Remaining C6 work is broader and
-  cleaner: arbitrary/irregular real-world footprints, beauty/readability captures, and then
-  one shared-scale house-shell skin pack over the code-owned sockets.
+  screenshots under `output/playwright/c6-wall-shells/`. Later C6.2 work proved irregular
+  topology, and the follow-up rejection closeout now requires a replacement house grammar
+  before any shared-scale decorative house skins are requested.
 - Implemented the K9.2 player-facing fishing cue/readback slice. `fishingCueForSchool`
   now formats compact cast/setup cues without changing `fishSchoolAt` or catch math, and
   main surfaces `currentFishingCue()` through vitals, F3, `__world.fishingCue()`, and
@@ -92,9 +101,9 @@ Current operating goal: Hearth and Horizon full crafting-survival cycle under th
   `coveredBoundaryEdges`, perimeter coverage `1`, services placed on founded room tiles,
   exterior wall relocation weakening shelter, and interior seam door relocation not
   weakening shelter. Later C6.1 work closed topology-safe pentagon invalid-edge proof, and
-  C6.2 closed the first irregular depth-two footprint proof, so the remaining C6 work is
-  cleaner beauty/readability captures and shared-scale Kiln house-shell skins after those
-  gates.
+  C6.2 closed the first irregular depth-two topology proof, but the later rejection closeout
+  supersedes the old beauty/readability path. Remaining C6 work is now the replacement
+  house grammar from `docs/c6-house-redesign-brief.md`.
 - Expanded the K9 aquatic GLB proof from the single cave-shimmer path to all five accepted
   singleton bodies: `fish-shore-minnow`, `fish-storm-runner`, `fish-cave-shimmer`,
   `creature-driftjelly`, and `fish-reed-fry`. `debugSetFishVisualScenario` now builds
@@ -121,8 +130,9 @@ Current operating goal: Hearth and Horizon full crafting-survival cycle under th
   and asset-viewer orientation contracts, and the remaining GLB debt is specific: exact
   seed/drop art instead of the `node-root-pod` alias, shrine/crater semantic yaw review,
   mesh/triangle warning decisions, aquatic beauty framing plus richer fishing verbs, broader
-  blind gameplay screenshot review, shared-scale house-shell skins, avatar/equipment authored
-  assets, future ore/resource nodes, and deeper native-life/combat behavior.
+  blind gameplay screenshot review, replacement house skins after the C6 rebuild,
+  avatar/equipment authored assets, future ore/resource nodes, and deeper native-life/combat
+  behavior.
 - Closed the C6 functional serviced wall-shell room proof. `npm run proof:c6-wall-shells`
   now builds a bedroll-centered code-owned wall-shell room that reports protected shelter,
   functional home label, lived-in comfort tier, workbench/chest/campfire service readiness,
@@ -132,8 +142,8 @@ Current operating goal: Hearth and Horizon full crafting-survival cycle under th
   interior seams. It still retains exact edge coverage diagnostics, wall/window/corner
   blockers, passable door edges, real player movement collision, stale collision clearing,
   and shelter weakening when a corner moves out. Later C6.2 work closed the first irregular
-  depth-two footprint proof, so remaining C6 work is cleaner beauty/readability captures and
-  shared-scale house-shell skins.
+  depth-two topology proof, but the visual grammar was rejected during closeout. Remaining
+  C6 work is the replacement floors-first house grammar before any decorative house skins.
 - Promoted, cataloged, and runtime-wired the exact K10 pickup/drop Kiln pack. The
   committed model set now includes 82 ready GLBs / 0 unused / 0 missing, including
   `drop-dirt-clod`, `drop-sand-pile`, `drop-snow-clump`, `drop-glow-crystal`,
@@ -147,10 +157,10 @@ Current operating goal: Hearth and Horizon full crafting-survival cycle under th
   `npx vitest run test\resourceDropRenderer.test.ts`,
   `npm run typecheck`, `npm run proof:kiln-assets`, `npm run proof:k10-resource-drops`
   with shared Playwright `NODE_PATH`, `npm run proof:kiln-asset-viewer` with shared
-  Playwright `NODE_PATH`, and `npm run build`. Current remaining asset debt is
-  shared-scale house-shell skins, avatar/equipment authored assets, future ore/resource
-  nodes after item taxonomy, and deeper creature/combat polish rather than generic
-  non-wood pickup visuals.
+  Playwright `NODE_PATH`, and `npm run build`. Current remaining asset debt is replacement
+  house skins after the C6 rebuild, avatar/equipment authored assets, future ore/resource
+  nodes after item taxonomy, and deeper creature/combat polish rather than generic non-wood
+  pickup visuals.
 
 ## 2026-07-07
 
@@ -343,9 +353,10 @@ Current operating goal: Hearth and Horizon full crafting-survival cycle under th
   near-only boids/path behavior. The first `fish-school-*` / cluster output is rejected
   review material and should not be promoted.
 - Added the next Kiln request backlog: singleton aquatic/driftjelly bodies, more pickup
-  skins, future ore/resource nodes after item taxonomy, a shared-scale house-shell pack, and
-  wonder/cave dressing. Hex tile textures, terrain blocks, mining cracks, water, sky, route
-  ribbons, telegraphs, dynamic glows, and particles stay procedural/material/shader systems.
+  skins, future ore/resource nodes after item taxonomy, replacement house skins after the C6
+  rebuild, and wonder/cave dressing. Hex tile textures, terrain blocks, mining cracks,
+  water, sky, route ribbons, telegraphs, dynamic glows, and particles stay
+  procedural/material/shader systems.
 - Promoted missing future GLBs into an executable Kiln request path instead of procedural
   stand-ins. `tools/kiln/requests/hearth-horizon-next-packs.json` now stages eight API-valid
   packs: shared-scale house shell, aquatic life/fish, pickup skins, ore/material nodes,

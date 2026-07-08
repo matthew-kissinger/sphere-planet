@@ -277,25 +277,21 @@ Deferred until scale, snap, budget, readability, or animation proof exists:
 - Any remaining modular house/build pieces outside the accepted utility props. The house-kit
   warning still applies: independently generated pieces do not share wall heights, opening
   sizes, wall thickness, or grid units unless the game imposes that contract. The accepted
-  door/window/roof skins prove the cheapest safe path: keep the procedural
+  door/window/roof skins prove the safe decoration path: keep the procedural
   socket/collider/snap volume as load-bearing, measure each loaded GLB template, normalize
   it to the socket, and hide duplicated procedural body parts only after GLB success. Future
-  wall-shell pieces need the same fitted-bbox diagnostics, fallback proof, and screenshot
-  proof before shipping as craftable art.
-- House walls are not solved by the current pack. A `window-frame` is an insert, not a
-  wall; a `door-kit` is an opening/threshold, not a full enclosure; a `roof-bundle` needs
-  supports and joins. The second C6 slice now adds code-owned `floorFoundation`,
-  `wallPanel`, `wallDoorPanel`, `wallWindowPanel`, `wallCorner`, `wallHalfRail`, and
-  `roofJoin` sockets and proves integrated walls seal while rails/foundations do not fake
-  enclosure. The edge-socket slice adds true edge-addressed occupancy: floor foundations,
-  center furniture, and multiple wall edges can share a hex only when sockets do not
-  overlap. Edge-based shelter coverage, traversal collision, functional serviced
-  single-room shelter, full six-edge single-room perimeter coverage, connected
-  foundation-backed outer-perimeter rooms, topology-safe invalid-edge blocking on degree-5
-  pentagon tiles, and a real irregular six-tile depth-two footprint now have browser proof;
-  before more craftable house pieces ship, prove cleaner beauty/readability captures. New
-  Kiln wall pieces should be generated only after that as one shared-scale house-shell pack
-  and then treated as decorative skins over measured sockets.
+  house pieces must wait for the C6 replacement grammar, not the rejected freestanding
+  wall-shell prototype.
+- House walls are not solved by the current pack or by the current C6 prototype. A
+  `window-frame` is an insert, not a wall; a `door-kit` is an opening/threshold, not a full
+  enclosure; a `roof-bundle` needs supports and joins. The current C6 wall-shell work proves
+  useful code-owned topology facts: edge-addressed occupancy, edge-based shelter coverage,
+  traversal collision, connected outer perimeters, topology-safe invalid-edge blocking on
+  degree-5 pentagon tiles, and a real irregular six-tile depth-two footprint. It is rejected
+  as the visible house direction. Before more craftable house pieces ship, rebuild the
+  procedural grammar from `docs/c6-house-redesign-brief.md` and prove one small, well-built
+  house. New Kiln wall/roof/foundation skins should be generated only after that as one
+  shared-scale decorative house-skin pack over measured sockets.
 - Shrine landmark shells: defer for blind screenshot readability, world-placement scale,
   water/glow/threshold ownership, repetition/LOD policy, and collision proof. Craters are no
   longer deferred for the first skyfall-shell slice. Trees are no longer deferred for the
