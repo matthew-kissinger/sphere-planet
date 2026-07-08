@@ -23,6 +23,7 @@ import {
   structureSocketOccupancy,
   structureSocketPlacement,
   structureSocketSpec,
+  structureTraversalBlocker,
   structureYawTurn,
   structureStationInventory,
   transferChestMaterial,
@@ -133,6 +134,78 @@ describe('Hearth and Horizon structures', () => {
     expect(structureSocketPlacement(corner)).toMatchObject({ kind: 'edge', edge: 2, occupies: ['edge:2', 'edge:3'] });
     expect(canPlaceStructure(structures, 30, 'wallHalfRail', STRUCTURE_YAW_STEP * 4)).toBe(true);
     expect(canPlaceStructure(structures, 30, 'wallHalfRail', STRUCTURE_YAW_STEP * 2)).toBe(false);
+  });
+
+  it('blocks player traversal across full wall-shell edge sockets', () => {
+    const topology: StructureTopology = {
+      degreeOf: () => 6,
+      neighbor: (tile, edge) => {
+        if (tile === 30 && edge === 0) return 31;
+        if (tile === 30 && edge === 1) return 32;
+        if (tile === 30 && edge === 2) return 33;
+        if (tile === 31 && edge === 3) return 30;
+        if (tile === 32 && edge === 4) return 30;
+        if (tile === 33 && edge === 5) return 30;
+        return tile * 10 + edge;
+      },
+    };
+    const structures: StructureSave[] = [
+      { id: 1, item: 'floorFoundation', tile: 30, layer: 2, yaw: 0 },
+      { id: 2, item: 'wallPanel', tile: 30, layer: 2, yaw: 0 },
+      { id: 3, item: 'wallWindowPanel', tile: 30, layer: 2, yaw: STRUCTURE_YAW_STEP },
+      { id: 4, item: 'wallDoorPanel', tile: 30, layer: 2, yaw: STRUCTURE_YAW_STEP * 2 },
+    ];
+
+    expect(structureTraversalBlocker(structures, topology, 30, 31)).toMatchObject({
+      item: 'wallPanel',
+      tile: 30,
+      edge: 0,
+      slot: 'edge:0',
+      message: 'wall panel blocks that edge',
+    });
+    expect(structureTraversalBlocker(structures, topology, 31, 30)).toMatchObject({
+      item: 'wallPanel',
+      tile: 30,
+      edge: 0,
+      slot: 'edge:0',
+    });
+    expect(structureTraversalBlocker(structures, topology, 30, 32)).toMatchObject({
+      item: 'wallWindowPanel',
+      edge: 1,
+      slot: 'edge:1',
+    });
+    expect(structureTraversalBlocker(structures, topology, 30, 33)).toBeNull();
+  });
+
+  it('treats door panels and rails as passable while corners block both owned edges', () => {
+    const topology: StructureTopology = {
+      degreeOf: () => 6,
+      neighbor: (tile, edge) => {
+        if (tile === 40 && edge === 0) return 41;
+        if (tile === 40 && edge === 1) return 42;
+        if (tile === 40 && edge === 2) return 43;
+        if (tile === 41 && edge === 3) return 40;
+        if (tile === 42 && edge === 4) return 40;
+        if (tile === 43 && edge === 5) return 40;
+        return tile * 10 + edge;
+      },
+    };
+
+    expect(structureTraversalBlocker([
+      { id: 1, item: 'wallDoorPanel', tile: 40, layer: 2, yaw: 0 },
+      { id: 2, item: 'wallHalfRail', tile: 40, layer: 2, yaw: STRUCTURE_YAW_STEP },
+    ], topology, 40, 41)).toBeNull();
+    expect(structureTraversalBlocker([
+      { id: 1, item: 'wallDoorPanel', tile: 40, layer: 2, yaw: 0 },
+      { id: 2, item: 'wallHalfRail', tile: 40, layer: 2, yaw: STRUCTURE_YAW_STEP },
+    ], topology, 40, 42)).toBeNull();
+
+    const cornerStructures: StructureSave[] = [
+      { id: 3, item: 'wallCorner', tile: 40, layer: 2, yaw: 0 },
+    ];
+    expect(structureTraversalBlocker(cornerStructures, topology, 40, 41)).toMatchObject({ item: 'wallCorner', edge: 0, slot: 'edge:0' });
+    expect(structureTraversalBlocker(cornerStructures, topology, 40, 42)).toMatchObject({ item: 'wallCorner', edge: 1, slot: 'edge:1' });
+    expect(structureTraversalBlocker(cornerStructures, topology, 40, 43)).toBeNull();
   });
 
   it('normalizes and rotates placed props in hex-facing steps', () => {

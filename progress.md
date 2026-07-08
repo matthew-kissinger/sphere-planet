@@ -3,6 +3,16 @@ Current operating goal: Hearth and Horizon full crafting-survival cycle under th
 
 ## 2026-07-08
 
+- Closed the next C6 wall-shell gameplay slice. `structureTraversalBlocker` now derives
+  player traversal blockers from the same edge sockets used by wall-shell placement:
+  full walls, integrated window walls, and corners block the relevant hex edge; integrated
+  door panels and half rails stay passable. `Player.update` accepts that collision callback
+  in the live movement path, and `__world.structureCollision()` plus
+  `debugWalkTowardTile()` expose proof diagnostics without making renderer geometry
+  authoritative. `npm run proof:c6-wall-shells` now proves wall/window/corner blockers,
+  passable door edges, real player movement hitting a wall blocker, and stale corner
+  collision clearing after relocation. Remaining C6 work is edge-based shelter coverage,
+  broader room shapes, and shared-scale house-shell skins.
 - Promoted, cataloged, and runtime-wired the exact K10 pickup/drop Kiln pack. The
   committed model set now includes 82 ready GLBs / 0 unused / 0 missing, including
   `drop-dirt-clod`, `drop-sand-pile`, `drop-snow-clump`, `drop-glow-crystal`,
@@ -121,8 +131,9 @@ Current operating goal: Hearth and Horizon full crafting-survival cycle under th
   `StructureRenderer.stats()` expose socket keys plus same-tile edge-stack diagnostics.
   `npm run proof:c6-wall-shells` now proves a foundation with two wall edges on the same
   hex, rejects a duplicate wall-door edge, and still verifies shelter weakening when a wall
-  piece moves out. Remaining C6 work is edge-based shelter coverage/collision polish,
-  broader room shapes, and shared-scale decorative skins over the code-owned wall shell.
+  piece moves out. Later C6 work added first wall traversal collision; remaining C6 work is
+  edge-based shelter coverage, broader room shapes, and shared-scale decorative skins over
+  the code-owned wall shell.
 - Closed the second C6 wall/shell socket slice. `wallDoorPanel`, `wallWindowPanel`,
   `wallCorner`, and `roofJoin` are now craftable/placeable code-owned building pieces with
   socket specs, snap-preview silhouettes, renderer diagnostics, save coverage, build

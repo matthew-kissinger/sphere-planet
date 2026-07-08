@@ -72,7 +72,7 @@ runtime dressing skins over real carved cave signals.
 | K1/K10 pickup and drop skins | `drop-wood-logs`, `drop-ore-chunk`, `drop-dirt-clod`, `drop-sand-pile`, `drop-snow-clump`, `drop-glow-crystal`, `drop-raw-fish`, `drop-kelp-reeds`, `drop-compost-pellet`, `drop-cave-mushroom`, `drop-creature-fiber`, plus `node-root-pod` as the seed pickup alias | `ResourceDropRenderer` | Passing expanded slice: `npm run proof:k10-resource-drops` spawns 13 source-aware drops, loads all 11 exact pickup/drop GLBs plus the committed seed alias, proves instanced material batches, collects wood/rock/dirt/sand/snow plus crafted food/forage/reward items into inventory, records desktop/phone screenshots, and rejects `generated/` runtime requests. `npm run proof:k1-resource-drops` remains a backward-compatible alias for this expanded gate |
 | K2 harvest nodes | all 12 `node-*` harvest/resource assets | `DomainResourceRenderer`, domain hooks | Passing first slice: `npm run proof:k2-domain-resources` reveals all 36 domain nodes, loads all 12 committed node GLBs, proves 36 batched instances on 33 instanced draw calls, keeps code-owned harvest glows/base overlays, records desktop/phone screenshots, and rejects `generated/` runtime requests |
 | K3 camp and home props | `campfire`, `bedroll`, `chest`, `crop-plot`, `drying-rack`, `weather-vane`, `workbench` | `StructureRenderer` | Passing first slice: `npm run proof:k3-home-props` places all seven props, loads committed GLB skins from `assets/kiln/models/`, keeps state overlays, storage, fire, warmth, crop, drying, and weather behavior readable, records desktop/phone screenshots, and rejects `generated/` runtime requests |
-| K3W wall and house shell contract | Code-authored/procedural wall panels, corners, wall-with-window openings, wall-with-door openings, half walls/rails, roof joins, foundations, and snap sockets; Kiln skins only after the wall contract exists | `src/sim/structures.ts`, `src/render/structures.ts`, `StructureRenderer` | Edge-socket slice passing: `npm run proof:c6-wall-shells` proves `floorFoundation`, `wallPanel`, `wallDoorPanel`, `wallWindowPanel`, `wallCorner`, `wallHalfRail`, and `roofJoin` sockets, weather-safe wall coverage, rail/foundation non-enclosure, integrated opening rules, same-hex center-plus-edge stacking, duplicate edge blocking, and shelter weakening when a corner moves out. Remaining proof must add edge-based shelter coverage/collision polish, broader room shapes, and shared-scale decorative skins |
+| K3W wall and house shell contract | Code-authored/procedural wall panels, corners, wall-with-window openings, wall-with-door openings, half walls/rails, roof joins, foundations, and snap sockets; Kiln skins only after the wall contract exists | `src/sim/structures.ts`, `src/render/structures.ts`, `StructureRenderer` | Edge-socket and traversal-collision slice passing: `npm run proof:c6-wall-shells` proves `floorFoundation`, `wallPanel`, `wallDoorPanel`, `wallWindowPanel`, `wallCorner`, `wallHalfRail`, and `roofJoin` sockets, weather-safe wall coverage, rail/foundation non-enclosure, integrated opening rules, same-hex center-plus-edge stacking, duplicate edge blocking, wall/window/corner traversal blockers, passable door edges, live player movement hitting a wall blocker, stale collision clearing after relocation, and shelter weakening when a corner moves out. Remaining proof must add edge-based shelter coverage, broader room shapes, and shared-scale decorative skins |
 | K4 waterline and utility props | `rain-cistern`, `fish-trap`, `shore-net`, `lantern-post`, `dock-segment`, `compost-bin`, `root-cellar` | `StructureRenderer` plus waterline/fishing rules | Passing first slice: `npm run proof:k4-utilities` places all seven utility/waterline props, loads committed GLB skins from `assets/kiln/models/`, keeps waterline readiness, trap/net/cistern/cellar/lantern state overlays code-owned, proves desktop and phone screenshots, and rejects `generated/` runtime requests |
 | K5 trees and shrubs | `tree-pine`, `tree-broadleaf`, `tree-dead-snag`, `tree-shrub` | `Trees`, `Streamer`, `TreeAssetRenderer` | Passing first slice: `npm run proof:k5-trees` loads all four committed tree GLBs, replaces chunk-embedded procedural tree meshes only after all skins are instanced-ready, proves 210 resident trees on 11 instanced draw calls, gates cosmetic sway to near range, fells a tree into ground drops, records desktop/phone screenshots, and rejects `generated/` runtime requests |
 | K6 native creatures | all `creature-*` GLBs | `NativeLifeRenderer` plus native-life/combat sim | Passing first slice: `npm run proof:k6-creatures` loads all nine committed creature GLBs, requires idle/walk clips, distance-gates mixers, proves tend/ward responses, captures desktop/phone screenshots, and rejects `generated/` runtime requests |
@@ -135,9 +135,11 @@ The asset-pack adoption track is done when:
   craftable sockets with separate diagnostics from the door/window/roof house kit, and
   `npm run proof:c6-wall-shells` proves an integrated room becomes weather-safe while
   moving one corner drops shelter back to `room boundary` missing. It now also proves a
-  foundation plus two wall edges on one hex and duplicate-edge rejection. Kiln house-shell
-  skins still wait on edge-based shelter coverage/collision polish, broader room shapes, and
-  a shared-scale wall-shell pack.
+  foundation plus three wall edges on one hex, duplicate-edge rejection, wall/window/corner
+  traversal blockers, passable integrated door edges, real player movement hitting a wall
+  blocker, and old collision edges clearing after the corner relocates. Kiln house-shell
+  skins still wait on edge-based shelter coverage, broader room shapes, and a shared-scale
+  wall-shell pack.
 - K4 waterline/utility props are runtime-wired for `compost-bin`, `rain-cistern`,
   `root-cellar`, `dock-segment`, `fish-trap`, `shore-net`, and `lantern-post`.
   `StructureRenderer` adds approved GLB skins over code-owned center or shore sockets,
@@ -432,8 +434,8 @@ These are still procedural or code-authored, with different reasons:
 - **House visuals intentionally blocked on code contracts**: current wall panels,
   integrated wall-door/window panels, corners, rails, foundations, and roof joins are
   procedural/code-owned sockets. Decorative GLB skins should come only from a shared-scale
-  house-shell pack after edge-based shelter coverage, collision, and broader room-shape
-  rules are proven.
+  house-shell pack after edge-based shelter coverage and broader room-shape rules are
+  proven; first wall traversal collision is already code-owned and browser-proven.
 - **Runtime families still awaiting new GLB generation or later art decisions**: K8
   shared-scale house shell skins, future ore/resource node expansion after item taxonomy,
   avatar/equipment authored assets, and optional future wonder/cave dressing beyond the
@@ -450,6 +452,6 @@ embedded terrain threshold or pickup readability still failing to read.
 K1, K2, K3, K4, K5, K6, K6T, K6R, K7, K9, K11, and the edge-socket K3W/C6 wall-shell slice now
 prove the repeated static-family, utility/waterline skin, first animated-family, native
 targetability, sparse creature-roaming, aquatic singleton, sky-life singleton, and
-code-owned house-shell socket paths. Continue with edge-based shelter coverage/collision
-polish, richer G5/K6R creature behavior, future ore/resource expansion, shared-scale
-house-shell skin decisions, and the avatar/equipment authored-asset path.
+code-owned house-shell socket paths. Continue with edge-based shelter coverage, broader
+room-shape polish, richer G5/K6R creature behavior, future ore/resource expansion,
+shared-scale house-shell skin decisions, and the avatar/equipment authored-asset path.

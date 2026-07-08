@@ -366,7 +366,8 @@ async function main() {
         const stackedWall = relocate(looseWall, foundation.tile, 0, true);
         const stackedWindow = relocate(looseWindow, foundation.tile, Math.PI / 3, true);
         const duplicateDoor = relocate(looseDoor, foundation.tile, 0, false);
-        if (!looseWall || !looseWindow || !looseDoor || !stackedWall.ok || !stackedWindow.ok || duplicateDoor.ok) {
+        const passDoor = relocate(looseDoor, foundation.tile, Math.PI * 2 / 3, true);
+        if (!looseWall || !looseWindow || !looseDoor || !stackedWall.ok || !stackedWindow.ok || duplicateDoor.ok || !passDoor.ok) {
           world.save.import(baseline);
           continue;
         }
@@ -382,6 +383,7 @@ async function main() {
             wall: stackedWall,
             window: stackedWindow,
             duplicateDoor,
+            door: passDoor,
             tile: foundation.tile,
           },
           structures: world.structures(),
@@ -425,7 +427,7 @@ async function main() {
     const stackedKeys = setup.structures.items
       .filter((entry) => entry.tile === setup.stacked.tile)
       .flatMap((entry) => entry.socket?.occupancyKeys ?? []);
-    for (const key of [`${setup.stacked.tile}:center`, `${setup.stacked.tile}:edge:0`, `${setup.stacked.tile}:edge:1`]) {
+    for (const key of [`${setup.stacked.tile}:center`, `${setup.stacked.tile}:edge:0`, `${setup.stacked.tile}:edge:1`, `${setup.stacked.tile}:edge:2`]) {
       if (!stackedKeys.includes(key)) {
         throw new Error(`same-tile edge stack missing ${key}: ${JSON.stringify({ stacked: setup.stacked, stackedKeys, items: setup.structures.items.filter((entry) => entry.tile === setup.stacked.tile) })}`);
       }
@@ -436,10 +438,73 @@ async function main() {
     if ((setup.structures.renderer.wallShell?.sameTileEdgeStacks ?? 0) < 1) {
       throw new Error(`renderer did not report same-tile edge stack: ${JSON.stringify(setup.structures.renderer.wallShell)}`);
     }
-    for (const key of [`${setup.stacked.tile}:edge:0`, `${setup.stacked.tile}:edge:1`]) {
+    for (const key of [`${setup.stacked.tile}:edge:0`, `${setup.stacked.tile}:edge:1`, `${setup.stacked.tile}:edge:2`]) {
       if (!setup.structures.renderer.wallShell?.edgeSockets?.includes(key)) {
         throw new Error(`renderer edge socket missing ${key}: ${JSON.stringify(setup.structures.renderer.wallShell)}`);
       }
+    }
+
+    const collisions = await page.evaluate((tile) => {
+      const world = window.__world;
+      const targets = {
+        wall: world.geo.neighbor(tile, 0),
+        window: world.geo.neighbor(tile, 1),
+        door: world.geo.neighbor(tile, 2),
+      };
+      world.debugSetPlayerTile(tile);
+      const wallWalk = world.debugWalkTowardTile(targets.wall, 1.55);
+      world.debugSetPlayerTile(tile);
+      const doorWalk = world.debugWalkTowardTile(targets.door, 1.55);
+      return {
+        targets,
+        wall: world.structureCollision(tile, targets.wall),
+        wallReverse: world.structureCollision(targets.wall, tile),
+        window: world.structureCollision(tile, targets.window),
+        door: world.structureCollision(tile, targets.door),
+        wallWalk,
+        doorWalk,
+        text: JSON.parse(window.render_game_to_text()).structures.collision,
+      };
+    }, setup.stacked.tile);
+    if (collisions.wall?.blocker?.item !== 'wallPanel' || collisions.wallReverse?.blocker?.item !== 'wallPanel') {
+      throw new Error(`wall traversal collision missing: ${JSON.stringify(collisions)}`);
+    }
+    if (collisions.window?.blocker?.item !== 'wallWindowPanel') {
+      throw new Error(`window-wall traversal collision missing: ${JSON.stringify(collisions)}`);
+    }
+    if (collisions.door?.blocker) {
+      throw new Error(`door edge should stay passable: ${JSON.stringify(collisions)}`);
+    }
+    if (!collisions.wallWalk?.blocked || collisions.wallWalk?.collision?.last?.item !== 'wallPanel') {
+      throw new Error(`real player walk did not hit wall-shell blocker: ${JSON.stringify(collisions.wallWalk)}`);
+    }
+    if (collisions.doorWalk?.blocked) {
+      throw new Error(`real player walk was structure-blocked by door edge: ${JSON.stringify(collisions.doorWalk)}`);
+    }
+
+    const cornerBefore = await page.evaluate((cornerId) => {
+      const world = window.__world;
+      const corner = world.structures().items.find((entry) => entry.id === cornerId);
+      if (!corner) return { ok: false, reason: 'corner missing' };
+      const targets = {
+        edge0: world.geo.neighbor(corner.tile, 0),
+        edge1: world.geo.neighbor(corner.tile, 1),
+        edge2: world.geo.neighbor(corner.tile, 2),
+      };
+      return {
+        ok: true,
+        corner,
+        targets,
+        edge0: world.structureCollision(corner.tile, targets.edge0),
+        edge1: world.structureCollision(corner.tile, targets.edge1),
+        edge2: world.structureCollision(corner.tile, targets.edge2),
+      };
+    }, setup.placed.find((entry) => entry.item === 'wallCorner')?.id);
+    if (!cornerBefore.ok || cornerBefore.edge0?.blocker?.item !== 'wallCorner' || cornerBefore.edge1?.blocker?.item !== 'wallCorner') {
+      throw new Error(`corner did not block both owned edges before relocation: ${JSON.stringify(cornerBefore)}`);
+    }
+    if (cornerBefore.edge2?.blocker) {
+      throw new Error(`corner blocked an unowned edge before relocation: ${JSON.stringify(cornerBefore)}`);
     }
 
     await page.waitForTimeout(300);
@@ -470,6 +535,16 @@ async function main() {
     if (weakened.structures.home.shelter.protected || !weakened.structures.home.shelter.missing.includes('room boundary')) {
       throw new Error(`moving one wall should weaken shelter: ${JSON.stringify(weakened.structures.home)}`);
     }
+    const cornerAfter = await page.evaluate((corner) => {
+      const world = window.__world;
+      return {
+        oldEdge0: world.structureCollision(corner.corner.tile, corner.targets.edge0),
+        oldEdge1: world.structureCollision(corner.corner.tile, corner.targets.edge1),
+      };
+    }, cornerBefore);
+    if (cornerAfter.oldEdge0?.blocker || cornerAfter.oldEdge1?.blocker) {
+      throw new Error(`corner relocation left stale collision on old edges: ${JSON.stringify({ cornerBefore, cornerAfter, weakened })}`);
+    }
 
     await page.waitForTimeout(500);
     const screenshot = path.join(outDir, 'wall-shells.png');
@@ -485,6 +560,9 @@ async function main() {
       readyPixelProbe,
       pixelProbe,
       previews,
+      collisions,
+      cornerBefore,
+      cornerAfter,
       setup,
       weakened,
       consoleErrors,
@@ -508,6 +586,17 @@ async function main() {
         missing: weakened.structures.home.shelter.missing,
       },
       wallShell: setup.structures.renderer.wallShell,
+      collisions: {
+        wall: collisions.wall.blocker?.item,
+        window: collisions.window.blocker?.item,
+        doorBlocked: !!collisions.door.blocker,
+        playerBlocked: collisions.wallWalk.blocked,
+        cornerEdges: [
+          cornerBefore.edge0.blocker?.item,
+          cornerBefore.edge1.blocker?.item,
+        ],
+        cornerCleared: !cornerAfter.oldEdge0.blocker && !cornerAfter.oldEdge1.blocker,
+      },
     }, null, 2));
   } finally {
     if (browser) await browser.close();

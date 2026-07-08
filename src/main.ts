@@ -124,6 +124,7 @@ import {
   spendRootCellarProvision,
   structureDismantleBlockers,
   structureSocketOccupancy,
+  structureTraversalBlocker,
   structureYawTurn,
   structureStationInventory,
   transferChestMaterial,
@@ -135,6 +136,7 @@ import {
   type FishTrapContext,
   type PlaceableItemId,
   type StructureSave,
+  type StructureTraversalBlock,
   type WaterlineRouteResupplySource,
   type WeatherVaneContext,
   type WaystoneContext,
@@ -731,6 +733,7 @@ async function boot(): Promise<void> {
     source: BuildCommandSource;
   } | null = null;
   let lastStructureAction = '';
+  let lastStructureCollisionBlock: StructureTraversalBlock | null = null;
   type BuildCommandSource = 'keyboard' | 'pointer' | 'touch' | 'gamepad' | 'debug';
   type BuildCommandVerb = 'select' | 'rotate' | 'place' | 'relocate' | 'use' | 'pack';
   type BuildCommandTarget = 'placement' | 'structure' | 'none';
@@ -2464,6 +2467,27 @@ async function boot(): Promise<void> {
 
   const nearbyTiles = (rings = 1): number[] => tilesAroundTile(player.tile, rings);
   const nearbyTileEntries = (rings = 1): CaveMouthTile[] => tileEntriesAroundTile(player.tile, rings);
+
+  const wallShellMovementBlocker = (fromTile: number, toTile: number): StructureTraversalBlock | null => {
+    const blocker = structureTraversalBlocker(structures, geo, fromTile, toTile);
+    if (blocker) {
+      lastStructureCollisionBlock = blocker;
+      lastStructureAction = `${blocker.item}:collision:${blocker.message}`;
+    }
+    return blocker;
+  };
+
+  const structureCollisionDiagnostics = (fromTile?: number, toTile?: number) => {
+    const from = Math.max(0, Math.min(geo.count - 1, Math.trunc(Number.isFinite(fromTile) ? Number(fromTile) : player.tile)));
+    const fallbackTo = geo.neighbor(from, 0);
+    const to = Math.max(0, Math.min(geo.count - 1, Math.trunc(Number.isFinite(toTile) ? Number(toTile) : fallbackTo)));
+    return {
+      fromTile: from,
+      toTile: to,
+      blocker: structureTraversalBlocker(structures, geo, from, to),
+      last: lastStructureCollisionBlock,
+    };
+  };
 
   const siteWorkStructures = (site: PentagonExpeditionSiteReport): StructureSave[] => {
     const local = new Set(tilesAroundTile(site.tile, 2));
@@ -4712,6 +4736,41 @@ async function boot(): Promise<void> {
     refreshUseButton();
   };
 
+  const debugSetPlayerTile = (tile: number) => {
+    relocatePlayerToTile(tile);
+    lastStructureCollisionBlock = null;
+    return { tile: player.tile, mode: player.mode, grounded: player.grounded };
+  };
+
+  const debugWalkTowardTile = (tile: number, seconds = 1.35) => {
+    const target = Math.max(0, Math.min(geo.count - 1, Math.trunc(Number.isFinite(tile) ? tile : player.tile)));
+    const start = player.tile;
+    lastStructureCollisionBlock = null;
+    facePlayerTowardTile(target);
+    const frameDt = 1 / 60;
+    const frames = Math.max(1, Math.min(240, Math.ceil(Math.max(0.05, Number.isFinite(seconds) ? seconds : 1.35) / frameDt)));
+    for (let i = 0; i < frames; i++) {
+      player.update(frameDt, {
+        forward: 1,
+        strafe: 0,
+        upDown: 0,
+        sprint: false,
+        jump: false,
+        swimUp: false,
+      }, { structureTraversalBlocker: wallShellMovementBlocker });
+      if (player.tile !== start || lastStructureCollisionBlock) break;
+    }
+    streamer.refreshDesired(...player.up(), player.altitudeAGL());
+    return {
+      startTile: start,
+      targetTile: target,
+      endTile: player.tile,
+      crossed: player.tile !== start,
+      blocked: lastStructureCollisionBlock !== null,
+      collision: structureCollisionDiagnostics(start, target),
+    };
+  };
+
   const skyLifeKinds: readonly SkyLifeSite['kind'][] = ['sky', 'shore', 'forest', 'storm'];
 
   const normalizeSkyLifeKind = (kind: unknown): SkyLifeSite['kind'] | null =>
@@ -5199,6 +5258,7 @@ async function boot(): Promise<void> {
       audio: audio.state(),
       controls: { ux: uxManager.snapshot(), gamepad: gamepad.snapshot(), touch: touch.enabled, inputActive: input.active(), aimActive: input.active() || gamepad.active(), panels: currentPanelOwnership() },
       relocation: relocationDiagnostics(),
+      structureCollision: structureCollisionDiagnostics(),
       survival: { ...survivalSnapshot(), time: { ...timeState }, state: { ...survivalState }, pack: packBurden(), lastAction: lastSurvivalAction },
       caves: { current: currentNaturalVoid(), signal: nearbyCaveSignal(), resonance: caveResonanceDiagnostics(), mouths: caveMouthDiagnostics(), pressure: currentCavePressure(), lastAction: lastCaveAction, echoLantern: itemCount(counts, craftedItems, 'echoLantern') },
       navigation: { horizonChart: horizonChartCount(), signal: visibleHorizonChartSignal(), hearthBeacon: visibleHearthBeaconSignal(), routePlan: currentRoutePlanSignal(), savedRoutePlan: activeRoutePlan, waystones: waystoneRouteSignals(), caveAnchors: caveAnchorRouteSignals(), weatherVane: weatherVaneForecast(), domain: currentPentagonDomain(), site: currentRouteSiteSignal(), thresholdChamber: currentRouteThresholdChamberSignal(), resource: currentRouteResourceSignal(), skyfall: currentRouteSkyfallSignal(), murmur: currentRouteMurmurSignal(), season: currentRouteSeasonSignal(), seasonAfterglow: currentRouteSeasonAfterglowSignal(), seasonRoute: currentSeasonRouteGuides(), guide: currentRouteGuide(), plan: horizonExpeditionPlan(), slate: currentRouteSlate(), lastAction: lastNavigationAction },
@@ -5262,6 +5322,9 @@ async function boot(): Promise<void> {
     },
     tools: () => ({ ...toolSummary(craftedItems, toolWear), wear: { ...toolWear }, lastAction: lastToolAction, reach: playerReach() }),
     nearbyTiles: (rings = 1) => [...tileSetAround(player.tile, Math.max(0, Math.trunc(Number.isFinite(rings) ? Number(rings) : 1)))],
+    structureCollision: structureCollisionDiagnostics,
+    debugSetPlayerTile,
+    debugWalkTowardTile,
     resourceDrops: () => resourceDropDiagnostics(),
     treeAssets: () => treeAssetDiagnostics(),
     mineProgress: () => mineProgressDiagnostics(),
@@ -5555,7 +5618,7 @@ async function boot(): Promise<void> {
     }),
     craft: (recipeId: string) => craftSelected(recipeId),
     crafting: () => ({ open: craftingOpen, crafted: { ...craftedItems }, recipes: craftingRows(), ledger: packLedger() }),
-    structures: () => ({ items: structures.map((s) => ({ ...s, state: s.state ? { ...s.state } : undefined, turn: structureYawTurn(s.yaw), socket: structureSocketOccupancy(s) })), placement: placementDiagnostics(), relocation: relocationDiagnostics(), snapPreview: currentStructureSnapPreview(), commands: buildCommandDiagnostics(), sockets: { houseKit: houseKitSocketCatalog(), wallShell: wallShellSocketCatalog(), k4Utilities: k4UtilitySocketCatalog() }, crops: cropDiagnostics(), compostBins: compostBinDiagnostics(), rainCisterns: rainCisternDiagnostics(), rootCellars: rootCellarDiagnostics(), caveAnchors: caveAnchorDiagnostics(), waystones: waystoneDiagnostics(), weatherVanes: weatherVaneDiagnostics(), fishTraps: fishTrapDiagnostics(), shoreNets: shoreNetDiagnostics(), storage: { open: openChestId !== null, chestId: openChestId, state: currentChestStorage() }, home: homeScore(structures, geo), renderer: structureRenderer.stats(), lastAction: lastStructureAction }),
+    structures: () => ({ items: structures.map((s) => ({ ...s, state: s.state ? { ...s.state } : undefined, turn: structureYawTurn(s.yaw), socket: structureSocketOccupancy(s) })), placement: placementDiagnostics(), relocation: relocationDiagnostics(), snapPreview: currentStructureSnapPreview(), commands: buildCommandDiagnostics(), sockets: { houseKit: houseKitSocketCatalog(), wallShell: wallShellSocketCatalog(), k4Utilities: k4UtilitySocketCatalog() }, collision: structureCollisionDiagnostics(), crops: cropDiagnostics(), compostBins: compostBinDiagnostics(), rainCisterns: rainCisternDiagnostics(), rootCellars: rootCellarDiagnostics(), caveAnchors: caveAnchorDiagnostics(), waystones: waystoneDiagnostics(), weatherVanes: weatherVaneDiagnostics(), fishTraps: fishTrapDiagnostics(), shoreNets: shoreNetDiagnostics(), storage: { open: openChestId !== null, chestId: openChestId, state: currentChestStorage() }, home: homeScore(structures, geo), renderer: structureRenderer.stats(), lastAction: lastStructureAction }),
     buildCommands: () => buildCommandDiagnostics(),
     selectStructure: (item: string) => selectStructureForPlacement(item),
     placeStructure: (item: string, tile?: number) => {
@@ -5966,6 +6029,7 @@ async function boot(): Promise<void> {
       snapPreview: currentStructureSnapPreview(),
       commands: buildCommandDiagnostics(),
       sockets: { houseKit: houseKitSocketCatalog(), wallShell: wallShellSocketCatalog(), k4Utilities: k4UtilitySocketCatalog() },
+      collision: structureCollisionDiagnostics(),
       yawTurns: structures.map((s) => ({ id: s.id, item: s.item, tile: s.tile, turn: structureYawTurn(s.yaw), yaw: s.yaw })),
       crops: cropDiagnostics(),
       compostBins: compostBinDiagnostics(),
@@ -6236,7 +6300,7 @@ async function boot(): Promise<void> {
         sprint: sprintIntent && sprintAllowed,
         jump: jumpIntent,
         swimUp: jumpIntent,
-      });
+      }, { structureTraversalBlocker: wallShellMovementBlocker });
       const shelter = shelterAtPlayer();
       advanceSurvivalTime(timeState, weatherState, dt, player.mode === 'plane' ? 13 : 8);
       const thresholdEffect = currentPentagonSiteThresholdEffect();

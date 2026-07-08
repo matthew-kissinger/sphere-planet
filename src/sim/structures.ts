@@ -198,6 +198,17 @@ export interface StructureTopology {
   neighbor(tile: number, edge: number): number;
 }
 
+export interface StructureTraversalBlock {
+  fromTile: number;
+  toTile: number;
+  structureId: number;
+  item: PlaceableItemId;
+  tile: number;
+  edge: number;
+  slot: string;
+  message: string;
+}
+
 export interface ShelterReport {
   centerTile: number | null;
   tiles: number[];
@@ -709,9 +720,24 @@ function edgeSlot(edge: number): string {
   return `edge:${((Math.trunc(edge) % 6) + 6) % 6}`;
 }
 
+function sharedEdge(topology: StructureTopology | undefined, fromTile: number, toTile: number): number | null {
+  if (!topology || fromTile === toTile) return null;
+  const degree = Math.max(0, Math.trunc(topology.degreeOf(fromTile)));
+  for (let edge = 0; edge < degree; edge++) {
+    if (topology.neighbor(fromTile, edge) === toTile) return edge;
+  }
+  return null;
+}
+
 function isEdgeAddressedSocket(item: PlaceableItemId): boolean {
   const spec = structureSocketSpec(item);
   return spec.pivot === 'wall-center' || spec.collider === 'edge-strip' || spec.role === 'roof-join';
+}
+
+function blocksPlayerTraversal(item: PlaceableItemId): boolean {
+  return item === 'wallPanel'
+    || item === 'wallWindowPanel'
+    || item === 'wallCorner';
 }
 
 export function structureSocketPlacementFor(item: PlaceableItemId, yaw: number): StructureSocketPlacement {
@@ -765,6 +791,42 @@ export function structurePlacementBlocker(
     const occupied = structureSocketPlacement(entry);
     if (occupied.occupies.some((slot) => wanted.has(slot))) {
       return placement.kind === 'edge' ? 'occupied edge socket' : 'occupied snap target';
+    }
+  }
+  return null;
+}
+
+export function structureTraversalBlocker(
+  structures: readonly StructureSave[],
+  topology: StructureTopology | undefined,
+  fromTile: number,
+  toTile: number,
+): StructureTraversalBlock | null {
+  const from = Math.trunc(fromTile);
+  const to = Math.trunc(toTile);
+  if (!Number.isFinite(from) || !Number.isFinite(to) || from === to) return null;
+
+  const candidates: Array<{ tile: number; edge: number | null }> = [
+    { tile: from, edge: sharedEdge(topology, from, to) },
+    { tile: to, edge: sharedEdge(topology, to, from) },
+  ];
+  for (const candidate of candidates) {
+    if (candidate.edge === null) continue;
+    const slot = edgeSlot(candidate.edge);
+    for (const structure of structures) {
+      if (structure.tile !== candidate.tile || !blocksPlayerTraversal(structure.item)) continue;
+      const occupancy = structureSocketPlacement(structure);
+      if (!occupancy.occupies.includes(slot)) continue;
+      return {
+        fromTile: from,
+        toTile: to,
+        structureId: structure.id,
+        item: structure.item,
+        tile: structure.tile,
+        edge: candidate.edge,
+        slot,
+        message: `${placeableName(structure.item).toLowerCase()} blocks that edge`,
+      };
     }
   }
   return null;

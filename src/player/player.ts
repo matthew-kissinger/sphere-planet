@@ -59,6 +59,10 @@ export interface PlayerInput {
   swimUp: boolean;
 }
 
+export interface PlayerCollisionContext {
+  structureTraversalBlocker?: (fromTile: number, toTile: number) => unknown;
+}
+
 export class Player {
   // f64 planet-frame state
   px = 0; py = 0; pz = 0;          // feet position
@@ -192,7 +196,7 @@ export class Player {
     return this.layers.topRadius(this.columns.groundLayerBelow(tile, this.layers.bounds[0]));
   }
 
-  update(dt: number, input: PlayerInput): void {
+  update(dt: number, input: PlayerInput, collisions?: PlayerCollisionContext): void {
     const [ux, uy, uz] = this.up();
     this.reorthonormalize();
     const fx = this.fwdX, fy = this.fwdY, fz = this.fwdZ;
@@ -304,6 +308,7 @@ export class Player {
         const gap = this.layers.bottomRadius(ceilK) - Math.max(groundR, r0 - 0.1);
         if (gap < BODY_HEIGHT) blocked = true;
       }
+      if (!blocked && collisions?.structureTraversalBlocker?.(this.tile, newTile)) blocked = true;
     }
     if (blocked) {
       const vr = this.vx * ux + this.vy * uy + this.vz * uz;
