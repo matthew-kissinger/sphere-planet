@@ -817,17 +817,73 @@ async function main() {
         }
         return null;
       };
-      const candidateCenters = world.nearbyTiles(7).filter((tile) => tile !== world.player.tile && world.geo.degreeOf(tile) >= 6);
+      const roomNeighborEdge = (tile, roomTiles) => {
+        for (const roomTile of roomTiles) {
+          if (roomTile === tile) continue;
+          const edge = sharedEdge(tile, roomTile);
+          if (edge !== null) return edge;
+        }
+        return null;
+      };
+      const extensionFrom = (tile, room, occupied, excludedEdges = []) => {
+        const degree = world.geo.degreeOf(tile);
+        for (let edge = 0; edge < degree; edge++) {
+          if (excludedEdges.includes(edge)) continue;
+          const next = world.geo.neighbor(tile, edge);
+          if (next === tile || room.has(next) || occupied.has(next) || next === world.player.tile) continue;
+          if (world.geo.degreeOf(next) < 6 || sharedEdge(next, tile) === null) continue;
+          return { tile: next, edge };
+        }
+        return null;
+      };
+      const irregularShapeFor = (center, occupied) => {
+        const degree = world.geo.degreeOf(center);
+        if (degree < 6 || occupied.has(center) || center === world.player.tile) return null;
+        for (let first = 0; first < degree; first++) {
+          for (const offset of [2, 3, 4]) {
+            const second = (first + offset) % degree;
+            if (second === first) continue;
+            const branchA = world.geo.neighbor(center, first);
+            const branchB = world.geo.neighbor(center, second);
+            if (branchA === center || branchB === center || branchA === branchB) continue;
+            if ([branchA, branchB].some((tile) => occupied.has(tile) || tile === world.player.tile || world.geo.degreeOf(tile) < 6)) continue;
+            const room = new Set([center, branchA, branchB]);
+            const backA = sharedEdge(branchA, center);
+            const backB = sharedEdge(branchB, center);
+            if (backA === null || backB === null) continue;
+            const extA = extensionFrom(branchA, room, occupied, [backA]);
+            if (!extA) continue;
+            room.add(extA.tile);
+            const extB = extensionFrom(branchB, room, occupied, [backB]);
+            if (!extB) continue;
+            room.add(extB.tile);
+            const extA2 = extensionFrom(branchA, room, occupied, [backA, extA.edge]);
+            if (!extA2) continue;
+            room.add(extA2.tile);
+            const roomTiles = [center, branchA, branchB, extA.tile, extB.tile, extA2.tile];
+            const depthTwoTiles = roomTiles.filter((tile) => tile !== center && sharedEdge(center, tile) === null);
+            if (depthTwoTiles.length < 3) continue;
+            const perimeter = outerEdgesFor(roomTiles);
+            if (perimeter.length < 20 || perimeter.some((edge) => edge.neighborEdge === null)) continue;
+            return {
+              roomTiles,
+              foundationTiles: roomTiles.filter((tile) => tile !== center),
+              serviceTiles: [extA.tile, extB.tile, extA2.tile],
+              directBranchEdges: [first, second],
+              interiorDoorEdge: first,
+              depthTwoTiles,
+              perimeter,
+            };
+          }
+        }
+        return null;
+      };
+      const candidateCenters = world.nearbyTiles(8).filter((tile) => tile !== world.player.tile && world.geo.degreeOf(tile) >= 6);
       for (const center of candidateCenters) {
         const occupied = occupiedTiles();
-        if (occupied.has(center)) continue;
-        const branchEdges = [0, 2, 3];
-        const branches = branchEdges.map((edge) => world.geo.neighbor(center, edge));
-        const roomTiles = [center, ...branches];
-        if (new Set(roomTiles).size !== roomTiles.length) continue;
-        if (roomTiles.some((tile) => tile === world.player.tile || occupied.has(tile) || world.geo.degreeOf(tile) < 6)) continue;
-        const perimeter = outerEdgesFor(roomTiles);
-        if (perimeter.length < 12 || perimeter.some((edge) => edge.neighborEdge === null)) continue;
+        const shape = irregularShapeFor(center, occupied);
+        if (!shape) continue;
+        const { roomTiles, foundationTiles, serviceTiles, directBranchEdges, interiorDoorEdge, depthTwoTiles, perimeter } = shape;
         const baseline = world.save.export();
         failures.length = 0;
 
@@ -839,28 +895,28 @@ async function main() {
         world.useStructure(bedroll.id);
         const foundations = [];
         const roofs = [];
-        for (const tile of branches) {
+        for (const tile of foundationTiles) {
           const foundation = place('floorFoundation', tile);
-          const inward = sharedEdge(tile, center);
+          const inward = roomNeighborEdge(tile, roomTiles);
           const roof = inward === null ? null : placeFacing('roofJoin', tile, inward);
           if (!foundation || !roof) break;
           foundations.push(foundation);
           roofs.push(roof);
         }
-        if (foundations.length !== branches.length || roofs.length !== branches.length) {
+        if (foundations.length !== foundationTiles.length || roofs.length !== foundationTiles.length) {
           world.save.import(baseline);
           continue;
         }
-        const fire = place('campfire', branches[0]);
-        const workbench = place('workbench', branches[1]);
-        const chest = place('chest', branches[2]);
+        const fire = place('campfire', serviceTiles[0]);
+        const workbench = place('workbench', serviceTiles[1]);
+        const chest = place('chest', serviceTiles[2]);
         if (!fire || !workbench || !chest) {
           world.save.import(baseline);
           continue;
         }
         world.useStructure(fire.id);
 
-        const seamDoor = placeFacing('wallDoorPanel', center, branchEdges[0]);
+        const seamDoor = placeFacing('wallDoorPanel', center, interiorDoorEdge);
         if (!seamDoor) {
           world.save.import(baseline);
           continue;
@@ -881,8 +937,8 @@ async function main() {
         const expectedEdges = perimeter.map((edge) => edge.key);
         const boundaryEdges = home.shelter.enclosure.boundaryEdges;
         const coveredEdges = home.shelter.enclosure.coveredBoundaryEdges;
-        const branchSeamKeys = branchEdges.flatMap((edge, index) => {
-          const branch = branches[index];
+        const branchSeamKeys = directBranchEdges.flatMap((edge) => {
+          const branch = world.geo.neighbor(center, edge);
           const back = sharedEdge(branch, center);
           return back === null ? [`${center}:edge:${edge}`] : [`${center}:edge:${edge}`, `${branch}:edge:${back}`];
         });
@@ -891,16 +947,19 @@ async function main() {
           && home.functional
           && home.shelter.enclosure.footprintMode === 'connected-foundation'
           && home.shelter.enclosure.roomTileCount === roomTiles.length
+          && home.shelter.enclosure.roomTileCount >= 6
           && home.shelter.enclosure.boundaryCoverage === 1
           && home.shelter.enclosure.perimeterCoverage === 1
           && home.shelter.enclosure.boundaryEdgeCount === expectedEdges.length
+          && home.shelter.enclosure.boundaryEdgeCount >= 20
           && sameSet(boundaryEdges, expectedEdges)
           && sameSet(coveredEdges, expectedEdges)
           && sameSet(home.shelter.enclosure.interiorSeamEdges, seamKeys)
           && seamKeys.every((key) => !boundaryEdges.includes(key) && !coveredEdges.includes(key))
+          && depthTwoTiles.every((tile) => home.shelter.enclosure.roomTiles.includes(tile))
           && home.shelter.enclosure.doorBoundaryEdges.length === 1
           && home.shelter.enclosure.windowBoundaryEdges.length === 1
-          && !home.shelter.enclosure.doorBoundaryEdges.includes(`${center}:edge:${branchEdges[0]}`);
+          && !home.shelter.enclosure.doorBoundaryEdges.includes(`${center}:edge:${interiorDoorEdge}`);
         if (!complete) {
           failures.push({ phase: 'assert-complete', home, expectedEdges, seamKeys });
           world.save.import(baseline);
@@ -917,7 +976,7 @@ async function main() {
           && weakened.shelter.missing.includes('room boundary');
 
         world.save.import(fullSave);
-        const restoredSeamDoor = world.structures().items.find((entry) => entry.tile === center && entry.item === 'wallDoorPanel' && entry.turn === branchEdges[0]);
+        const restoredSeamDoor = world.structures().items.find((entry) => entry.tile === center && entry.item === 'wallDoorPanel' && entry.turn === interiorDoorEdge);
         const seamMoved = restoredSeamDoor ? moveAway(restoredSeamDoor, roomTiles) : null;
         const withoutInteriorSeam = world.structures().home;
         const interiorSeamNotRequired = !!seamMoved
@@ -936,10 +995,12 @@ async function main() {
           ok: true,
           center,
           roomTiles,
+          depthTwoTiles,
           foundationTiles: foundations.map((entry) => entry.tile),
           expectedEdges,
           seamKeys,
           branchSeamKeys,
+          irregular: true,
           footprintMode: home.shelter.enclosure.footprintMode,
           roomTileCount: home.shelter.enclosure.roomTileCount,
           pentagonRoomTiles: home.shelter.enclosure.pentagonRoomTiles,
@@ -963,13 +1024,66 @@ async function main() {
       const viewTile = world.nearbyTiles(4).find((tile) => !blocked.has(tile) && !occupied.has(tile));
       if (viewTile !== undefined) world.debugSetPlayerTile(viewTile);
       world.debugAimAtTile(input.center);
-      world.setZoom?.(0.18);
+      world.setZoom?.(0.15);
     }, { center: multiRoom.center, roomTiles: multiRoom.roomTiles });
+    await page.waitForFunction(() => (window.__world?.structures?.().renderer?.kilnSkinsPending ?? 0) === 0, null, { timeout: 8000 }).catch(() => undefined);
     await page.waitForTimeout(300);
     const multiRoomScreenshot = path.join(outDir, 'wall-shells-multi-room.png');
     await page.screenshot({ path: multiRoomScreenshot, fullPage: false });
     const multiRoomPixelProbe = pngPixelProbe(await fs.readFile(multiRoomScreenshot));
     if (!multiRoomPixelProbe.ok) throw new Error(`Multi-room screenshot pixel probe failed: ${JSON.stringify(multiRoomPixelProbe)}`);
+    const footprintReview = await page.evaluate((input) => {
+      const world = window.__world;
+      const structures = world.structures();
+      const points = input.roomTiles.map((tile) => world.screenPointForTile(tile)).filter((point) => Number.isFinite(point.x) && Number.isFinite(point.y));
+      const visiblePoints = points.filter((point) => point.visible);
+      const xs = visiblePoints.map((point) => point.x);
+      const ys = visiblePoints.map((point) => point.y);
+      if (!xs.length || !ys.length) {
+        return {
+          ok: false,
+          reason: 'no visible room tile screen points',
+          points,
+          visiblePoints,
+          renderer: structures.renderer,
+          wallShellPolicy: structures.sockets.wallShell.map((entry) => ({ item: entry.item, glbPolicy: entry.glbPolicy })),
+        };
+      }
+      const pad = 170;
+      const x = Math.max(0, Math.floor(Math.min(...xs) - pad));
+      const y = Math.max(0, Math.floor(Math.min(...ys) - pad));
+      const right = Math.min(window.innerWidth, Math.ceil(Math.max(...xs) + pad));
+      const bottom = Math.min(window.innerHeight, Math.ceil(Math.max(...ys) + pad));
+      return {
+        ok: true,
+        clip: { x, y, width: Math.max(1, right - x), height: Math.max(1, bottom - y) },
+        roomTiles: input.roomTiles,
+        depthTwoTiles: input.depthTwoTiles,
+        expectedEdges: input.expectedEdges,
+        coveredBoundaryEdges: structures.home.shelter.enclosure.coveredBoundaryEdges,
+        interiorSeamEdges: structures.home.shelter.enclosure.interiorSeamEdges,
+        boundaryEdgeCount: structures.home.shelter.enclosure.boundaryEdgeCount,
+        perimeterCoverage: structures.home.shelter.enclosure.perimeterCoverage,
+        points,
+        visiblePoints,
+        renderer: structures.renderer,
+        wallShellPolicy: structures.sockets.wallShell.map((entry) => ({ item: entry.item, glbPolicy: entry.glbPolicy })),
+      };
+    }, {
+      roomTiles: multiRoom.roomTiles,
+      depthTwoTiles: multiRoom.depthTwoTiles,
+      expectedEdges: multiRoom.expectedEdges,
+    });
+    if (!footprintReview.ok || !footprintReview.clip || footprintReview.clip.width < 80 || footprintReview.clip.height < 80) {
+      throw new Error(`Footprint review crop was not visible: ${JSON.stringify(footprintReview)}`);
+    }
+    if (footprintReview.wallShellPolicy.some((entry) => entry.glbPolicy !== 'procedural-only')) {
+      throw new Error(`Wall-shell socket policy must remain procedural-only before shared-scale house skins: ${JSON.stringify(footprintReview.wallShellPolicy)}`);
+    }
+    const footprintReviewScreenshot = path.join(outDir, 'wall-shells-footprint-review.png');
+    await page.screenshot({ path: footprintReviewScreenshot, clip: footprintReview.clip });
+    const footprintReviewPixelProbe = pngPixelProbe(await fs.readFile(footprintReviewScreenshot));
+    if (!footprintReviewPixelProbe.ok) throw new Error(`Footprint review screenshot pixel probe failed: ${JSON.stringify(footprintReviewPixelProbe)}`);
     await page.evaluate((save) => {
       window.__world.save.import(save);
     }, multiRoom.restoreSave);
@@ -1030,6 +1144,11 @@ async function main() {
       multiRoom,
       multiRoomScreenshot,
       multiRoomPixelProbe,
+      footprintReview: {
+        ...footprintReview,
+        screenshot: footprintReviewScreenshot,
+        pixelProbe: footprintReviewPixelProbe,
+      },
       pentagonInvalidEdge,
       previews,
       collisions,
@@ -1078,8 +1197,10 @@ async function main() {
       multiRoom: {
         screenshot: multiRoomScreenshot,
         pixelProbe: multiRoomPixelProbe,
+        irregular: multiRoom.irregular,
         center: multiRoom.center,
         roomTiles: multiRoom.roomTiles,
+        depthTwoTiles: multiRoom.depthTwoTiles,
         foundationTiles: multiRoom.foundationTiles,
         boundaryCoverage: multiRoom.home.shelter.enclosure.boundaryCoverage,
         perimeterCoverage: multiRoom.home.shelter.enclosure.perimeterCoverage,
@@ -1093,6 +1214,17 @@ async function main() {
         seamKeys: multiRoom.seamKeys,
         exteriorWeakens: multiRoom.exteriorWeakens,
         interiorSeamNotRequired: multiRoom.interiorSeamNotRequired,
+      },
+      footprintReview: {
+        screenshot: footprintReviewScreenshot,
+        pixelProbe: footprintReviewPixelProbe,
+        clip: footprintReview.clip,
+        roomTiles: footprintReview.roomTiles,
+        depthTwoTiles: footprintReview.depthTwoTiles,
+        boundaryEdgeCount: footprintReview.boundaryEdgeCount,
+        perimeterCoverage: footprintReview.perimeterCoverage,
+        kilnSkinsPending: footprintReview.renderer.kilnSkinsPending,
+        wallShellPolicy: footprintReview.wallShellPolicy,
       },
       pentagonInvalidEdge,
       weakened: {

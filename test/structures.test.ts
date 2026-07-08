@@ -66,6 +66,35 @@ describe('Hearth and Horizon structures', () => {
     };
   })();
 
+  const irregularRoomTopology: StructureTopology = (() => {
+    const links = new Map<string, number>();
+    const set = (tile: number, edge: number, neighbor: number) => {
+      links.set(`${tile}:${edge}`, neighbor);
+    };
+    const addExterior = (tile: number, edge: number) => {
+      const exterior = tile * 10 + edge;
+      set(tile, edge, exterior);
+      set(exterior, (edge + 3) % 6, tile);
+    };
+    for (const tile of [200, 201, 202, 203, 204, 205]) {
+      for (let edge = 0; edge < 6; edge++) addExterior(tile, edge);
+    }
+    set(200, 0, 201);
+    set(201, 3, 200);
+    set(200, 2, 202);
+    set(202, 5, 200);
+    set(201, 1, 203);
+    set(203, 4, 201);
+    set(201, 5, 204);
+    set(204, 2, 201);
+    set(202, 3, 205);
+    set(205, 0, 202);
+    return {
+      degreeOf: () => 6,
+      neighbor: (tile, edge) => links.get(`${tile}:${edge}`) ?? tile,
+    };
+  })();
+
   it('normalizes save data and rejects invalid or duplicate placed props', () => {
     const raw = [
       { id: 4, item: 'campfire', tile: 10, layer: 3, yaw: 0.5 },
@@ -1726,6 +1755,131 @@ describe('Hearth and Horizon structures', () => {
     );
     expect(withoutDivider.protected).toBe(true);
     expect(withoutDivider.enclosure.coveredBoundaryEdges).toEqual(expectedBoundaryEdges);
+  });
+
+  it('keeps irregular connected foundation rooms sealed only by their outer perimeter', () => {
+    const expectedBoundaryEdges = [
+      '200:edge:1',
+      '200:edge:3',
+      '200:edge:4',
+      '200:edge:5',
+      '201:edge:0',
+      '201:edge:2',
+      '201:edge:4',
+      '202:edge:0',
+      '202:edge:1',
+      '202:edge:2',
+      '202:edge:4',
+      '203:edge:0',
+      '203:edge:1',
+      '203:edge:2',
+      '203:edge:3',
+      '203:edge:5',
+      '204:edge:0',
+      '204:edge:1',
+      '204:edge:3',
+      '204:edge:4',
+      '204:edge:5',
+      '205:edge:1',
+      '205:edge:2',
+      '205:edge:3',
+      '205:edge:4',
+      '205:edge:5',
+    ];
+    const expectedInteriorSeams = [
+      '200:edge:0',
+      '200:edge:2',
+      '201:edge:1',
+      '201:edge:3',
+      '201:edge:5',
+      '202:edge:3',
+      '202:edge:5',
+      '203:edge:4',
+      '204:edge:2',
+      '205:edge:0',
+    ];
+    const wallShells: StructureSave[] = expectedBoundaryEdges.map((key, index) => {
+      const [, tileRaw, edgeRaw] = /^(\d+):edge:(\d+)$/.exec(key) ?? [];
+      const tile = Number(tileRaw);
+      const edge = Number(edgeRaw);
+      return {
+        id: 30 + index,
+        item: key === '200:edge:1' ? 'wallDoorPanel' : key === '205:edge:5' ? 'wallWindowPanel' : 'wallPanel',
+        tile,
+        layer: 2,
+        yaw: STRUCTURE_YAW_STEP * edge,
+      };
+    });
+    const structures: StructureSave[] = [
+      { id: 1, item: 'bedroll', tile: 200, layer: 2, yaw: 0, state: { home: true } },
+      { id: 2, item: 'floorFoundation', tile: 201, layer: 2, yaw: 0 },
+      { id: 3, item: 'floorFoundation', tile: 202, layer: 2, yaw: 0 },
+      { id: 4, item: 'floorFoundation', tile: 203, layer: 2, yaw: 0 },
+      { id: 5, item: 'floorFoundation', tile: 204, layer: 2, yaw: 0 },
+      { id: 6, item: 'floorFoundation', tile: 205, layer: 2, yaw: 0 },
+      { id: 7, item: 'roofJoin', tile: 201, layer: 2, yaw: STRUCTURE_YAW_STEP * 3 },
+      { id: 8, item: 'roofJoin', tile: 202, layer: 2, yaw: STRUCTURE_YAW_STEP * 5 },
+      { id: 9, item: 'roofJoin', tile: 203, layer: 2, yaw: STRUCTURE_YAW_STEP * 4 },
+      { id: 10, item: 'roofJoin', tile: 204, layer: 2, yaw: STRUCTURE_YAW_STEP * 2 },
+      { id: 11, item: 'roofJoin', tile: 205, layer: 2, yaw: 0 },
+      { id: 12, item: 'campfire', tile: 203, layer: 2, yaw: 0, state: { lit: true } },
+      { id: 13, item: 'workbench', tile: 204, layer: 2, yaw: 0 },
+      { id: 14, item: 'chest', tile: 205, layer: 2, yaw: 0 },
+      { id: 15, item: 'wallDoorPanel', tile: 200, layer: 2, yaw: 0 },
+      ...wallShells,
+    ];
+
+    const shelter = shelterReport(structures, irregularRoomTopology);
+
+    expect(shelter).toMatchObject({
+      centerTile: 200,
+      tiles: [200, 201, 202, 203, 204, 205],
+      protected: true,
+      functional: true,
+      label: 'shelter alive',
+      enclosure: {
+        footprintMode: 'connected-foundation',
+        roomTileCount: 6,
+        roomTiles: [200, 201, 202, 203, 204, 205],
+        foundationTiles: [201, 202, 203, 204, 205],
+        roofTiles: [201, 202, 203, 204, 205],
+        utilityTiles: [203, 204, 205],
+        boundaryCoverageMode: 'edge',
+        boundaryCoverageNeed: expectedBoundaryEdges.length,
+        boundaryEdgeCount: expectedBoundaryEdges.length,
+        boundaryCoverage: 1,
+        perimeterCoverage: 1,
+        doorBoundaryEdges: ['200:edge:1'],
+        windowBoundaryEdges: ['205:edge:5'],
+        serviceReady: true,
+      },
+    });
+    expect(shelter.enclosure.boundaryEdges).toEqual(expectedBoundaryEdges);
+    expect(shelter.enclosure.coveredBoundaryEdges).toEqual(expectedBoundaryEdges);
+    expect(shelter.enclosure.wallBoundaryEdges).toEqual(expectedBoundaryEdges);
+    expect(shelter.enclosure.interiorSeamEdges).toEqual(expectedInteriorSeams);
+    for (const seam of expectedInteriorSeams) {
+      expect(shelter.enclosure.boundaryEdges).not.toContain(seam);
+    }
+    expect(shelter.enclosure.doorBoundaryEdges).not.toContain('200:edge:0');
+    expect(shelter.missing).toEqual([]);
+
+    const weakened = shelterReport(
+      structures.filter((entry) => !(entry.tile === 203 && structureYawTurn(entry.yaw) === 5)),
+      irregularRoomTopology,
+    );
+    expect(weakened.protected).toBe(false);
+    expect(weakened.functional).toBe(false);
+    expect(weakened.missing).toContain('room boundary');
+    expect(weakened.enclosure.coveredBoundaryEdges).not.toContain('203:edge:5');
+
+    const withoutInteriorDoor = shelterReport(
+      structures.filter((entry) => !(entry.item === 'wallDoorPanel' && entry.tile === 200 && structureYawTurn(entry.yaw) === 0)),
+      irregularRoomTopology,
+    );
+    expect(withoutInteriorDoor.protected).toBe(true);
+    expect(withoutInteriorDoor.functional).toBe(true);
+    expect(withoutInteriorDoor.enclosure.coveredBoundaryEdges).toEqual(expectedBoundaryEdges);
   });
 
   it('keeps connected foundation rooms valid when the home room is a pentagon tile', () => {

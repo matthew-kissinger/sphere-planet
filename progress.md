@@ -3,6 +3,19 @@ Current operating goal: Hearth and Horizon full crafting-survival cycle under th
 
 ## 2026-07-08
 
+- Closed the C6.2 irregular/broader wall-shell footprint proof and night-closeout task
+  ledger. `test/structures.test.ts` now includes a six-tile depth-2 irregular connected
+  foundation fixture with 26 explicit exterior boundary edges, depth seams excluded from
+  boundary/covered edges, exterior door/window coverage, a removed exterior wall weakening
+  shelter, and an interior seam door not being required. `npm run proof:c6-wall-shells`
+  now finds and builds a real live six-tile irregular footprint on the sphere, including
+  three depth-two room tiles, 24 exterior edges, full perimeter coverage, interior seams
+  excluded, exterior wall weakening, interior seam door non-requirement, `kilnSkinsPending:
+  0`, and a procedural-only wall-shell socket policy. It also writes
+  `output/playwright/c6-wall-shells/wall-shells-footprint-review.png`; that crop is
+  proof-grade but still cluttered, so final beauty/readability house framing remains open.
+  Added `docs/hearth-and-horizon-remaining-tasks.md` with 89 post-closeout atomic tasks
+  remaining for the full Hearth and Horizon goal.
 - Closed the C6.1 topology-safe wall-shell proof slice. `structurePlacementBlocker`,
   `canPlaceStructure`, `addStructure`, `rotateStructure`, `relocateStructure`, and the
   build-command facade now accept topology, so edge sockets beyond a tile's actual degree
@@ -78,9 +91,10 @@ Current operating goal: Hearth and Horizon full crafting-survival cycle under th
   four-tile connected room with 16 topology-derived exterior edges, complete
   `coveredBoundaryEdges`, perimeter coverage `1`, services placed on founded room tiles,
   exterior wall relocation weakening shelter, and interior seam door relocation not
-  weakening shelter. Later C6.1 work closed topology-safe pentagon invalid-edge proof, so
-  the remaining C6 work is arbitrary/broader real-world footprints, cleaner
-  beauty/readability captures, and shared-scale Kiln house-shell skins after those gates.
+  weakening shelter. Later C6.1 work closed topology-safe pentagon invalid-edge proof, and
+  C6.2 closed the first irregular depth-two footprint proof, so the remaining C6 work is
+  cleaner beauty/readability captures and shared-scale Kiln house-shell skins after those
+  gates.
 - Expanded the K9 aquatic GLB proof from the single cave-shimmer path to all five accepted
   singleton bodies: `fish-shore-minnow`, `fish-storm-runner`, `fish-cave-shimmer`,
   `creature-driftjelly`, and `fish-reed-fry`. `debugSetFishVisualScenario` now builds
@@ -117,8 +131,9 @@ Current operating goal: Hearth and Horizon full crafting-survival cycle under th
   coverage `1`, plus a first connected foundation-backed room whose outer perimeter excludes
   interior seams. It still retains exact edge coverage diagnostics, wall/window/corner
   blockers, passable door edges, real player movement collision, stale collision clearing,
-  and shelter weakening when a corner moves out. Remaining C6 work is arbitrary/broader
-  footprints, cleaner beauty/readability captures, and shared-scale house-shell skins.
+  and shelter weakening when a corner moves out. Later C6.2 work closed the first irregular
+  depth-two footprint proof, so remaining C6 work is cleaner beauty/readability captures and
+  shared-scale house-shell skins.
 - Promoted, cataloged, and runtime-wired the exact K10 pickup/drop Kiln pack. The
   committed model set now includes 82 ready GLBs / 0 unused / 0 missing, including
   `drop-dirt-clod`, `drop-sand-pile`, `drop-snow-clump`, `drop-glow-crystal`,
@@ -239,9 +254,9 @@ Current operating goal: Hearth and Horizon full crafting-survival cycle under th
   hex, rejects a duplicate wall-door edge, and still verifies shelter weakening when a wall
   piece moves out. Later C6 work added traversal collision, edge-based shelter coverage, a
   functional serviced single-room shell, a full six-edge single-room perimeter proof, a
-  first connected foundation-backed outer-perimeter proof, and topology-safe pentagon
-  invalid-edge proof; remaining C6 work is arbitrary/broader real-world footprints,
-  beauty/readability proof, and shared-scale Kiln skins over the code-owned wall shell.
+  first connected foundation-backed outer-perimeter proof, topology-safe pentagon
+  invalid-edge proof, and irregular depth-two footprint proof; remaining C6 work is
+  beauty/readability proof and shared-scale Kiln skins over the code-owned wall shell.
 - Closed the second C6 wall/shell socket slice. `wallDoorPanel`, `wallWindowPanel`,
   `wallCorner`, and `roofJoin` are now craftable/placeable code-owned building pieces with
   socket specs, snap-preview silhouettes, renderer diagnostics, save coverage, build
@@ -263,9 +278,9 @@ Current operating goal: Hearth and Horizon full crafting-survival cycle under th
   `room boundary` missing. Later C6 slices add true edge-addressed sockets, corners,
   wall-with-door/window panels, roof joins, multi-piece-per-tile building, traversal
   blockers, a functional serviced single-room shell, a full six-edge single-room
-  perimeter proof, a first connected foundation-backed outer-perimeter proof, and
-  topology-safe pentagon invalid-edge proof. Arbitrary/broader real-world footprints,
-  beauty/readability proof, and GLB skins for shared-scale house shells remain future C6
+  perimeter proof, a first connected foundation-backed outer-perimeter proof,
+  topology-safe pentagon invalid-edge proof, and irregular depth-two footprint proof.
+  Beauty/readability proof and GLB skins for shared-scale house shells remain future C6
   work.
 - Promoted and wired the K11 singleton bird pack. `bird-sky-kite`, `bird-shore-gull`,
   `bird-forest-flutter`, and `bird-storm-finch` now live under committed

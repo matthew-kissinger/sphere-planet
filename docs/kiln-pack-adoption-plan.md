@@ -72,7 +72,7 @@ runtime dressing skins over real carved cave signals.
 | K1/K10 pickup and drop skins | `drop-wood-logs`, `drop-ore-chunk`, `drop-dirt-clod`, `drop-sand-pile`, `drop-snow-clump`, `drop-glow-crystal`, `drop-raw-fish`, `drop-kelp-reeds`, `drop-compost-pellet`, `drop-cave-mushroom`, `drop-creature-fiber`, plus `node-root-pod` as the seed pickup alias | `ResourceDropRenderer` | Passing expanded slice: `npm run proof:k10-resource-drops` spawns 13 source-aware drops, loads all 11 exact pickup/drop GLBs plus the committed seed alias, proves instanced material batches, collects wood/rock/dirt/sand/snow plus crafted food/forage/reward items into inventory, records desktop/phone screenshots, and rejects `generated/` runtime requests. `npm run proof:k1-resource-drops` remains a backward-compatible alias for this expanded gate |
 | K2 harvest nodes | all 12 `node-*` harvest/resource assets | `DomainResourceRenderer`, domain hooks | Passing first slice: `npm run proof:k2-domain-resources` reveals all 36 domain nodes, loads all 12 committed node GLBs, proves 36 batched instances on 33 instanced draw calls, keeps code-owned harvest glows/base overlays, records desktop/phone screenshots, and rejects `generated/` runtime requests |
 | K3 camp and home props | `campfire`, `bedroll`, `chest`, `crop-plot`, `drying-rack`, `weather-vane`, `workbench` | `StructureRenderer` | Passing first slice: `npm run proof:k3-home-props` places all seven props, loads committed GLB skins from `assets/kiln/models/`, keeps state overlays, storage, fire, warmth, crop, drying, and weather behavior readable, records desktop/phone screenshots, and rejects `generated/` runtime requests |
-| K3W wall and house shell contract | Code-authored/procedural wall panels, corners, wall-with-window openings, wall-with-door openings, half walls/rails, roof joins, foundations, and snap sockets; Kiln skins only after the wall contract exists | `src/sim/structures.ts`, `src/render/structures.ts`, `StructureRenderer` | Edge-socket, edge-shelter, traversal-collision, serviced-room, full six-edge single-room perimeter, connected outer-perimeter, and topology-safe pentagon slice passing: `npm run proof:c6-wall-shells` proves `floorFoundation`, `wallPanel`, `wallDoorPanel`, `wallWindowPanel`, `wallCorner`, `wallHalfRail`, and `roofJoin` sockets, edge-based weather-safe wall coverage, rail/foundation non-enclosure, integrated opening rules, same-hex floor/center/edge stacking, duplicate edge blocking, invalid edge blocking beyond a tile's real degree, wall/window/corner traversal blockers, passable door edges, live player movement hitting a wall blocker, stale collision clearing after relocation, shelter weakening when a corner moves out, a serviced wall-shell room becoming a `shelter alive` / `lived-in` functional home with campfire, workbench, chest, and bedroll shelter sleep, all six home-boundary edges covered in a single-room shell, a connected four-tile foundation-backed room deriving coverage from topology-derived exterior edges while excluding interior seams, and a live degree-5 pentagon invalid-edge denial. Remaining proof must add arbitrary/broader real-world footprints and cleaner beauty/readability captures before shared-scale Kiln house-shell skins are generated or wired |
+| K3W wall and house shell contract | Code-authored/procedural wall panels, corners, wall-with-window openings, wall-with-door openings, half walls/rails, roof joins, foundations, and snap sockets; Kiln skins only after the wall contract exists | `src/sim/structures.ts`, `src/render/structures.ts`, `StructureRenderer` | Edge-socket, edge-shelter, traversal-collision, serviced-room, full six-edge single-room perimeter, connected outer-perimeter, topology-safe pentagon, and irregular depth-two footprint slices passing: `npm run proof:c6-wall-shells` proves `floorFoundation`, `wallPanel`, `wallDoorPanel`, `wallWindowPanel`, `wallCorner`, `wallHalfRail`, and `roofJoin` sockets, edge-based weather-safe wall coverage, rail/foundation non-enclosure, integrated opening rules, same-hex floor/center/edge stacking, duplicate edge blocking, invalid edge blocking beyond a tile's real degree, wall/window/corner traversal blockers, passable door edges, live player movement hitting a wall blocker, stale collision clearing after relocation, shelter weakening when a wall/corner moves out, a serviced wall-shell room becoming a `shelter alive` / `lived-in` functional home with campfire, workbench, chest, and bedroll shelter sleep, all six home-boundary edges covered in a single-room shell, connected foundation-backed rooms deriving coverage from topology-derived exterior edges while excluding interior seams, a live degree-5 pentagon invalid-edge denial, and a real six-tile irregular live footprint with three depth-two tiles and 24 exterior edges. Remaining proof must add cleaner beauty/readability captures before shared-scale Kiln house-shell skins are generated or wired |
 | K4 waterline and utility props | `rain-cistern`, `fish-trap`, `shore-net`, `lantern-post`, `dock-segment`, `compost-bin`, `root-cellar` | `StructureRenderer` plus waterline/fishing rules | Passing first slice: `npm run proof:k4-utilities` places all seven utility/waterline props, loads committed GLB skins from `assets/kiln/models/`, keeps waterline readiness, trap/net/cistern/cellar/lantern state overlays code-owned, proves desktop and phone screenshots, and rejects `generated/` runtime requests |
 | K5 trees and shrubs | `tree-pine`, `tree-broadleaf`, `tree-dead-snag`, `tree-shrub` | `Trees`, `Streamer`, `TreeAssetRenderer` | Passing first slice: `npm run proof:k5-trees` loads all four committed tree GLBs, replaces chunk-embedded procedural tree meshes only after all skins are instanced-ready, proves 210 resident trees on 11 instanced draw calls, keeps bases planted by disabling whole-instance matrix wind sway until a height-weighted bend exists, fells a tree into ground drops, records desktop/phone screenshots, and rejects `generated/` runtime requests |
 | K6 native creatures | all `creature-*` GLBs | `NativeLifeRenderer` plus native-life/combat sim | Passing first slice: `npm run proof:k6-creatures` loads all nine committed creature GLBs, requires idle/walk clips, distance-gates mixers, proves tend/ward responses, captures desktop/phone screenshots, and rejects `generated/` runtime requests |
@@ -140,13 +140,13 @@ The asset-pack adoption track is done when:
   `room boundary` missing when one corner moves out. The current slice also splits
   `floorFoundation` into a floor socket so furniture can sit on founded room tiles, proves a
   connected four-tile foundation-backed room with 16 exterior perimeter edges and interior
-  seams excluded, proves exterior wall relocation weakens the room, and proves an interior
-  seam door is not required for shelter. It also proves a foundation plus three wall edges on
+  seams excluded, then an irregular six-tile live footprint with three depth-two tiles and
+  24 exterior edges. It proves exterior wall relocation weakens the room and proves an
+  interior seam door is not required for shelter. It also proves a foundation plus three wall edges on
   one hex, duplicate-edge rejection, edge-based shelter coverage diagnostics, wall/window/corner traversal
   blockers, passable integrated door edges, real player movement hitting a wall blocker,
   and old collision edges clearing after the corner relocates. Kiln house-shell skins still
-  wait on arbitrary/broader footprint proof, cleaner beauty/readability captures, and a
-  shared-scale wall-shell pack.
+  wait on cleaner beauty/readability captures and a shared-scale wall-shell pack.
 - K4 waterline/utility props are runtime-wired for `compost-bin`, `rain-cistern`,
   `root-cellar`, `dock-segment`, `fish-trap`, `shore-net`, and `lantern-post`.
   `StructureRenderer` adds approved GLB skins over code-owned center or shore sockets,
@@ -458,8 +458,9 @@ These are still procedural or code-authored, with different reasons:
 - **House visuals intentionally blocked on code contracts**: current wall panels,
   integrated wall-door/window panels, corners, rails, foundations, and roof joins are
   procedural/code-owned sockets. Decorative GLB skins should come only from a shared-scale
-  house-shell pack after broader room-shape rules are proven; first edge-based shelter
-  coverage and wall traversal collision are already code-owned and browser-proven.
+  house-shell pack after cleaner beauty/readability proof; edge-based shelter coverage,
+  wall traversal collision, connected outer perimeters, topology-safe pentagon blocking, and
+  irregular depth-two footprints are already code-owned and browser-proven.
 - **Runtime families still awaiting new GLB generation or later art decisions**: K8
   shared-scale house shell skins, future ore/resource node expansion after item taxonomy,
   avatar/equipment authored assets, and optional future wonder/cave dressing beyond the
@@ -490,15 +491,16 @@ remain accepted with explicit caps.
 
 ## Next Critical Slice
 
-K1, K2, K3, K4, K5, K6, K6T, K6R, K7, K9, K11, and the serviced plus full-six-edge K3W/C6 wall-shell slice now
+K1, K2, K3, K4, K5, K6, K6T, K6R, K7, K9, K11, and the serviced, full-six-edge, connected, topology-safe, and irregular K3W/C6 wall-shell slices now
 prove the repeated static-family, utility/waterline skin, first animated-family, native
 targetability, sparse creature-roaming, aquatic singleton, sky-life singleton, and
-code-owned house-shell socket paths. Continue with broader room-shape polish, richer
+code-owned house-shell socket paths. Continue with clean house readability framing, richer
 G5/K6R creature behavior, future ore/resource expansion, shared-scale house-shell skin
 decisions, richer fishing verbs/beauty framing after the closed K9.2 cue slice, and the
 avatar/equipment authored-asset path. The night-closeout decision is to avoid new fish
 generation or beauty claims now that the existing fishing loop tells the player what to do
-through HUD/readback and a focused interaction proof.
+through HUD/readback and a focused interaction proof. The full remaining-task ledger is
+tracked in `docs/hearth-and-horizon-remaining-tasks.md`.
 
 ## End-Of-Night Remaining Atomic Tasks
 
@@ -521,14 +523,13 @@ through HUD/readback and a focused interaction proof.
 5. Execute the readiness warning decisions above: seed/drop replacement, LOD/simplify passes
    for high-density assets, and explicit sparse-use acceptance notes where current proof is
    good enough.
-6. Finish C6 broader footprint and beauty/readability proof before generating house-shell
+6. Finish C6 beauty/readability proof before generating house-shell
    art. Current C6 shelter authority now proves a serviced bedroll-centered wall-shell room,
-   a full six-edge single-room shell, a connected four-tile foundation-backed outer-perimeter
-   room, and topology-safe invalid-edge blocking on degree-5 pentagon tiles. Arbitrary or
-   irregular real-world layouts and a clean reviewer-readable house screenshot still need
-   proof. After that broader perimeter plus beauty/readability contract passes, generate one
-   shared-scale Kiln house-shell pack for decorative wall/foundation/roof skins over the
-   code-owned sockets.
+   a full six-edge single-room shell, connected foundation-backed outer-perimeter rooms,
+   topology-safe invalid-edge blocking on degree-5 pentagon tiles, and a real irregular
+   six-tile depth-two footprint. A clean reviewer-readable house screenshot still needs
+   proof. After that beauty/readability contract passes, generate one shared-scale Kiln
+   house-shell pack for decorative wall/foundation/roof skins over the code-owned sockets.
 7. Start the avatar/equipment authored-asset pack after socket decisions: final Wayfarer body,
    hatchet, pickaxe, fishing rod, sword, bow, arrows, chart/map, pack frame, and storm cloak.
 8. Deepen G5/K6R native-life behavior on top of the current sparse roaming actors. The
