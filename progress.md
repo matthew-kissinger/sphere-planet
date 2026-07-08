@@ -3,6 +3,28 @@ Current operating goal: Hearth and Horizon full crafting-survival cycle under th
 
 ## 2026-07-08
 
+- Wrapped the current H5 GLB alignment pass for the approved 82-asset pack. The runtime
+  keeps pine/shrub skins in authored Y-up, rotates only tall broadleaf/dead-snag trees
+  through longest-axis-to-Y, lifts tree bases to a small surface offset, and disables
+  whole-instance matrix wind sway until a height-weighted bend can move only upper foliage.
+  Native creature GLB skins now preserve authored local `+Z` as runtime local `+Z`, so the
+  walking direction no longer carries the old forced `-X` front correction. Focused proof
+  now covers tree, creature, resource, landmark, skyfall, and asset-viewer orientation
+  contracts, and the remaining GLB debt is specific: fish branch proof expansion, exact
+  seed/drop art instead of the `node-root-pod` alias, shrine/crater semantic yaw review,
+  mesh/triangle warning decisions, broader blind gameplay screenshot review, shared-scale
+  house-shell skins, avatar/equipment authored assets, future ore/resource nodes, and
+  deeper native-life/combat behavior.
+- Closed the first C6 edge-based shelter coverage slice. Wall-shell shelter reports now
+  normalize owned wall/opening sockets onto home-room boundary edge keys, so home-tile
+  edge walls count, adjacent walls only count when their yaw owns the room-facing edge,
+  doors only satisfy access when their edge is on the boundary, and wrong-facing walls no
+  longer fake enclosure. Diagnostics now expose `boundaryCoverageMode`,
+  `coveredBoundaryEdges`, door/window/wall edge sets, the four-edge weather-safe threshold,
+  total perimeter edge count, and true perimeter coverage. `npm run proof:c6-wall-shells`
+  now proves edge-based coverage, yaw-aligned wall-door/window/corner placement, wall
+  traversal collision, passable door edges, and stale collision clearing after relocation.
+  Remaining C6 work is broader room shapes and shared-scale house-shell skins.
 - Closed the next C6 wall-shell gameplay slice. `structureTraversalBlocker` now derives
   player traversal blockers from the same edge sockets used by wall-shell placement:
   full walls, integrated window walls, and corners block the relevant hex edge; integrated
@@ -58,12 +80,12 @@ Current operating goal: Hearth and Horizon full crafting-survival cycle under th
   are merely pending; the procedural body is reserved for actual load failure so first
   impressions do not flash legacy creature art before Kiln models arrive.
 - Fixed the two immediate K5/K6 visual readability regressions from playtesting. Native
-  creature GLB skins now declare and apply an authored local `-X` front to runtime local
-  `+Z` movement-forward correction before center-XZ/bottom-Y fitting, and the Kiln asset
-  viewer/proofs assert that policy so walking creatures do not face sideways. Tree and
-  shrub wind now applies as root-anchored local tilt around the bottom pivot instead of
-  translating the whole instanced mesh, keeping vegetation bases planted while upper mass
-  sways. While reconciling the in-progress K6R behavior pass, native-life snapshots now
+  creature GLB skins now preserve authored local `+Z` as runtime local `+Z`
+  movement-forward before center-XZ/bottom-Y fitting, and the Kiln asset viewer/proofs
+  assert that policy so walking creatures do not face sideways. Tree and shrub ambient
+  matrix wind sway is disabled until a height-weighted vertex/shader bend exists; this
+  keeps vegetation bases planted instead of rotating the whole instanced mesh. While
+  reconciling the in-progress K6R behavior pass, native-life snapshots now
   receive player proximity context and expose transient moods/states (`curious`, `flee`,
   `warn`, `telegraph`, `lunge`) through `__world.nativeLife()` and renderer stats without
   changing saved creature ids or home-site authority.
@@ -270,15 +292,17 @@ Current operating goal: Hearth and Horizon full crafting-survival cycle under th
   templates through `KilnRuntimeAssets`; `TreeAssetRenderer` mirrors resident streamer
   chunks while `Trees` remains the gameplay authority for visual kind, chopping, and wood
   drops. Procedural chunk tree meshes stay active until all four GLB skins are ready, then
-  become fallback instead of default visuals. Cosmetic sway is distance-gated to 96 world
-  units while chop damage stays matrix-driven. `npm run proof:k5-trees` now proves desktop
+  become fallback instead of default visuals. Ambient matrix wind sway stays disabled until
+  a root-stable height-weighted bend exists, while chop damage stays matrix-driven.
+  `npm run proof:k5-trees` now proves desktop
   and phone committed model requests, zero `generated/` runtime requests, 210 resident tree
   instances on 11 instanced draw calls, zero pending/fallback, screenshot pixels, no browser
   errors, and a felled tree spawning collectible wood drops.
 - Fixed the K5 tree orientation risk from screenshot review with a broad GLB import policy.
   The shared instanced asset normalizer can now preserve authored Y-up or rotate a detected
-  dominant source axis into local Y before centering, bottom-pivoting, and batching. Stemmed
-  tree skins use the longest-axis-to-Y policy, shrubs preserve authored Y-up, and fit
+  dominant source axis into local Y before centering, bottom-pivoting, and batching. Tall
+  broadleaf/dead-snag skins use the longest-axis-to-Y policy, pine and shrubs preserve
+  authored Y-up, and fit
   diagnostics now report orientation policy, chosen source up axis, correction, and
   oriented source bounds. Added `test/kilnAssetOrientation.test.ts` so sideways source
   geometry is corrected at the loader level instead of patched per renderer.

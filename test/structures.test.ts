@@ -1308,6 +1308,83 @@ describe('Hearth and Horizon structures', () => {
     expect(shelter.missing).toEqual(['workbench', 'chest']);
   });
 
+  it('counts home-tile edge wall sockets toward shelter boundary coverage', () => {
+    const structures: StructureSave[] = [
+      { id: 1, item: 'bedroll', tile: 100, layer: 2, yaw: 0, state: { home: true } },
+      { id: 2, item: 'roofBundle', tile: 101, layer: 2, yaw: 0 },
+      { id: 3, item: 'roofBundle', tile: 102, layer: 2, yaw: 0 },
+      { id: 4, item: 'wallDoorPanel', tile: 100, layer: 2, yaw: 0 },
+      { id: 5, item: 'wallPanel', tile: 100, layer: 2, yaw: STRUCTURE_YAW_STEP },
+      { id: 6, item: 'wallWindowPanel', tile: 100, layer: 2, yaw: STRUCTURE_YAW_STEP * 2 },
+      { id: 7, item: 'wallCorner', tile: 100, layer: 2, yaw: STRUCTURE_YAW_STEP * 3 },
+      { id: 8, item: 'campfire', tile: 106, layer: 2, yaw: 0, state: { lit: true } },
+    ];
+
+    const shelter = shelterReport(structures, hubTopology);
+    expect(shelter).toMatchObject({
+      protected: true,
+      functional: false,
+      label: 'weather safe',
+      hasDoor: true,
+      hasWindow: true,
+      enclosure: {
+        boundaryCoverageMode: 'edge',
+        boundaryCoverage: 1,
+        boundaryCoverageNeed: 4,
+        boundaryEdgeCount: 6,
+        perimeterCoverage: 5 / 6,
+        doorOnBoundary: true,
+        enclosed: true,
+        comfortTier: 'weather-safe',
+      },
+    });
+    expect(shelter.enclosure.boundaryEdges).toEqual([
+      '100:edge:0',
+      '100:edge:1',
+      '100:edge:2',
+      '100:edge:3',
+      '100:edge:4',
+      '100:edge:5',
+    ]);
+    expect(shelter.enclosure.coveredBoundaryEdges).toEqual([
+      '100:edge:0',
+      '100:edge:1',
+      '100:edge:2',
+      '100:edge:3',
+      '100:edge:4',
+    ]);
+    expect(shelter.enclosure.doorBoundaryEdges).toEqual(['100:edge:0']);
+    expect(shelter.enclosure.windowBoundaryEdges).toEqual(['100:edge:2']);
+    expect(shelter.missing).toEqual(['workbench', 'chest']);
+  });
+
+  it('does not let a wrong-facing wall edge satisfy the room boundary', () => {
+    const structures: StructureSave[] = [
+      { id: 1, item: 'bedroll', tile: 100, layer: 2, yaw: 0, state: { home: true } },
+      { id: 2, item: 'roofBundle', tile: 101, layer: 2, yaw: 0 },
+      { id: 3, item: 'roofBundle', tile: 102, layer: 2, yaw: 0 },
+      { id: 4, item: 'wallDoorPanel', tile: 103, layer: 2, yaw: 0 },
+      { id: 5, item: 'wallPanel', tile: 104, layer: 2, yaw: STRUCTURE_YAW_STEP },
+      { id: 6, item: 'wallPanel', tile: 105, layer: 2, yaw: 0 },
+      { id: 7, item: 'campfire', tile: 106, layer: 2, yaw: 0, state: { lit: true } },
+    ];
+
+    const shelter = shelterReport(structures, hubTopology);
+    expect(shelter.protected).toBe(false);
+    expect(shelter.missing).toContain('room boundary');
+    expect(shelter.enclosure).toMatchObject({
+      boundaryCoverageMode: 'edge',
+      boundaryCoverage: 0.5,
+      boundaryCoverageNeed: 4,
+      boundaryEdgeCount: 6,
+      perimeterCoverage: 2 / 6,
+      coveredBoundaryEdges: ['100:edge:2', '100:edge:4'],
+      wallBoundaryEdges: ['100:edge:2', '100:edge:4'],
+      doorBoundaryEdges: ['100:edge:2'],
+      enclosed: false,
+    });
+  });
+
   it('counts integrated wall door/window panels, corners, and roof joins without double-counting tiles', () => {
     const structures: StructureSave[] = [
       { id: 1, item: 'bedroll', tile: 100, layer: 2, yaw: 0, state: { home: true } },

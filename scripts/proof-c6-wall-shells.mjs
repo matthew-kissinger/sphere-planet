@@ -321,6 +321,13 @@ async function main() {
         if (ok !== expectOk) failures.push({ item: entry.item, expectedRelocateOk: expectOk, result });
         return result;
       };
+      const inwardYaw = (tile, centerTile) => {
+        const degree = world.geo.degreeOf(tile);
+        for (let edge = 0; edge < degree; edge++) {
+          if (world.geo.neighbor(tile, edge) === centerTile) return edge * Math.PI / 3;
+        }
+        return 0;
+      };
       const centers = world.nearbyTiles(3).filter((tile) => tile !== world.player.tile);
       for (const center of centers) {
         if (occupied().has(center)) continue;
@@ -354,6 +361,13 @@ async function main() {
         }
         const fire = placed.find((entry) => entry.item === 'campfire');
         if (fire) world.useStructure(fire.id);
+        const edgeAlignments = placed
+          .filter((entry) => ['wallDoorPanel', 'wallWindowPanel', 'wallCorner'].includes(entry.item))
+          .map((entry) => relocate(entry, entry.tile, inwardYaw(entry.tile, center), true));
+        if (edgeAlignments.some((result) => !result.ok)) {
+          world.save.import(baseline);
+          continue;
+        }
         const halfRail = placeFirst('wallHalfRail', 5);
         const foundation = placeFirst('floorFoundation', 7, halfRail ? [halfRail.tile] : []);
         const looseWall = placeFirst('wallPanel', 7, [halfRail?.tile, foundation?.tile].filter((tile) => tile !== undefined));
@@ -377,6 +391,7 @@ async function main() {
           boundary,
           bedroll,
           placed,
+          edgeAlignments,
           halfRail,
           foundation,
           stacked: {
@@ -413,6 +428,19 @@ async function main() {
     }
     if (readyHome.shelter.enclosure.boundaryCoverage < 0.75 || readyHome.shelter.enclosure.wallTiles.length < 3 || readyHome.shelter.enclosure.cornerTiles.length < 1 || readyHome.shelter.enclosure.roofJoinTiles.length < 1) {
       throw new Error(`wall shell boundary did not register: ${JSON.stringify(readyHome.shelter.enclosure)}`);
+    }
+    if (
+      readyHome.shelter.enclosure.boundaryCoverageMode !== 'edge'
+      || readyHome.shelter.enclosure.boundaryCoverageNeed !== 4
+      || readyHome.shelter.enclosure.boundaryEdgeCount < 5
+      || readyHome.shelter.enclosure.perimeterCoverage <= 0
+      || readyHome.shelter.enclosure.coveredBoundaryEdges.length < 3
+      || readyHome.shelter.enclosure.wallBoundaryEdges.length < 3
+      || readyHome.shelter.enclosure.doorBoundaryEdges.length < 1
+      || readyHome.shelter.enclosure.windowBoundaryEdges.length < 1
+      || !readyHome.shelter.enclosure.doorOnBoundary
+    ) {
+      throw new Error(`wall shell shelter coverage is not edge-based: ${JSON.stringify(readyHome.shelter.enclosure)}`);
     }
     if (
       (setup.structures.renderer.wallShell?.doorPanels ?? 0) < 1
@@ -579,6 +607,11 @@ async function main() {
         protected: readyHome.shelter.protected,
         functional: readyHome.functional,
         boundaryCoverage: readyHome.shelter.enclosure.boundaryCoverage,
+        boundaryCoverageMode: readyHome.shelter.enclosure.boundaryCoverageMode,
+        boundaryCoverageNeed: readyHome.shelter.enclosure.boundaryCoverageNeed,
+        boundaryEdgeCount: readyHome.shelter.enclosure.boundaryEdgeCount,
+        perimeterCoverage: readyHome.shelter.enclosure.perimeterCoverage,
+        coveredBoundaryEdges: readyHome.shelter.enclosure.coveredBoundaryEdges,
         wallTiles: readyHome.shelter.enclosure.wallTiles,
       },
       weakened: {

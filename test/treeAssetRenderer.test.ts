@@ -52,9 +52,9 @@ function template(slug: KilnTreeSkinSlug): KilnTreeSkinTemplate {
       orientedSourceBboxSize: [1, 2, 1],
       normalizedBboxSize: [1, 2, 1],
       normalizePolicy: 'center-xz-bottom-y',
-      orientation: { policy: slug === 'tree-shrub' ? 'preserve-y-up' : 'longest-axis-to-y', sourceUpAxis: 'y', axisCorrection: [0, 0, 0] },
+      orientation: { policy: slug === 'tree-broadleaf' || slug === 'tree-dead-snag' ? 'longest-axis-to-y' : 'preserve-y-up', sourceUpAxis: 'y', axisCorrection: [0, 0, 0] },
       batchingPolicy: 'instanced-merged-by-material',
-      animationPolicy: 'root-anchored-sway-near-and-damage-tilt',
+      animationPolicy: 'root-stable-damage-tilt-no-matrix-wind-sway',
       sourceUrl: `/assets/kiln/models/${slug}.glb`,
       sourceMeshCount: 1,
       instancedMeshCount: 1,
@@ -146,19 +146,21 @@ describe('tree asset renderer Kiln skin batching', () => {
     expect(stats.batchedInstances).toBe(stats.currentTrees);
     expect(stats.instancedDrawCalls).toBe(4);
     expect(stats.animationLodDistance).toBe(96);
+    expect(stats.surfaceBaseOffset).toBeCloseTo(0.03);
+    expect(stats.windSwayMode).toBe('disabled-until-height-weighted-shader');
     expect(stats.kilnTreeSkinsBySlug['tree-pine']).toMatchObject({ instancedMeshes: 1 });
     expect(stats.kilnTreeSkinsBySlug['tree-broadleaf']).toMatchObject({ instancedMeshes: 1 });
     expect(stats.kilnTreeSkinsBySlug['tree-dead-snag']).toMatchObject({ instancedMeshes: 1 });
     expect(stats.kilnTreeSkinsBySlug['tree-shrub']).toMatchObject({ instancedMeshes: 1 });
     expect(stats.kilnTreeSkinFits['tree-pine']).toMatchObject({
       sourceUrl: '/assets/kiln/models/tree-pine.glb',
-      orientation: { policy: 'longest-axis-to-y', sourceUpAxis: 'y' },
+      orientation: { policy: 'preserve-y-up', sourceUpAxis: 'y' },
       batchingPolicy: 'instanced-merged-by-material',
-      animationPolicy: 'root-anchored-sway-near-and-damage-tilt',
+      animationPolicy: 'root-stable-damage-tilt-no-matrix-wind-sway',
     });
   });
 
-  it('keeps wind sway root-anchored so tree bases do not slide across the hex', async () => {
+  it('keeps tree bases fixed by disabling whole-instance wind sway and limiting matrix lean to damage', async () => {
     const { geo, layers, columns, trees } = fixtureWorld();
     const byKind = firstLiveTreeByKind(trees, geo);
     const tile = byKind.get('pine') ?? [...byKind.values()][0];
@@ -185,22 +187,32 @@ describe('tree asset renderer Kiln skin batching', () => {
     expect(mesh).toBeDefined();
     const first = new THREE.Matrix4();
     const second = new THREE.Matrix4();
+    const damaged = new THREE.Matrix4();
     mesh!.getMatrixAt(0, first);
 
     renderer.update(geo, layers, columns, trees, camWorld, 4.75);
     mesh!.getMatrixAt(0, second);
+    trees.strike(tile!, 1, 3);
+    renderer.update(geo, layers, columns, trees, camWorld, 5.1);
+    mesh!.getMatrixAt(0, damaged);
 
     const posA = new THREE.Vector3();
     const posB = new THREE.Vector3();
+    const posC = new THREE.Vector3();
     const quatA = new THREE.Quaternion();
     const quatB = new THREE.Quaternion();
+    const quatC = new THREE.Quaternion();
     const scaleA = new THREE.Vector3();
     const scaleB = new THREE.Vector3();
+    const scaleC = new THREE.Vector3();
     first.decompose(posA, quatA, scaleA);
     second.decompose(posB, quatB, scaleB);
+    damaged.decompose(posC, quatC, scaleC);
 
     expect(posA.distanceTo(posB)).toBeLessThan(1e-6);
-    expect(quatA.angleTo(quatB)).toBeGreaterThan(0.0001);
+    expect(quatA.angleTo(quatB)).toBeLessThan(1e-6);
+    expect(posA.distanceTo(posC)).toBeLessThan(1e-6);
+    expect(quatA.angleTo(quatC)).toBeGreaterThan(0.0001);
   });
 
   it('keeps procedural chunk trees active if any approved tree GLB fails', async () => {

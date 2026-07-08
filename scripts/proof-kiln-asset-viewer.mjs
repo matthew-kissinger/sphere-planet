@@ -308,15 +308,18 @@ function assertViewerState(label, state, expected) {
     if (!record.orientation?.policy || !record.orientation?.sourceUpAxis || !Array.isArray(record.orientation?.axisCorrection)) {
       throw new Error(`${label}: ${slug} missing orientation diagnostics ${JSON.stringify(record)}`);
     }
-    if (slug.startsWith('tree-') && slug !== 'tree-shrub') {
+    if ((slug === 'tree-broadleaf' || slug === 'tree-dead-snag')) {
       if (record.orientation.policy !== 'longest-axis-to-y') throw new Error(`${label}: ${slug} missing tree upright policy ${JSON.stringify(record)}`);
       const oriented = record.orientedSourceBboxSize ?? [];
       if ((oriented[1] ?? 0) < Math.max(oriented[0] ?? 0, oriented[2] ?? 0) * 0.8) {
         throw new Error(`${label}: ${slug} still appears side-loaded after normalization ${JSON.stringify(record)}`);
       }
     }
+    if (slug === 'tree-pine' || slug === 'tree-shrub') {
+      if (record.orientation.policy !== 'preserve-y-up') throw new Error(`${label}: ${slug} should preserve authored Y-up orientation ${JSON.stringify(record)}`);
+    }
     if (slug.startsWith('creature-') && slug !== 'creature-driftjelly') {
-      if (record.orientation.policy !== 'preserve-y-up-neg-x-front-to-z' || record.orientation.sourceForwardAxis !== '-x') {
+      if (record.orientation.policy !== 'preserve-y-up' || record.orientation.sourceForwardAxis !== '+z') {
         throw new Error(`${label}: ${slug} missing creature forward policy ${JSON.stringify(record)}`);
       }
     }

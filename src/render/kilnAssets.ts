@@ -325,7 +325,7 @@ export interface KilnTreeSkinFitSnapshot {
   normalizePolicy: 'center-xz-bottom-y';
   orientation: KilnInstancedOrientationSnapshot;
   batchingPolicy: 'instanced-merged-by-material';
-  animationPolicy: 'root-anchored-sway-near-and-damage-tilt';
+  animationPolicy: 'root-stable-damage-tilt-no-matrix-wind-sway';
   sourceUrl: string;
   sourceMeshCount: number;
   instancedMeshCount: number;
@@ -996,7 +996,7 @@ const RUNTIME_TREE_SKINS: Record<KilnTreeSkinSlug, {
 }> = {
   'tree-pine': {
     kind: 'pine',
-    orientationPolicy: 'longest-axis-to-y',
+    orientationPolicy: 'preserve-y-up',
     acceptanceNote: 'accepted as an instanced evergreen tree skin; chop state, hit proxy, and wood drops remain code-authored',
   },
   'tree-broadleaf': {
@@ -1651,7 +1651,7 @@ function normalizeCreatureTemplate(source: THREE.Object3D, slug: string, targetH
   source.updateMatrixWorld(true);
   const sourceBox = new THREE.Box3().setFromObject(source);
   const runtimeSourceBboxSize = bboxSizeOfBox(sourceBox);
-  const correction = orientationCorrectionFor('y', 'preserve-y-up-neg-x-front-to-z');
+  const correction = orientationCorrectionFor('y', 'preserve-y-up');
   const root = new THREE.Group();
   root.name = `kiln-creature-template-${slug}`;
   const scaled = new THREE.Group();
@@ -1698,9 +1698,9 @@ function normalizeCreatureTemplate(source: THREE.Object3D, slug: string, targetH
     normalizedBboxSize,
     sourceMeshCount,
     orientation: {
-      policy: 'preserve-y-up-neg-x-front-to-z',
+      policy: 'preserve-y-up',
       sourceUpAxis: 'y',
-      sourceForwardAxis: correction.sourceForwardAxis,
+      sourceForwardAxis: '+z',
       axisCorrection: correction.euler,
     },
   };
@@ -2397,7 +2397,7 @@ export class KilnRuntimeAssets implements StructureSkinProvider, ResourceDropSki
           normalizePolicy: 'center-xz-bottom-y',
           orientation,
           batchingPolicy: 'instanced-merged-by-material',
-          animationPolicy: 'root-anchored-sway-near-and-damage-tilt',
+          animationPolicy: 'root-stable-damage-tilt-no-matrix-wind-sway',
           sourceUrl,
           sourceMeshCount,
           instancedMeshCount: parts.length,

@@ -291,9 +291,9 @@ function assertRendererPolicies(renderer, label, requiredVisibleSlug = null, opt
   for (const slug of slugsToCheck) {
     const fit = renderer.kilnCreatureSkinFits?.[slug];
     if (!fit) throw new Error(`${label}: missing fit diagnostics for ${slug}`);
-    if (fit.orientation?.policy !== 'preserve-y-up-neg-x-front-to-z'
-      || fit.orientation?.sourceForwardAxis !== '-x'
-      || JSON.stringify(fit.orientation?.axisCorrection) !== JSON.stringify([0, 1.570796, 0])) {
+    if (fit.orientation?.policy !== 'preserve-y-up'
+      || fit.orientation?.sourceForwardAxis !== '+z'
+      || JSON.stringify(fit.orientation?.axisCorrection) !== JSON.stringify([0, 0, 0])) {
       throw new Error(`${label}: ${slug} creature forward-axis correction drifted ${JSON.stringify(fit)}`);
     }
     if (fit.animationPolicy !== 'mixer-near-freeze-far') throw new Error(`${label}: ${slug} animation policy drifted ${JSON.stringify(fit)}`);

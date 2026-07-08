@@ -22,6 +22,8 @@ const KILN_TREE_SKIN_BY_KIND: Record<TreeVisualKind, KilnTreeSkinSlug> = {
 };
 
 const TREE_ANIMATION_LOD_DISTANCE = 96;
+const TREE_WIND_SWAY_MODE = 'disabled-until-height-weighted-shader' as const;
+const TREE_SURFACE_BASE_OFFSET = 0.03;
 
 type TreeSkinStatus = 'pending' | 'loaded' | 'fallback';
 
@@ -198,6 +200,7 @@ export class TreeAssetRenderer {
     camWorld: { x: number; y: number; z: number },
     seconds: number,
   ): void {
+    void seconds;
     for (const batch of this.skinBatches.values()) {
       batch.count = 0;
       for (const mesh of batch.meshes) mesh.count = 0;
@@ -215,8 +218,8 @@ export class TreeAssetRenderer {
     const vZ = new THREE.Vector3();
     const basis = new THREE.Matrix4();
     const q = new THREE.Quaternion();
-    const swayQ = new THREE.Quaternion();
-    const swayEuler = new THREE.Euler();
+    const damageQ = new THREE.Quaternion();
+    const damageEuler = new THREE.Euler();
     const pos = new THREE.Vector3();
     const scale = new THREE.Vector3();
     const instanceMatrix = new THREE.Matrix4();
@@ -246,16 +249,16 @@ export class TreeAssetRenderer {
       const damageLeanA = Math.sin(phase) * 0.14 * damage;
       const damageLeanB = Math.cos(phase * 1.3) * 0.12 * damage;
       const rG = layers.topRadius(columns.topLayerOf(site.tile));
-      const baseX = ux * (rG - 0.2) + offsetAx * params.offA + offsetBx * params.offB;
-      const baseY = uy * (rG - 0.2) + offsetAy * params.offA + offsetBy * params.offB;
-      const baseZ = uz * (rG - 0.2) + offsetAz * params.offA + offsetBz * params.offB;
+      const baseRadius = rG + TREE_SURFACE_BASE_OFFSET;
+      const baseX = ux * baseRadius + offsetAx * params.offA + offsetBx * params.offB;
+      const baseY = uy * baseRadius + offsetAy * params.offA + offsetBy * params.offB;
+      const baseZ = uz * baseRadius + offsetAz * params.offA + offsetBz * params.offB;
       const distToCamera = Math.hypot(baseX - camWorld.x, baseY - camWorld.y, baseZ - camWorld.z);
-      const windSway = distToCamera <= TREE_ANIMATION_LOD_DISTANCE
-        ? Math.sin(seconds * 0.8 + site.tile * 0.013) * 0.025 * (site.kind === 'deadSnag' ? 0.35 : 1)
-        : 0;
-      swayEuler.set(damageLeanB + windSway * 0.62, 0, -(damageLeanA + windSway), 'XYZ');
-      swayQ.setFromEuler(swayEuler);
-      q.multiply(swayQ);
+      if (distToCamera <= TREE_ANIMATION_LOD_DISTANCE || damage > 0) {
+        damageEuler.set(damageLeanB, 0, -damageLeanA, 'XYZ');
+        damageQ.setFromEuler(damageEuler);
+        q.multiply(damageQ);
+      }
       pos.set(
         baseX - camWorld.x,
         baseY - camWorld.y,
@@ -287,6 +290,8 @@ export class TreeAssetRenderer {
     instancedDrawCalls: number;
     batchedInstances: number;
     animationLodDistance: number;
+    surfaceBaseOffset: number;
+    windSwayMode: typeof TREE_WIND_SWAY_MODE;
     kilnTreeSkinsBySlug: Partial<Record<KilnTreeSkinSlug, TreeSkinStats>>;
     kilnTreeSkinFits: Partial<Record<KilnTreeSkinSlug, KilnTreeSkinFitSnapshot>>;
   } {
@@ -335,6 +340,8 @@ export class TreeAssetRenderer {
       instancedDrawCalls: instancedMeshes,
       batchedInstances,
       animationLodDistance: TREE_ANIMATION_LOD_DISTANCE,
+      surfaceBaseOffset: TREE_SURFACE_BASE_OFFSET,
+      windSwayMode: TREE_WIND_SWAY_MODE,
       kilnTreeSkinsBySlug,
       kilnTreeSkinFits,
     };

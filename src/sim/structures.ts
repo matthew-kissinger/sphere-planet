@@ -235,6 +235,13 @@ export type ShelterComfortTier = 'none' | 'rough' | 'weather-safe' | 'working' |
 export interface ShelterEnclosureReport {
   roomTiles: number[];
   boundaryTiles: number[];
+  boundaryEdges: string[];
+  coveredBoundaryEdges: string[];
+  wallBoundaryEdges: string[];
+  railBoundaryEdges: string[];
+  openingBoundaryEdges: string[];
+  doorBoundaryEdges: string[];
+  windowBoundaryEdges: string[];
   supportTiles: number[];
   foundationTiles: number[];
   wallTiles: number[];
@@ -246,6 +253,10 @@ export interface ShelterEnclosureReport {
   utilityTiles: number[];
   roofCoverage: number;
   boundaryCoverage: number;
+  boundaryCoverageMode: 'tile' | 'edge';
+  boundaryCoverageNeed: number;
+  boundaryEdgeCount: number;
+  perimeterCoverage: number;
   utilityCoverage: number;
   doorOnBoundary: boolean;
   warmthInside: boolean;
@@ -1341,6 +1352,13 @@ function emptyShelterEnclosure(): ShelterEnclosureReport {
   return {
     roomTiles: [],
     boundaryTiles: [],
+    boundaryEdges: [],
+    coveredBoundaryEdges: [],
+    wallBoundaryEdges: [],
+    railBoundaryEdges: [],
+    openingBoundaryEdges: [],
+    doorBoundaryEdges: [],
+    windowBoundaryEdges: [],
     supportTiles: [],
     foundationTiles: [],
     wallTiles: [],
@@ -1352,6 +1370,10 @@ function emptyShelterEnclosure(): ShelterEnclosureReport {
     utilityTiles: [],
     roofCoverage: 0,
     boundaryCoverage: 0,
+    boundaryCoverageMode: 'tile',
+    boundaryCoverageNeed: 0,
+    boundaryEdgeCount: 0,
+    perimeterCoverage: 0,
     utilityCoverage: 0,
     doorOnBoundary: false,
     warmthInside: false,
@@ -1397,6 +1419,52 @@ function isOpeningItem(item: PlaceableItemId): boolean {
   return isDoorItem(item) || isWindowItem(item);
 }
 
+interface ShelterBoundaryEdge {
+  key: string;
+  homeTile: number;
+  homeEdge: number;
+  neighborTile: number;
+  neighborEdge: number | null;
+}
+
+function shelterBoundaryEdges(topology: StructureTopology | undefined, homeTile: number, boundaryTiles: readonly number[]): ShelterBoundaryEdge[] {
+  if (!topology) return [];
+  const boundary = new Set(boundaryTiles);
+  const degree = Math.max(0, Math.trunc(topology.degreeOf(homeTile)));
+  const edges: ShelterBoundaryEdge[] = [];
+  for (let edge = 0; edge < degree; edge++) {
+    const neighbor = topology.neighbor(homeTile, edge);
+    if (neighbor === homeTile || !boundary.has(neighbor)) continue;
+    edges.push({
+      key: `${homeTile}:${edgeSlot(edge)}`,
+      homeTile,
+      homeEdge: edge,
+      neighborTile: neighbor,
+      neighborEdge: sharedEdge(topology, neighbor, homeTile),
+    });
+  }
+  return edges;
+}
+
+function structureBoundaryEdgeKeys(structure: StructureSave, edges: readonly ShelterBoundaryEdge[]): string[] {
+  if (edges.length === 0) return [];
+  const occupancy = structureSocketPlacement(structure);
+  if (occupancy.kind !== 'edge') return [];
+  const keys: string[] = [];
+  for (const edge of edges) {
+    if (structure.tile === edge.homeTile && occupancy.occupies.includes(edgeSlot(edge.homeEdge))) {
+      keys.push(edge.key);
+    } else if (
+      structure.tile === edge.neighborTile
+      && edge.neighborEdge !== null
+      && occupancy.occupies.includes(edgeSlot(edge.neighborEdge))
+    ) {
+      keys.push(edge.key);
+    }
+  }
+  return keys;
+}
+
 export function shelterReport(structures: readonly StructureSave[], topology?: StructureTopology, rings = 1): ShelterReport {
   const home = structures.find((s) => s.item === 'bedroll' && s.state?.home === true) ?? null;
   if (!home) {
@@ -1426,6 +1494,7 @@ export function shelterReport(structures: readonly StructureSave[], topology?: S
   const local = new Set(tiles);
   const boundaryTiles = tiles.filter((tile) => tile !== home.tile);
   const boundary = new Set(boundaryTiles);
+  const boundaryEdgeRecords = shelterBoundaryEdges(topology, home.tile, boundaryTiles);
   const supportTiles = tilesWithin(topology, home.tile, 2);
   const support = new Set(supportTiles);
   const nearby = structures.filter((s) => local.has(s.tile));
@@ -1449,20 +1518,45 @@ export function shelterReport(structures: readonly StructureSave[], topology?: S
   const hasCellar = supportStructures.some((s) => s.item === 'rootCellar');
   const hasLight = hasWarmth || nearby.some((s) => s.item === 'lantern' && s.state?.lit === true);
   const comfort = (hasWindow ? 1 : 0) + (hasLight ? 1 : 0) + (hasStation ? 1 : 0) + (hasStorage ? 1 : 0) + (hasCellar ? 1 : 0) + (foundationTiles.length > 0 ? 1 : 0) + Math.min(2, roofPieces);
-  const boundaryNeed = Math.max(1, Math.min(4, boundaryTiles.length || 1));
   const shellBoundaryAttempt = wallTiles.length > 0 || railTiles.length > 0;
+  const boundaryNeed = Math.max(1, Math.min(4, boundaryEdgeRecords.length || boundaryTiles.length || 1));
+  const edgeKeysFor = (predicate: (s: StructureSave) => boolean): string[] => {
+    const keys = new Set<string>();
+    for (const structure of nearby) {
+      if (!predicate(structure)) continue;
+      for (const key of structureBoundaryEdgeKeys(structure, boundaryEdgeRecords)) keys.add(key);
+    }
+    return [...keys].sort();
+  };
+  const wallBoundaryEdges = edgeKeysFor((s) => isWallBoundaryItem(s.item));
+  const railBoundaryEdges = edgeKeysFor((s) => s.item === 'wallHalfRail');
+  const openingBoundaryEdges = edgeKeysFor((s) => isOpeningItem(s.item));
+  const doorBoundaryEdges = edgeKeysFor((s) => isDoorItem(s.item));
+  const windowBoundaryEdges = edgeKeysFor((s) => isWindowItem(s.item));
   const boundaryContributorTiles = shellBoundaryAttempt ? [...wallTiles, ...openingTiles] : [...roofTiles, ...openingTiles];
   const boundaryContributorSet = new Set(boundaryContributorTiles.filter((tile) => boundary.has(tile)));
-  const boundaryCoverage = Math.min(1, boundaryContributorSet.size / boundaryNeed);
+  const edgeBoundaryContributorSet = new Set([...wallBoundaryEdges, ...openingBoundaryEdges]);
+  const boundaryCoverageMode = shellBoundaryAttempt && boundaryEdgeRecords.length > 0 ? 'edge' as const : 'tile' as const;
+  const coveredBoundaryEdges = boundaryCoverageMode === 'edge'
+    ? [...edgeBoundaryContributorSet].sort()
+    : [];
+  const boundaryEdgeCount = boundaryEdgeRecords.length;
+  const boundaryCoverage = boundaryCoverageMode === 'edge'
+    ? Math.min(1, coveredBoundaryEdges.length / boundaryNeed)
+    : Math.min(1, boundaryContributorSet.size / boundaryNeed);
+  const perimeterCoverage = boundaryCoverageMode === 'edge' && boundaryEdgeCount > 0
+    ? Math.min(1, coveredBoundaryEdges.length / boundaryEdgeCount)
+    : boundaryCoverage;
   const utilityCoverage = Math.min(1, (Number(hasWarmth) + Number(hasStation) + Number(hasStorage)) / 3);
-  const spatiallyEnclosed = roofPieces >= ROOF_NEED && boundaryCoverage >= 0.75 && doorOnBoundary;
+  const effectiveDoorOnBoundary = boundaryCoverageMode === 'edge' ? doorBoundaryEdges.length > 0 : doorOnBoundary;
+  const spatiallyEnclosed = roofPieces >= ROOF_NEED && boundaryCoverage >= 0.75 && effectiveDoorOnBoundary;
   const weatherSafe = spatiallyEnclosed && hasWarmth;
   const serviceReady = hasWarmth && hasStation && hasStorage;
   const functional = weatherSafe && serviceReady;
   const missing: string[] = [];
   if (roofPieces < ROOF_NEED) missing.push(`roof ${roofPieces}/${ROOF_NEED}`);
   if (!hasDoor) missing.push('door');
-  else if (!doorOnBoundary) missing.push('door on room edge');
+  else if (!effectiveDoorOnBoundary) missing.push('door on room edge');
   if (hasDoor && roofPieces >= ROOF_NEED && boundaryCoverage < 0.75) missing.push('room boundary');
   if (!hasWarmth) missing.push('lit campfire');
   if (!hasStation) missing.push('workbench');
@@ -1471,6 +1565,13 @@ export function shelterReport(structures: readonly StructureSave[], topology?: S
   const enclosure: ShelterEnclosureReport = {
     roomTiles: tiles,
     boundaryTiles,
+    boundaryEdges: boundaryEdgeRecords.map((edge) => edge.key),
+    coveredBoundaryEdges,
+    wallBoundaryEdges,
+    railBoundaryEdges,
+    openingBoundaryEdges,
+    doorBoundaryEdges,
+    windowBoundaryEdges,
     supportTiles,
     foundationTiles,
     wallTiles,
@@ -1482,8 +1583,12 @@ export function shelterReport(structures: readonly StructureSave[], topology?: S
     utilityTiles,
     roofCoverage: Math.min(1, roofPieces / ROOF_NEED),
     boundaryCoverage,
+    boundaryCoverageMode,
+    boundaryCoverageNeed: boundaryNeed,
+    boundaryEdgeCount,
+    perimeterCoverage,
     utilityCoverage,
-    doorOnBoundary,
+    doorOnBoundary: effectiveDoorOnBoundary,
     warmthInside: hasWarmth,
     lightInside: hasLight,
     workbenchInside: hasStation,

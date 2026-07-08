@@ -108,10 +108,10 @@ function template(slug: KilnCreatureSkinSlug): KilnCreatureSkinTemplate {
       normalizedBboxSize: [0.4, 0.6, 0.4],
       normalizePolicy: 'center-xz-bottom-y-fit-height',
       orientation: {
-        policy: 'preserve-y-up-neg-x-front-to-z',
+        policy: 'preserve-y-up',
         sourceUpAxis: 'y',
-        sourceForwardAxis: '-x',
-        axisCorrection: [0, 1.570796, 0],
+        sourceForwardAxis: '+z',
+        axisCorrection: [0, 0, 0],
       },
       animationPolicy: 'mixer-near-freeze-far',
       sourceUrl: `/assets/kiln/models/${slug}.glb`,
@@ -242,10 +242,10 @@ describe('native life renderer asset readability', () => {
     expect(farStats.kilnCreatureSkinFits['creature-brambleback']).toMatchObject({
       normalizePolicy: 'center-xz-bottom-y-fit-height',
       orientation: {
-        policy: 'preserve-y-up-neg-x-front-to-z',
+        policy: 'preserve-y-up',
         sourceUpAxis: 'y',
-        sourceForwardAxis: '-x',
-        axisCorrection: [0, 1.570796, 0],
+        sourceForwardAxis: '+z',
+        axisCorrection: [0, 0, 0],
       },
     });
     expect(farStats.kilnCreatureSkinFits['creature-tide-lurker']).toMatchObject({
@@ -323,8 +323,8 @@ describe('native life renderer asset readability', () => {
       clips: ['idle', 'walk'],
     });
     expect(stats.kilnCreatureSkinFits['creature-brambleback']?.orientation).toMatchObject({
-      policy: 'preserve-y-up-neg-x-front-to-z',
-      sourceForwardAxis: '-x',
+      policy: 'preserve-y-up',
+      sourceForwardAxis: '+z',
     });
   });
 });

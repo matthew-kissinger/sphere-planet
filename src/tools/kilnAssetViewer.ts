@@ -226,10 +226,10 @@ function familyForSlug(slug: string): KilnViewerFamily {
 }
 
 function orientationPolicyFor(slug: string, asset?: KilnManifestAsset): KilnInstancedOrientationPolicy {
-  if (slug === 'tree-pine' || slug === 'tree-broadleaf' || slug === 'tree-dead-snag') return 'longest-axis-to-y';
+  if (slug === 'tree-broadleaf' || slug === 'tree-dead-snag') return 'longest-axis-to-y';
   if (slug === 'lantern-post' || slug === 'weather-vane') return 'longest-axis-to-y';
   if (slug.startsWith('shrine-') || slug.startsWith('cave-mouth-')) return 'preserve-y-up-x-front-to-z';
-  if (slug.startsWith('creature-') && slug !== 'creature-driftjelly') return 'preserve-y-up-neg-x-front-to-z';
+  if (slug.startsWith('creature-') && slug !== 'creature-driftjelly') return 'preserve-y-up';
   void asset;
   return 'preserve-y-up';
 }
@@ -512,6 +512,8 @@ function makeNormalizedAnimatedObject(
     : [0, 0, 0];
   const orientation = policy === 'preserve-y-up-neg-x-front-to-z'
     ? { policy, sourceUpAxis: 'y' as const, sourceForwardAxis: '-x' as const, axisCorrection }
+    : slug.startsWith('creature-') && slug !== 'creature-driftjelly'
+    ? { policy: 'preserve-y-up' as const, sourceUpAxis: 'y' as const, sourceForwardAxis: '+z' as const, axisCorrection }
     : { policy: 'preserve-y-up' as const, sourceUpAxis: 'y' as const, axisCorrection };
   const body = source.clone(true);
   body.traverse((child) => {

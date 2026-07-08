@@ -235,16 +235,20 @@ function assertTreeRenderer(renderer, label, requiredVisibleSlug = null) {
   if ((renderer.batchedInstances ?? 0) <= 0) throw new Error(`${label}: expected visible batched tree instances`);
   if ((renderer.instancedDrawCalls ?? 999) > 16) throw new Error(`${label}: draw-call budget exceeded; expected <=16 instanced draws, got ${renderer.instancedDrawCalls}`);
   if ((renderer.animationLodDistance ?? 0) !== 96) throw new Error(`${label}: animation LOD distance drifted ${renderer.animationLodDistance}`);
+  if (Math.abs((renderer.surfaceBaseOffset ?? 0) - 0.03) > 1e-6) throw new Error(`${label}: tree base surface offset drifted ${renderer.surfaceBaseOffset}`);
+  if (renderer.windSwayMode !== 'disabled-until-height-weighted-shader') {
+    throw new Error(`${label}: tree wind sway mode should keep bases planted until a height-weighted shader exists ${JSON.stringify(renderer)}`);
+  }
 
   for (const slug of requiredTreeSlugs) {
     const bySlug = renderer.kilnTreeSkinsBySlug?.[slug];
     if (!bySlug?.instancedMeshes) throw new Error(`${label}: ${slug} did not create an instanced batch ${JSON.stringify(bySlug)}`);
     if ((bySlug.pending ?? 0) !== 0 || (bySlug.fallback ?? 0) !== 0) throw new Error(`${label}: ${slug} has pending/fallback state ${JSON.stringify(bySlug)}`);
     const fit = renderer.kilnTreeSkinFits?.[slug];
-    if (fit?.batchingPolicy !== 'instanced-merged-by-material' || fit?.animationPolicy !== 'root-anchored-sway-near-and-damage-tilt') {
+    if (fit?.batchingPolicy !== 'instanced-merged-by-material' || fit?.animationPolicy !== 'root-stable-damage-tilt-no-matrix-wind-sway') {
       throw new Error(`${label}: ${slug} policy drifted ${JSON.stringify(fit)}`);
     }
-    const expectedOrientationPolicy = slug === 'tree-shrub' ? 'preserve-y-up' : 'longest-axis-to-y';
+    const expectedOrientationPolicy = slug === 'tree-broadleaf' || slug === 'tree-dead-snag' ? 'longest-axis-to-y' : 'preserve-y-up';
     if (fit?.orientation?.policy !== expectedOrientationPolicy || !fit?.orientation?.sourceUpAxis || !Array.isArray(fit?.orientation?.axisCorrection)) {
       throw new Error(`${label}: ${slug} orientation policy missing or drifted ${JSON.stringify(fit)}`);
     }
@@ -400,7 +404,7 @@ try {
     generatedAt: new Date().toISOString(),
     requiredTreeSlugs,
     drawCallBudget: '<=16 instanced tree draws after material batching',
-    animationLod: 'root-anchored canopy/trunk tilt only inside 96 world units; bases stay planted while damage feedback remains matrix-driven',
+    animationLod: 'ambient matrix wind sway disabled until a height-weighted shader exists; bases stay planted and chop damage remains matrix-driven',
     results,
   };
   await fs.writeFile(path.join(outDir, 'proof.json'), JSON.stringify(proof, null, 2));

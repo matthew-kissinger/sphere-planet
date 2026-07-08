@@ -203,20 +203,20 @@ First wired pilot:
   instanced vegetation skins. `Trees` remains the gameplay authority for tree existence,
   visual kind, chop progress, and drops; `TreeAssetRenderer` mirrors resident streamer
   chunks and turns each accepted tree GLB into a material-merged instanced batch. Stemmed
-  trees now use the shared longest-axis-to-local-Y orientation normalizer before centering
-  and bottom-pivoting; shrubs preserve authored Y-up because squat vegetation should not be
-  spun simply for being wide. Procedural chunk tree meshes stay active until every tree skin
+  tall broadleaf/dead-snag trees now use the shared longest-axis-to-local-Y orientation
+  normalizer before centering and bottom-pivoting; pine and shrubs preserve authored Y-up
+  because these approved GLBs are squat but already bottom-grounded. Procedural chunk tree meshes stay active until every tree skin
   is ready, then become fallback. The proof caps the family at 11 instanced draw calls for
-  210 resident trees and gates cosmetic sway to 96 world units. Sway and chop feedback are
-  root-anchored tilt around the bottom pivot, not whole-instance translation, so vegetation
-  bases stay planted while upper mass moves.
+  210 resident trees. Ambient matrix wind sway is disabled until a height-weighted
+  vertex/shader bend can move only the upper mass; chop feedback remains matrix-driven and
+  must keep the planted base position fixed.
 - All 9 `creature-*` native-life bodies: accepted as H5/K6 animated creature skins.
   `NativeLifeRenderer` keeps the native-life simulation, pressure, tend/ward rules, and
   reward/warning overlays code-authored, then hides duplicated procedural body meshes after
   a GLB skin attaches. Accepted creature assets must provide `idle` and `walk` clips.
   Runtime diagnostics split loaded/pending/fallback, visible GLB, procedural fallback,
   fit metadata, clip metadata, and active/low-rate/frozen/hidden mixer bands by slug.
-  Runtime fit now corrects authored creature local `-X` fronts into the game's local `+Z`
+  Runtime fit now preserves authored creature local `+Z` as the game's local `+Z`
   movement forward before pivot/scale fitting, and the Kiln viewer uses the same policy.
   `npm run proof:k6-creatures` proves all nine committed model requests, zero generated
   requests, zero fallback, distance-gated animation, desktop/phone screenshots, and
@@ -288,10 +288,11 @@ Deferred until scale, snap, budget, readability, or animation proof exists:
   `wallPanel`, `wallDoorPanel`, `wallWindowPanel`, `wallCorner`, `wallHalfRail`, and
   `roofJoin` sockets and proves integrated walls seal while rails/foundations do not fake
   enclosure. The edge-socket slice adds true edge-addressed occupancy: center foundations and
-  multiple wall edges can share a hex only when sockets do not overlap. Before more
-  craftable house pieces ship, finish edge-based shelter coverage, collision, and broader
-  room-shape proof. New Kiln wall pieces should be generated as one shared-scale house-shell
-  pack and then treated as decorative skins over measured sockets.
+  multiple wall edges can share a hex only when sockets do not overlap. Edge-based shelter
+  coverage and traversal collision now have a first browser proof; before more craftable
+  house pieces ship, finish broader room-shape proof and the shared-scale decorative skin
+  contract. New Kiln wall pieces should be generated as one shared-scale house-shell pack
+  and then treated as decorative skins over measured sockets.
 - Shrine landmark shells: defer for blind screenshot readability, world-placement scale,
   water/glow/threshold ownership, repetition/LOD policy, and collision proof. Craters are no
   longer deferred for the first skyfall-shell slice. Trees are no longer deferred for the
@@ -304,6 +305,11 @@ Deferred until scale, snap, budget, readability, or animation proof exists:
   hexes with anti-farming cooldowns.
 - Native-life polish still needs named HUD pressure-source feedback and suppression of any
   remaining procedural body fragments that compete with the approved GLB skins.
+- End-of-night GLB debt is now specific rather than broad: expand fish proof across every
+  singleton fish/driftjelly branch, replace or explicitly accept the temporary
+  `node-root-pod` seed pickup alias, prove shrine facade/approach direction in gameplay
+  context, decide crater yaw policy for directional crater art, and resolve the remaining
+  mesh/triangle readiness warnings before broad density increases.
 
 ## Next Kiln Request Backlog
 
