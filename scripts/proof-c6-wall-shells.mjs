@@ -275,6 +275,43 @@ async function main() {
       }),
     };
 
+    const pentagonInvalidEdge = await page.evaluate(() => {
+      const world = window.__world;
+      const baseline = world.save.export();
+      world.giveItem('wallPanel', 12);
+      const landmarkTiles = (world.landmarks?.().items ?? []).map((entry) => entry.tile).filter((tile) => world.tileDegree?.(tile) === 5);
+      const failures = [];
+      for (const tile of landmarkTiles) {
+        world.save.import(baseline);
+        world.giveItem('wallPanel', 12);
+        const before = new Set(world.structures().items.map((entry) => entry.id));
+        const placedOk = world.placeStructure('wallPanel', tile);
+        const placed = world.structures().items.find((entry) => !before.has(entry.id) && entry.item === 'wallPanel') ?? null;
+        if (!placedOk || !placed) {
+          failures.push({ tile, degree: world.tileDegree?.(tile), phase: 'place', lastAction: world.structures().lastAction, command: world.buildCommands?.().last });
+          continue;
+        }
+        const rotateOk = world.rotateStructure(placed.id, 5);
+        const command = world.buildCommands?.().last ?? null;
+        const structures = world.structures();
+        world.save.import(baseline);
+        return {
+          ok: !rotateOk && command?.blockers?.includes('invalid edge socket'),
+          tile,
+          degree: world.tileDegree?.(tile),
+          placedTurn: placed.turn,
+          rotateOk,
+          lastAction: structures.lastAction,
+          command,
+        };
+      }
+      world.save.import(baseline);
+      return { ok: false, reason: 'no placeable pentagon wall target', landmarkTiles, failures };
+    });
+    if (!pentagonInvalidEdge.ok) {
+      throw new Error(`pentagon invalid-edge proof failed: ${JSON.stringify(pentagonInvalidEdge)}`);
+    }
+
     let setup = await page.evaluate(() => {
       const world = window.__world;
       for (const item of ['bedroll', 'roofBundle', 'roofJoin', 'wallDoorPanel', 'wallWindowPanel', 'wallCorner', 'wallPanel', 'wallHalfRail', 'floorFoundation', 'campfire', 'workbench', 'chest']) world.giveItem(item, 40);
@@ -756,6 +793,18 @@ async function main() {
         }
         return edges.sort((a, b) => a.tile - b.tile || a.edge - b.edge);
       };
+      const interiorEdgesFor = (roomTiles) => {
+        const room = new Set(roomTiles);
+        const edges = [];
+        for (const tile of roomTiles) {
+          const degree = world.geo.degreeOf(tile);
+          for (let edge = 0; edge < degree; edge++) {
+            const neighbor = world.geo.neighbor(tile, edge);
+            if (neighbor !== tile && room.has(neighbor)) edges.push(`${tile}:edge:${edge}`);
+          }
+        }
+        return edges.sort();
+      };
       const freeTiles = (blocked = []) => {
         const blockedSet = new Set([world.player.tile, ...blocked]);
         const occupied = occupiedTiles();
@@ -832,18 +881,22 @@ async function main() {
         const expectedEdges = perimeter.map((edge) => edge.key);
         const boundaryEdges = home.shelter.enclosure.boundaryEdges;
         const coveredEdges = home.shelter.enclosure.coveredBoundaryEdges;
-        const seamKeys = branchEdges.flatMap((edge, index) => {
+        const branchSeamKeys = branchEdges.flatMap((edge, index) => {
           const branch = branches[index];
           const back = sharedEdge(branch, center);
           return back === null ? [`${center}:edge:${edge}`] : [`${center}:edge:${edge}`, `${branch}:edge:${back}`];
         });
+        const seamKeys = interiorEdgesFor(roomTiles);
         const complete = home.shelter.protected
           && home.functional
+          && home.shelter.enclosure.footprintMode === 'connected-foundation'
+          && home.shelter.enclosure.roomTileCount === roomTiles.length
           && home.shelter.enclosure.boundaryCoverage === 1
           && home.shelter.enclosure.perimeterCoverage === 1
           && home.shelter.enclosure.boundaryEdgeCount === expectedEdges.length
           && sameSet(boundaryEdges, expectedEdges)
           && sameSet(coveredEdges, expectedEdges)
+          && sameSet(home.shelter.enclosure.interiorSeamEdges, seamKeys)
           && seamKeys.every((key) => !boundaryEdges.includes(key) && !coveredEdges.includes(key))
           && home.shelter.enclosure.doorBoundaryEdges.length === 1
           && home.shelter.enclosure.windowBoundaryEdges.length === 1
@@ -886,6 +939,11 @@ async function main() {
           foundationTiles: foundations.map((entry) => entry.tile),
           expectedEdges,
           seamKeys,
+          branchSeamKeys,
+          footprintMode: home.shelter.enclosure.footprintMode,
+          roomTileCount: home.shelter.enclosure.roomTileCount,
+          pentagonRoomTiles: home.shelter.enclosure.pentagonRoomTiles,
+          interiorSeamEdges: home.shelter.enclosure.interiorSeamEdges,
           home: world.structures().home,
           exteriorWeakens,
           interiorSeamNotRequired,
@@ -972,6 +1030,7 @@ async function main() {
       multiRoom,
       multiRoomScreenshot,
       multiRoomPixelProbe,
+      pentagonInvalidEdge,
       previews,
       collisions,
       cornerBefore,
@@ -1024,13 +1083,18 @@ async function main() {
         foundationTiles: multiRoom.foundationTiles,
         boundaryCoverage: multiRoom.home.shelter.enclosure.boundaryCoverage,
         perimeterCoverage: multiRoom.home.shelter.enclosure.perimeterCoverage,
+        footprintMode: multiRoom.home.shelter.enclosure.footprintMode,
+        roomTileCount: multiRoom.home.shelter.enclosure.roomTileCount,
+        pentagonRoomTiles: multiRoom.home.shelter.enclosure.pentagonRoomTiles,
         boundaryEdgeCount: multiRoom.home.shelter.enclosure.boundaryEdgeCount,
         expectedEdges: multiRoom.expectedEdges,
         coveredBoundaryEdges: multiRoom.home.shelter.enclosure.coveredBoundaryEdges,
+        interiorSeamEdges: multiRoom.home.shelter.enclosure.interiorSeamEdges,
         seamKeys: multiRoom.seamKeys,
         exteriorWeakens: multiRoom.exteriorWeakens,
         interiorSeamNotRequired: multiRoom.interiorSeamNotRequired,
       },
+      pentagonInvalidEdge,
       weakened: {
         protected: weakened.structures.home.shelter.protected,
         missing: weakened.structures.home.shelter.missing,

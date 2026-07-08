@@ -2111,6 +2111,7 @@ async function boot(): Promise<void> {
         yaw: yawForTile(lastPick.hitTile) + placementYawOffset(),
         playerTile: player.tile,
         blocker: snap.blocker,
+        topology: geo,
       });
     }
     if (selectedStructureItem) {
@@ -2127,6 +2128,7 @@ async function boot(): Promise<void> {
         creative: creativeActive,
         playerTile: player.tile,
         blocker: snap.blocker,
+        topology: geo,
       });
     }
     return null;
@@ -2206,7 +2208,7 @@ async function boot(): Promise<void> {
     const target = id !== undefined
       ? structures.find((s) => s.id === Math.trunc(id)) ?? null
       : nearestStructureOnTiles(structures, nearbyStructureTiles());
-    const result = rotatePlacedStructureCommand(structures, target, delta);
+    const result = rotatePlacedStructureCommand(structures, target, delta, geo);
     lastStructureAction = result.action;
     recordBuildCommand(source, 'rotate', target ? 'structure' : 'none', result, target);
     if (!result.ok) {
@@ -2237,6 +2239,7 @@ async function boot(): Promise<void> {
       creative: creativeActive,
       playerTile: player.tile,
       blocker: snap.blocker,
+      topology: geo,
     });
     recordBuildCommand(source, 'place', 'placement', result, result.placed, inventoryBefore, itemCount(counts, craftedItems, item));
     if (!result.ok || !result.placed) {
@@ -2274,6 +2277,7 @@ async function boot(): Promise<void> {
       yaw,
       playerTile: player.tile,
       blocker: snap.blocker,
+      topology: geo,
     });
     lastStructureAction = result.action;
     recordBuildCommand(source, 'relocate', target ? 'structure' : 'none', result, target);
@@ -2349,6 +2353,7 @@ async function boot(): Promise<void> {
         tile: player.tile,
         layer: columns.groundLayerBelow(player.tile, layers.bounds[0]),
         playerTile: player.tile,
+        topology: geo,
       });
       lastStructureAction = result.action;
       recordBuildCommand(source, 'relocate', 'none', result);
@@ -5611,6 +5616,7 @@ async function boot(): Promise<void> {
     },
     tools: () => ({ ...toolSummary(craftedItems, toolWear), wear: { ...toolWear }, lastAction: lastToolAction, reach: playerReach() }),
     nearbyTiles: (rings = 1) => [...tileSetAround(player.tile, Math.max(0, Math.trunc(Number.isFinite(rings) ? Number(rings) : 1)))],
+    tileDegree: (tile?: number) => geo.degreeOf(Number.isFinite(tile) ? Math.max(0, Math.min(geo.count - 1, Math.trunc(tile!))) : player.tile),
     structureCollision: structureCollisionDiagnostics,
     debugSetPlayerTile,
     debugWalkTowardTile,

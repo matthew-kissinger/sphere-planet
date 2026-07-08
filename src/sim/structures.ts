@@ -233,10 +233,14 @@ export interface ShelterReport {
 export type ShelterComfortTier = 'none' | 'rough' | 'weather-safe' | 'working' | 'lived-in';
 
 export interface ShelterEnclosureReport {
+  footprintMode: 'local-radius' | 'connected-foundation';
   roomTiles: number[];
+  roomTileCount: number;
+  pentagonRoomTiles: number[];
   boundaryTiles: number[];
   boundaryEdges: string[];
   coveredBoundaryEdges: string[];
+  interiorSeamEdges: string[];
   wallBoundaryEdges: string[];
   railBoundaryEdges: string[];
   openingBoundaryEdges: string[];
@@ -731,6 +735,11 @@ function edgeSlot(edge: number): string {
   return `edge:${((Math.trunc(edge) % 6) + 6) % 6}`;
 }
 
+function edgeFromSlot(slot: string): number | null {
+  const match = /^edge:(\d+)$/.exec(slot);
+  return match ? Math.trunc(Number(match[1])) : null;
+}
+
 function sharedEdge(topology: StructureTopology | undefined, fromTile: number, toTile: number): number | null {
   if (!topology || fromTile === toTile) return null;
   const degree = Math.max(0, Math.trunc(topology.degreeOf(fromTile)));
@@ -799,9 +808,19 @@ export function structurePlacementBlocker(
   structures: readonly StructureSave[],
   input: Pick<PlaceStructureInput, 'item' | 'tile' | 'yaw'>,
   ignoreId?: number,
+  topology?: StructureTopology,
 ): string | null {
   const tile = Math.trunc(input.tile);
   const placement = structureSocketPlacementFor(input.item, input.yaw);
+  if (topology && placement.kind === 'edge') {
+    const degree = Math.max(0, Math.trunc(topology.degreeOf(tile)));
+    if (placement.occupies.some((slot) => {
+      const edge = edgeFromSlot(slot);
+      return edge !== null && edge >= degree;
+    })) {
+      return 'invalid edge socket';
+    }
+  }
   const wanted = new Set(placement.occupies);
   const ignored = Number.isFinite(ignoreId) ? Math.trunc(ignoreId!) : null;
   for (const entry of structures) {
@@ -1055,17 +1074,17 @@ export function nextStructureId(structures: readonly StructureSave[]): number {
   return id;
 }
 
-export function canPlaceStructure(structures: readonly StructureSave[], tile: number, item?: PlaceableItemId, yaw = 0): boolean {
-  if (item) return structurePlacementBlocker(structures, { item, tile, yaw }) === null;
+export function canPlaceStructure(structures: readonly StructureSave[], tile: number, item?: PlaceableItemId, yaw = 0, topology?: StructureTopology): boolean {
+  if (item) return structurePlacementBlocker(structures, { item, tile, yaw }, undefined, topology) === null;
   return !structures.some((s) => s.tile === tile && structureSocketPlacement(s).kind === 'center');
 }
 
-export function addStructure(structures: StructureSave[], input: PlaceStructureInput): StructureSave | null {
+export function addStructure(structures: StructureSave[], input: PlaceStructureInput, topology?: StructureTopology): StructureSave | null {
   const tile = Math.trunc(input.tile);
   const layer = Math.trunc(input.layer);
   if (!isPlaceableItemId(input.item) || tile < 0 || layer < 0) return null;
   const yaw = normalizeStructureYaw(Number.isFinite(input.yaw) ? input.yaw : 0);
-  if (structurePlacementBlocker(structures, { item: input.item, tile, yaw })) return null;
+  if (structurePlacementBlocker(structures, { item: input.item, tile, yaw }, undefined, topology)) return null;
   const structure = {
     id: nextStructureId(structures),
     item: input.item,
@@ -1078,7 +1097,13 @@ export function addStructure(structures: StructureSave[], input: PlaceStructureI
   return structure;
 }
 
-export function rotateStructure(structures: StructureSave[], id: number, turns = 1): StructureRotationResult {
+function structurePlacementBlockerMessage(item: PlaceableItemId, blocker: string): string {
+  if (blocker === 'occupied edge socket') return `${placeableName(item).toLowerCase()} edge is occupied`;
+  if (blocker === 'invalid edge socket') return `${placeableName(item).toLowerCase()} needs a real hex edge`;
+  return 'that hex already has a prop';
+}
+
+export function rotateStructure(structures: StructureSave[], id: number, turns = 1, topology?: StructureTopology): StructureRotationResult {
   const targetId = Math.trunc(id);
   const structure = structures.find((entry) => entry.id === targetId);
   if (!structure) return { ok: false, message: 'no structure' };
@@ -1094,7 +1119,7 @@ export function rotateStructure(structures: StructureSave[], id: number, turns =
     };
   }
   const nextYaw = normalizeStructureYaw(structure.yaw + turnDelta * STRUCTURE_YAW_STEP);
-  const blocker = structurePlacementBlocker(structures, { item: structure.item, tile: structure.tile, yaw: nextYaw }, structure.id);
+  const blocker = structurePlacementBlocker(structures, { item: structure.item, tile: structure.tile, yaw: nextYaw }, structure.id, topology);
   if (blocker) {
     return {
       ok: false,
@@ -1102,7 +1127,7 @@ export function rotateStructure(structures: StructureSave[], id: number, turns =
       item: structure.item,
       yaw: structure.yaw,
       turn: structureYawTurn(structure.yaw),
-      message: blocker === 'occupied edge socket' ? `${placeableName(structure.item).toLowerCase()} edge is occupied` : 'that hex already has a prop',
+      message: structurePlacementBlockerMessage(structure.item, blocker),
       blockers: [blocker],
     };
   }
@@ -1122,6 +1147,7 @@ export function relocateStructure(
   structures: StructureSave[],
   id: number,
   input: StructureRelocationInput,
+  topology?: StructureTopology,
 ): StructureRelocationResult {
   const targetId = Math.trunc(id);
   const structure = structures.find((entry) => entry.id === targetId);
@@ -1169,7 +1195,7 @@ export function relocateStructure(
       blockers: ['same snap target'],
     };
   }
-  const blocker = structurePlacementBlocker(structures, { item: structure.item, tile: toTile, yaw: nextYaw }, structure.id);
+  const blocker = structurePlacementBlocker(structures, { item: structure.item, tile: toTile, yaw: nextYaw }, structure.id, topology);
   if (blocker) {
     return {
       ok: false,
@@ -1179,7 +1205,7 @@ export function relocateStructure(
       fromLayer: structure.layer,
       toTile,
       toLayer,
-      message: blocker === 'occupied edge socket' ? `${placeableName(structure.item).toLowerCase()} edge is occupied` : 'that hex already has a prop',
+      message: structurePlacementBlockerMessage(structure.item, blocker),
       blockers: [blocker],
     };
   }
@@ -1362,10 +1388,14 @@ function homeSupportTiles(structures: readonly StructureSave[], topology?: Struc
 
 function emptyShelterEnclosure(): ShelterEnclosureReport {
   return {
+    footprintMode: 'local-radius',
     roomTiles: [],
+    roomTileCount: 0,
+    pentagonRoomTiles: [],
     boundaryTiles: [],
     boundaryEdges: [],
     coveredBoundaryEdges: [],
+    interiorSeamEdges: [],
     wallBoundaryEdges: [],
     railBoundaryEdges: [],
     openingBoundaryEdges: [],
@@ -1526,6 +1556,20 @@ function shelterBoundaryEdgesFromRoom(
   return edges.sort((a, b) => a.homeTile - b.homeTile || a.homeEdge - b.homeEdge);
 }
 
+function shelterInteriorSeamEdges(topology: StructureTopology | undefined, roomTiles: readonly number[]): string[] {
+  if (!topology) return [];
+  const room = new Set(roomTiles);
+  const edges: string[] = [];
+  for (const tile of roomTiles) {
+    const degree = Math.max(0, Math.trunc(topology.degreeOf(tile)));
+    for (let edge = 0; edge < degree; edge++) {
+      const neighbor = topology.neighbor(tile, edge);
+      if (neighbor !== tile && room.has(neighbor)) edges.push(`${tile}:${edgeSlot(edge)}`);
+    }
+  }
+  return edges.sort();
+}
+
 function structureBoundaryEdgeKeys(structure: StructureSave, edges: readonly ShelterBoundaryEdge[]): string[] {
   if (edges.length === 0) return [];
   const occupancy = structureSocketPlacement(structure);
@@ -1572,6 +1616,7 @@ export function shelterReport(structures: readonly StructureSave[], topology?: S
 
   const footprint = shelterFootprint(structures, topology, home.tile, Math.max(0, Math.trunc(rings)));
   const tiles = footprint.roomTiles;
+  const pentagonRoomTiles = topology ? tiles.filter((tile) => Math.max(0, Math.trunc(topology.degreeOf(tile))) === 5).sort((a, b) => a - b) : [];
   const local = new Set(footprint.expanded ? [...footprint.roomTiles, ...footprint.boundaryTiles] : footprint.roomTiles);
   const room = new Set(footprint.roomTiles);
   const boundaryTiles = footprint.boundaryTiles;
@@ -1649,10 +1694,14 @@ export function shelterReport(structures: readonly StructureSave[], topology?: S
   if (!hasStorage) missing.push('chest');
   const tier = shelterComfortTier(functional, weatherSafe, true, comfort);
   const enclosure: ShelterEnclosureReport = {
+    footprintMode: footprint.expanded ? 'connected-foundation' : 'local-radius',
     roomTiles: tiles,
+    roomTileCount: tiles.length,
+    pentagonRoomTiles,
     boundaryTiles,
     boundaryEdges: boundaryEdgeRecords.map((edge) => edge.key),
     coveredBoundaryEdges,
+    interiorSeamEdges: shelterInteriorSeamEdges(topology, tiles),
     wallBoundaryEdges,
     railBoundaryEdges,
     openingBoundaryEdges,

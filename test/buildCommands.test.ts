@@ -11,7 +11,7 @@ import {
   selectStructurePlacementCommand,
   useStructureInteractionCommand,
 } from '../src/sim/buildCommands';
-import { addStructure, type StructureSave } from '../src/sim/structures';
+import { addStructure, STRUCTURE_YAW_STEP, type StructureSave, type StructureTopology } from '../src/sim/structures';
 import type { InventoryItems } from '../src/sim/crafting';
 
 describe('Hearth and Horizon build commands', () => {
@@ -670,6 +670,104 @@ describe('Hearth and Horizon build commands', () => {
       command: 'rotatePlaced',
       item: 'wallWindowPanel',
       blockers: ['occupied edge socket'],
+    });
+  });
+
+  it('blocks wall-shell previews and moves onto nonexistent pentagon edges', () => {
+    const topology: StructureTopology = {
+      degreeOf: (tile) => (tile === 30 || tile === 31 ? 5 : 6),
+      neighbor: (tile, edge) => tile * 10 + edge,
+    };
+    const materials = [0, 0, 0, 0, 0];
+    const crafted: InventoryItems = { wallPanel: 2 };
+    const structures: StructureSave[] = [];
+
+    expect(previewPlaceStructureCommand({
+      structures,
+      item: 'wallPanel',
+      tile: 30,
+      layer: 2,
+      yaw: STRUCTURE_YAW_STEP * 5,
+      placementTurn: 5,
+      materialCounts: materials,
+      craftedItems: crafted,
+      creative: false,
+      playerTile: 4,
+      topology,
+    })).toMatchObject({
+      ok: false,
+      blocker: 'invalid edge socket',
+      blockers: ['invalid edge socket'],
+      message: 'Wall Panel needs a real hex edge',
+    });
+
+    expect(placeStructureCommand({
+      structures,
+      item: 'wallPanel',
+      tile: 30,
+      layer: 2,
+      yaw: STRUCTURE_YAW_STEP * 5,
+      placementTurn: 5,
+      materialCounts: materials,
+      craftedItems: crafted,
+      creative: false,
+      playerTile: 4,
+      topology,
+    })).toMatchObject({
+      ok: false,
+      action: 'wallPanel:place:blocked:invalid edge socket',
+      blockers: ['invalid edge socket'],
+      message: 'Wall Panel needs a real hex edge',
+    });
+    expect(crafted.wallPanel).toBe(2);
+
+    const placed = placeStructureCommand({
+      structures,
+      item: 'wallPanel',
+      tile: 30,
+      layer: 2,
+      yaw: STRUCTURE_YAW_STEP * 4,
+      placementTurn: 4,
+      materialCounts: materials,
+      craftedItems: crafted,
+      creative: false,
+      playerTile: 4,
+      topology,
+    });
+    expect(placed).toMatchObject({ ok: true, item: 'wallPanel', turn: 4 });
+
+    expect(rotatePlacedStructureCommand(structures, placed.placed!, 1, topology)).toMatchObject({
+      ok: false,
+      command: 'rotatePlaced',
+      blockers: ['invalid edge socket'],
+      message: 'wall panel needs a real hex edge',
+    });
+    expect(previewRelocateStructureCommand({
+      structures,
+      target: placed.placed!,
+      tile: 31,
+      layer: 2,
+      yaw: STRUCTURE_YAW_STEP * 5,
+      playerTile: 4,
+      topology,
+    })).toMatchObject({
+      ok: false,
+      blocker: 'invalid edge socket',
+      blockers: ['invalid edge socket'],
+      message: 'Wall Panel needs a real hex edge',
+    });
+    expect(relocateStructureCommand({
+      structures,
+      target: placed.placed!,
+      tile: 31,
+      layer: 2,
+      yaw: STRUCTURE_YAW_STEP * 5,
+      playerTile: 4,
+      topology,
+    })).toMatchObject({
+      ok: false,
+      blockers: ['invalid edge socket'],
+      message: 'wall panel needs a real hex edge',
     });
   });
 });

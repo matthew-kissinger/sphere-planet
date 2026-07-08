@@ -164,6 +164,32 @@ describe('Hearth and Horizon structures', () => {
     expect(canPlaceStructure(structures, 30, 'wallHalfRail', STRUCTURE_YAW_STEP * 2)).toBe(false);
   });
 
+  it('blocks wall-shell sockets that point past a pentagon tile degree', () => {
+    const pentagonTopology: StructureTopology = {
+      degreeOf: (tile) => (tile === 50 || tile === 51 ? 5 : 6),
+      neighbor: (tile, edge) => tile * 10 + edge,
+    };
+    const structures: StructureSave[] = [];
+
+    expect(canPlaceStructure(structures, 50, 'wallPanel', STRUCTURE_YAW_STEP * 4, pentagonTopology)).toBe(true);
+    expect(canPlaceStructure(structures, 50, 'wallPanel', STRUCTURE_YAW_STEP * 5, pentagonTopology)).toBe(false);
+    expect(canPlaceStructure(structures, 50, 'wallCorner', STRUCTURE_YAW_STEP * 3, pentagonTopology)).toBe(true);
+    expect(canPlaceStructure(structures, 50, 'wallCorner', STRUCTURE_YAW_STEP * 4, pentagonTopology)).toBe(false);
+
+    const wall = addStructure(structures, { item: 'wallPanel', tile: 50, layer: 2, yaw: STRUCTURE_YAW_STEP * 4 }, pentagonTopology)!;
+    expect(addStructure(structures, { item: 'wallPanel', tile: 50, layer: 2, yaw: STRUCTURE_YAW_STEP * 5 }, pentagonTopology)).toBeNull();
+    expect(rotateStructure(structures, wall.id, 1, pentagonTopology)).toMatchObject({
+      ok: false,
+      blockers: ['invalid edge socket'],
+      message: 'wall panel needs a real hex edge',
+    });
+    expect(relocateStructure(structures, wall.id, { tile: 51, layer: 2, yaw: STRUCTURE_YAW_STEP * 5 }, pentagonTopology)).toMatchObject({
+      ok: false,
+      blockers: ['invalid edge socket'],
+      message: 'wall panel needs a real hex edge',
+    });
+  });
+
   it('blocks player traversal across full wall-shell edge sockets', () => {
     const topology: StructureTopology = {
       degreeOf: () => 6,
@@ -1700,6 +1726,95 @@ describe('Hearth and Horizon structures', () => {
     );
     expect(withoutDivider.protected).toBe(true);
     expect(withoutDivider.enclosure.coveredBoundaryEdges).toEqual(expectedBoundaryEdges);
+  });
+
+  it('keeps connected foundation rooms valid when the home room is a pentagon tile', () => {
+    const pentagonRoomTopology: StructureTopology = (() => {
+      const links = new Map<string, number>();
+      const set = (tile: number, edge: number, neighbor: number) => {
+        links.set(`${tile}:${edge}`, neighbor);
+      };
+      const addExterior = (tile: number, edge: number, degree: number) => {
+        const exterior = tile * 10 + edge;
+        set(tile, edge, exterior);
+        set(exterior, (edge + Math.floor(degree / 2)) % 6, tile);
+      };
+      for (let edge = 0; edge < 5; edge++) addExterior(500, edge, 5);
+      for (const tile of [501, 502]) {
+        for (let edge = 0; edge < 6; edge++) addExterior(tile, edge, 6);
+      }
+      set(500, 0, 501);
+      set(501, 3, 500);
+      set(500, 2, 502);
+      set(502, 5, 500);
+      return {
+        degreeOf: (tile) => (tile === 500 ? 5 : 6),
+        neighbor: (tile, edge) => links.get(`${tile}:${edge}`) ?? tile,
+      };
+    })();
+    const outerEdges: Array<{ tile: number; edge: number; item?: 'wallDoorPanel' | 'wallWindowPanel' | 'wallPanel' }> = [
+      { tile: 500, edge: 1, item: 'wallDoorPanel' },
+      { tile: 500, edge: 3 },
+      { tile: 500, edge: 4 },
+      { tile: 501, edge: 0 },
+      { tile: 501, edge: 1 },
+      { tile: 501, edge: 2 },
+      { tile: 501, edge: 4 },
+      { tile: 501, edge: 5 },
+      { tile: 502, edge: 0, item: 'wallWindowPanel' },
+      { tile: 502, edge: 1 },
+      { tile: 502, edge: 2 },
+      { tile: 502, edge: 3 },
+      { tile: 502, edge: 4 },
+    ];
+    const wallShells: StructureSave[] = outerEdges.map((entry, index) => ({
+      id: 20 + index,
+      item: entry.item ?? 'wallPanel',
+      tile: entry.tile,
+      layer: 2,
+      yaw: STRUCTURE_YAW_STEP * entry.edge,
+    }));
+    const structures: StructureSave[] = [
+      { id: 1, item: 'bedroll', tile: 500, layer: 2, yaw: 0, state: { home: true } },
+      { id: 2, item: 'floorFoundation', tile: 501, layer: 2, yaw: 0 },
+      { id: 3, item: 'floorFoundation', tile: 502, layer: 2, yaw: 0 },
+      { id: 4, item: 'roofJoin', tile: 501, layer: 2, yaw: 0 },
+      { id: 5, item: 'roofJoin', tile: 502, layer: 2, yaw: 0 },
+      { id: 6, item: 'campfire', tile: 501, layer: 2, yaw: 0, state: { lit: true } },
+      { id: 7, item: 'workbench', tile: 502, layer: 2, yaw: 0 },
+      { id: 8, item: 'chest', tile: 502, layer: 2, yaw: 0 },
+      ...wallShells,
+    ];
+
+    const shelter = shelterReport(structures, pentagonRoomTopology);
+    const expectedBoundaryEdges = outerEdges.map((entry) => `${entry.tile}:edge:${entry.edge}`);
+
+    expect(shelter).toMatchObject({
+      centerTile: 500,
+      tiles: [500, 501, 502],
+      protected: true,
+      functional: true,
+      label: 'shelter alive',
+      enclosure: {
+        footprintMode: 'connected-foundation',
+        roomTileCount: 3,
+        pentagonRoomTiles: [500],
+        boundaryCoverageMode: 'edge',
+        boundaryCoverageNeed: expectedBoundaryEdges.length,
+        boundaryEdgeCount: expectedBoundaryEdges.length,
+        boundaryCoverage: 1,
+        perimeterCoverage: 1,
+        doorBoundaryEdges: ['500:edge:1'],
+        windowBoundaryEdges: ['502:edge:0'],
+        serviceReady: true,
+      },
+    });
+    expect(shelter.enclosure.boundaryEdges).toEqual(expectedBoundaryEdges);
+    expect(shelter.enclosure.coveredBoundaryEdges).toEqual(expectedBoundaryEdges);
+    expect(shelter.enclosure.interiorSeamEdges).toEqual(['500:edge:0', '500:edge:2', '501:edge:3', '502:edge:5']);
+    for (const seam of shelter.enclosure.interiorSeamEdges) {
+      expect(shelter.enclosure.boundaryEdges).not.toContain(seam);
+    }
   });
 
   it('does not double-count an integrated door panel as two boundary tiles', () => {

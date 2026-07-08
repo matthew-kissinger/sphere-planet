@@ -86,6 +86,7 @@ export interface StructurePlaceCommandInput {
   creative: boolean;
   playerTile: number;
   blocker?: string | null;
+  topology?: StructureTopology;
 }
 
 export interface StructureUseCommandInput {
@@ -110,6 +111,7 @@ export interface StructureRelocateCommandInput {
   yaw?: number;
   playerTile: number;
   blocker?: string | null;
+  topology?: StructureTopology;
 }
 
 export interface StructurePlacePreviewInput extends StructurePlaceCommandInput {}
@@ -188,6 +190,7 @@ export function rotatePlacedStructureCommand(
   structures: StructureSave[],
   target: StructureSave | null,
   turns = 1,
+  topology?: StructureTopology,
 ): StructureCommandResult {
   if (!target) {
     return {
@@ -197,7 +200,7 @@ export function rotatePlacedStructureCommand(
       action: 'rotate:none',
     };
   }
-  const result = rotateStructure(structures, target.id, turns);
+  const result = rotateStructure(structures, target.id, turns, topology);
   return {
     ok: result.ok,
     command: 'rotatePlaced',
@@ -209,6 +212,12 @@ export function rotatePlacedStructureCommand(
     action: `${target.item}:rotate:${result.message}`,
     blockers: result.blockers,
   };
+}
+
+function placementBlockerMessage(item: PlaceableItemId, blocker: string, genericOccupiedEdge = false): string {
+  if (blocker === 'occupied edge socket') return genericOccupiedEdge ? 'that edge already has a prop' : `${placeableName(item)} edge is occupied`;
+  if (blocker === 'invalid edge socket') return `${placeableName(item)} needs a real hex edge`;
+  return 'that hex already has a prop';
 }
 
 export function previewPlaceStructureCommand(input: StructurePlacePreviewInput): StructureSnapPreview {
@@ -234,12 +243,12 @@ export function previewPlaceStructureCommand(input: StructurePlacePreviewInput):
   if (input.blocker) {
     return { ...base, ok: false, message: input.blocker, blocker: input.blocker, blockers: [input.blocker] };
   }
-  const occupancyBlocker = structurePlacementBlocker(input.structures, { item: input.item, tile: input.tile, yaw: input.yaw });
+  const occupancyBlocker = structurePlacementBlocker(input.structures, { item: input.item, tile: input.tile, yaw: input.yaw }, undefined, input.topology);
   if (occupancyBlocker) {
     return {
       ...base,
       ok: false,
-      message: occupancyBlocker === 'occupied edge socket' ? 'that edge already has a prop' : 'that hex already has a prop',
+      message: placementBlockerMessage(input.item, occupancyBlocker, true),
       blocker: occupancyBlocker,
       blockers: [occupancyBlocker],
     };
@@ -296,19 +305,19 @@ export function placeStructureCommand(input: StructurePlaceCommandInput): Struct
       blockers: [input.blocker],
     };
   }
-  const occupancyBlocker = structurePlacementBlocker(structures, { item, tile, yaw });
+  const occupancyBlocker = structurePlacementBlocker(structures, { item, tile, yaw }, undefined, input.topology);
   if (occupancyBlocker) {
     return {
       ok: false,
       command: 'place',
       item,
-      message: occupancyBlocker === 'occupied edge socket' ? 'that edge already has a prop' : 'that hex already has a prop',
+      message: placementBlockerMessage(item, occupancyBlocker, true),
       action: `${item}:place:blocked:${occupancyBlocker}`,
       selected: item,
       blockers: [occupancyBlocker],
     };
   }
-  const placed = addStructure(structures, { item, tile, layer, yaw });
+  const placed = addStructure(structures, { item, tile, layer, yaw }, input.topology);
   if (!placed) {
     return {
       ok: false,
@@ -376,7 +385,7 @@ export function relocateStructureCommand(input: StructureRelocateCommandInput): 
       blockers: [input.blocker],
     };
   }
-  const result = relocateStructure(input.structures, target.id, { tile, layer, yaw });
+  const result = relocateStructure(input.structures, target.id, { tile, layer, yaw }, input.topology);
   return {
     ok: result.ok,
     command: 'relocate',
@@ -437,12 +446,12 @@ export function previewRelocateStructureCommand(input: StructureRelocatePreviewI
   if (sameSocket) {
     return { ...base, ok: false, message: `${placeableName(target.item).toLowerCase()} already on that snap hex`, blocker: 'same snap target', blockers: ['same snap target'] };
   }
-  const occupancyBlocker = structurePlacementBlocker(input.structures, { item: target.item, tile: toTile, yaw }, target.id);
+  const occupancyBlocker = structurePlacementBlocker(input.structures, { item: target.item, tile: toTile, yaw }, target.id, input.topology);
   if (occupancyBlocker) {
     return {
       ...base,
       ok: false,
-      message: occupancyBlocker === 'occupied edge socket' ? `${placeableName(target.item)} edge is occupied` : 'that hex already has a prop',
+      message: placementBlockerMessage(target.item, occupancyBlocker),
       blocker: occupancyBlocker,
       blockers: [occupancyBlocker],
     };
